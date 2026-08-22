@@ -1,5 +1,36 @@
-peer_rules:
-  - id: retailer_a.peer_group_placeholder.v1
+rule_version: rules_v1
+price_segment_rules:
+  - price_segment_rule_id: retailer_a.price_segments.v1
     retailer_id: retailer_a
-    version: v1
-    description: Placeholder peer grouping rule without real grouping logic.
+    rule_version: rules_v1
+    price_metric_name: weighted_shelf_price_vat
+    min_segment_population: 3
+    segments:
+      - ECONOMY
+      - MID
+      - PREMIUM
+peer_rules:
+  - peer_rule_id: retailer_a.category_pool.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    peer_level: BROAD_CATEGORY
+    required_dimensions:
+      - category
+    top_n: 10
+    ranking_metrics:
+      - revenue_net
+      - units
+      - units_per_selling_store
+  - peer_rule_id: retailer_a.direct_peer.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    peer_level: DIRECT_COMPARABLE
+    required_dimensions:
+      - category
+      - carbonation
+      - volume_band
+      - price_segment
+      - package
+    fallback_behavior: REPORT_EMPTY
+    direct_peer_mode: DIRECT_ONLY
+    self_inclusion: EXCLUDE_SELF
