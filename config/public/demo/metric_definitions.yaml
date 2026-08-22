@@ -95,7 +95,7 @@ metrics:
     aggregation: distinct_count
     distinct_column: canonical_store_id
     grain: [period, category, canonical_product_id]
-    broadcast_grain: [period, category]
+    broadcast_grain: [period]
     entity_type: sku
   numeric_distribution:
     concept: distribution
@@ -119,3 +119,245 @@ metrics:
     denominator: selling_store_count
     grain: [period, category, canonical_product_id]
     entity_type: sku
+  revenue_net_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.revenue_net_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: revenue_net
+    denominator: selling_store_count
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  brand_revenue_net:
+    concept: revenue
+    definition_id: retailer_a.brand_revenue_net.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: revenue_net
+    grain: [period, category, brand]
+    entity_type: brand
+  brand_units:
+    concept: units
+    definition_id: retailer_a.brand_units.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: units
+    grain: [period, category, brand]
+    entity_type: brand
+  brand_selling_store_count:
+    concept: selling_store_count
+    definition_id: retailer_a.brand_selling_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    condition:
+      units:
+        gt: 0
+    grain: [period, category, brand]
+    entity_type: brand
+  brand_active_store_count:
+    concept: active_store_count
+    definition_id: retailer_a.brand_active_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    grain: [period, category, brand]
+    broadcast_grain: [period]
+    entity_type: brand
+  brand_numeric_distribution:
+    concept: distribution
+    definition_id: retailer_a.brand_numeric_distribution.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: brand_selling_store_count
+    denominator: brand_active_store_count
+    grain: [period, category, brand]
+    entity_type: brand
+  brand_units_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.brand_units_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: brand_units
+    denominator: brand_selling_store_count
+    grain: [period, category, brand]
+    entity_type: brand
+  brand_revenue_net_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.brand_revenue_net_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: brand_revenue_net
+    denominator: brand_selling_store_count
+    grain: [period, category, brand]
+    entity_type: brand
+  manufacturer_revenue_net:
+    concept: revenue
+    definition_id: retailer_a.manufacturer_revenue_net.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: revenue_net
+    grain: [period, category, manufacturer]
+    entity_type: manufacturer
+  manufacturer_units:
+    concept: units
+    definition_id: retailer_a.manufacturer_units.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: units
+    grain: [period, category, manufacturer]
+    entity_type: manufacturer
+  manufacturer_selling_store_count:
+    concept: selling_store_count
+    definition_id: retailer_a.manufacturer_selling_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    condition:
+      units:
+        gt: 0
+    grain: [period, category, manufacturer]
+    entity_type: manufacturer
+  manufacturer_active_store_count:
+    concept: active_store_count
+    definition_id: retailer_a.manufacturer_active_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    grain: [period, category, manufacturer]
+    broadcast_grain: [period]
+    entity_type: manufacturer
+  manufacturer_numeric_distribution:
+    concept: distribution
+    definition_id: retailer_a.manufacturer_numeric_distribution.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: manufacturer_selling_store_count
+    denominator: manufacturer_active_store_count
+    grain: [period, category, manufacturer]
+    entity_type: manufacturer
+  manufacturer_units_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.manufacturer_units_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: manufacturer_units
+    denominator: manufacturer_selling_store_count
+    grain: [period, category, manufacturer]
+    entity_type: manufacturer
+  manufacturer_revenue_net_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.manufacturer_revenue_net_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: manufacturer_revenue_net
+    denominator: manufacturer_selling_store_count
+    grain: [period, category, manufacturer]
+    entity_type: manufacturer
+  category_revenue_net:
+    concept: revenue
+    definition_id: retailer_a.category_revenue_net.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: revenue_net
+    grain: [period, category]
+    entity_type: category
+  category_units:
+    concept: units
+    definition_id: retailer_a.category_units.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: units
+    grain: [period, category]
+    entity_type: category
+  category_selling_store_count:
+    concept: selling_store_count
+    definition_id: retailer_a.category_selling_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    condition:
+      units:
+        gt: 0
+    grain: [period, category]
+    entity_type: category
+  category_active_store_count:
+    concept: active_store_count
+    definition_id: retailer_a.category_active_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    grain: [period, category]
+    broadcast_grain: [period]
+    entity_type: category
+  category_numeric_distribution:
+    concept: distribution
+    definition_id: retailer_a.category_numeric_distribution.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: category_selling_store_count
+    denominator: category_active_store_count
+    grain: [period, category]
+    entity_type: category
+  category_units_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.category_units_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: category_units
+    denominator: category_selling_store_count
+    grain: [period, category]
+    entity_type: category
+  category_revenue_net_per_selling_store:
+    concept: velocity
+    definition_id: retailer_a.category_revenue_net_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: category_revenue_net
+    denominator: category_selling_store_count
+    grain: [period, category]
+    entity_type: category

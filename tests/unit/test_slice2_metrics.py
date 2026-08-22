@@ -261,6 +261,121 @@ def test_same_source_id_is_required_for_metrics_scope():
     assert result.metrics["metric_value"].sum() == 4000.0
 
 
+def test_public_metric_config_includes_distribution_and_velocity_for_required_grains():
+    registry = load_metric_definition_config("config/public/demo/metric_definitions.yaml")
+    scoped = registry.for_context(_context())
+    distribution_grains = {definition.entity_type for definition in scoped.definitions if definition.concept == "distribution"}
+    velocity_grains = {definition.entity_type for definition in scoped.definitions if definition.concept == "velocity"}
+
+    assert {"sku", "brand", "manufacturer", "category"}.issubset(distribution_grains)
+    assert {"sku", "brand", "manufacturer", "category"}.issubset(velocity_grains)
+
+
+def test_public_sku_distribution_uses_monthly_store_universe_not_category_local():
+    frame = pl.concat(
+        [
+            _frame(),
+            pl.DataFrame(
+                {
+                    "analysis_run_id": ["run_a"],
+                    "retailer_id": ["retailer_a"],
+                    "source_id": ["source_a"],
+                    "period": [date(2026, 1, 1)],
+                    "category": ["CATEGORY_REDUCED"],
+                    "brand": ["BRAND_C"],
+                    "manufacturer": ["MANUFACTURER_C"],
+                    "canonical_product_id": ["SKU_A_004"],
+                    "canonical_store_id": ["STORE_A_004"],
+                    "units": [1.0],
+                    "revenue_net": [10.0],
+                    "revenue_vat": [12.0],
+                    "retailer_margin_abs": [2.0],
+                    "shelf_price_vat": [12.0],
+                    "input_price_vat": [10.0],
+                }
+            ),
+        ],
+        how="diagonal",
+    )
+    registry = load_metric_definition_config("config/public/demo/metric_definitions.yaml").for_context(_context())
+    definitions = tuple(registry.get(name) for name in ("selling_store_count", "active_store_count", "numeric_distribution"))
+
+    result = calculate_metrics(frame, definitions, _context(), metric_config_hash=registry.config_hash)
+
+    assert _metric_by_name(result.metrics, "SKU_A_001", "active_store_count")["metric_value"][0] == 4.0
+    assert _metric_by_name(result.metrics, "SKU_A_001", "numeric_distribution")["metric_value"][0] == 1.0 / 4.0
+
+
+def test_brand_distribution_uses_monthly_store_universe_and_distinct_selling_stores():
+    result = calculate_metrics(_frame(), _grain_metric_definitions("brand", ("period", "category", "brand")), _context())
+
+    assert _metric_by_name(result.metrics, "BRAND_A", "brand_selling_store_count")["metric_value"][0] == 1.0
+    assert _metric_by_name(result.metrics, "BRAND_A", "brand_active_store_count")["metric_value"][0] == 3.0
+    assert _metric_by_name(result.metrics, "BRAND_A", "brand_numeric_distribution")["metric_value"][0] == 1.0 / 3.0
+
+
+def test_manufacturer_distribution_counts_duplicate_store_once():
+    result = calculate_metrics(_frame(), _grain_metric_definitions("manufacturer", ("period", "category", "manufacturer")), _context())
+
+    assert _metric_by_name(result.metrics, "MANUFACTURER_A", "manufacturer_selling_store_count")["metric_value"][0] == 1.0
+    assert _metric_by_name(result.metrics, "MANUFACTURER_A", "manufacturer_numeric_distribution")["metric_value"][0] == 1.0 / 3.0
+
+
+def test_category_distribution_uses_target_grain_distinct_store_count():
+    result = calculate_metrics(_frame(), _grain_metric_definitions("category", ("period", "category")), _context())
+
+    assert _metric_by_name(result.metrics, "CATEGORY_STANDARD", "category_selling_store_count")["metric_value"][0] == 1.0
+    assert _metric_by_name(result.metrics, "CATEGORY_STANDARD", "category_numeric_distribution")["metric_value"][0] == 1.0 / 3.0
+
+
+def test_brand_velocity_is_ratio_of_sums_not_mean_of_sku_velocities():
+    result = calculate_metrics(
+        _frame(),
+        (
+            *_grain_metric_definitions("sku", ("period", "category", "canonical_product_id"), prefix="sku"),
+            *_grain_metric_definitions("brand", ("period", "category", "brand")),
+        ),
+        _context(),
+    )
+
+    brand_velocity = _metric_by_name(result.metrics, "BRAND_A", "brand_units_per_selling_store")["metric_value"][0]
+    sku_velocities = result.metrics.filter(
+        (pl.col("entity_type") == "sku")
+        & (pl.col("metric_name") == "sku_units_per_selling_store")
+        & (pl.col("entity_id").is_in(["SKU_A_001", "SKU_A_002"]))
+    )["metric_value"].to_list()
+    assert brand_velocity == 13.0
+    assert brand_velocity != sum(sku_velocities) / len(sku_velocities)
+
+
+def test_manufacturer_and_category_revenue_velocity_use_selling_store_denominator():
+    definitions = (
+        *_grain_metric_definitions("manufacturer", ("period", "category", "manufacturer")),
+        *_grain_metric_definitions("category", ("period", "category")),
+    )
+    result = calculate_metrics(_frame(), definitions, _context())
+
+    assert _metric_by_name(result.metrics, "MANUFACTURER_A", "manufacturer_revenue_net_per_selling_store")["metric_value"][0] == 130.0
+    assert _metric_by_name(result.metrics, "CATEGORY_STANDARD", "category_revenue_net_per_selling_store")["metric_value"][0] == 130.0
+
+
+def test_multi_grain_distribution_is_retailer_and_source_isolated():
+    frame = pl.concat(
+        [
+            _frame(),
+            _frame().with_columns(pl.lit("source_b").alias("source_id"), pl.lit("STORE_B_001").alias("canonical_store_id")),
+            _frame().with_columns(pl.lit("retailer_b").alias("retailer_id"), pl.lit("STORE_C_001").alias("canonical_store_id")),
+        ],
+        how="diagonal",
+    )
+
+    result = calculate_metrics(frame, _grain_metric_definitions("brand", ("period", "category", "brand")), _context("retailer_a", "source_a"))
+
+    assert _metric_by_name(result.metrics, "BRAND_A", "brand_active_store_count")["metric_value"][0] == 3.0
+    assert set(result.metrics["retailer_id"].unique().to_list()) == {"retailer_a"}
+    assert set(result.metrics["source_id"].unique().to_list()) == {"source_a"}
+
+
 def _sum_definition(column: str, concept: str, *, grain=("period", "category", "canonical_product_id"), entity_type="sku") -> MetricDefinition:
     return MetricDefinition(
         column,
@@ -335,3 +450,102 @@ def _velocity_definition(numerator: str, name: str) -> MetricDefinition:
 
 def _metric(frame: pl.DataFrame, entity_id: str, concept: str) -> pl.DataFrame:
     return frame.filter((pl.col("entity_id") == entity_id) & (pl.col("concept") == concept))
+
+
+def _metric_by_name(frame: pl.DataFrame, entity_id: str, metric_name: str) -> pl.DataFrame:
+    return frame.filter((pl.col("entity_id") == entity_id) & (pl.col("metric_name") == metric_name))
+
+
+def _grain_metric_definitions(entity_type: str, grain: tuple[str, ...], *, prefix: str | None = None) -> tuple[MetricDefinition, ...]:
+    name_prefix = prefix or entity_type
+    return (
+        MetricDefinition(
+            f"{name_prefix}_revenue_net",
+            "revenue",
+            f"retailer_a.{name_prefix}_revenue_net.v1",
+            "v1",
+            "sum",
+            source_column="revenue_net",
+            grain=grain,
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+        MetricDefinition(
+            f"{name_prefix}_units",
+            "units",
+            f"retailer_a.{name_prefix}_units.v1",
+            "v1",
+            "sum",
+            source_column="units",
+            grain=grain,
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+        MetricDefinition(
+            f"{name_prefix}_selling_store_count",
+            "selling_store_count",
+            f"retailer_a.{name_prefix}_selling_store_count.v1",
+            "v1",
+            "distinct_count",
+            distinct_column="canonical_store_id",
+            condition={"units": {"gt": 0}},
+            grain=grain,
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+        MetricDefinition(
+            f"{name_prefix}_active_store_count",
+            "active_store_count",
+            f"retailer_a.{name_prefix}_active_store_count.v1",
+            "v1",
+            "distinct_count",
+            distinct_column="canonical_store_id",
+            grain=grain,
+            broadcast_grain=("period",),
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+        MetricDefinition(
+            f"{name_prefix}_numeric_distribution",
+            "distribution",
+            f"retailer_a.{name_prefix}_numeric_distribution.v1",
+            "v1",
+            "ratio_of_sums",
+            numerator=f"{name_prefix}_selling_store_count",
+            denominator=f"{name_prefix}_active_store_count",
+            grain=grain,
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+        MetricDefinition(
+            f"{name_prefix}_units_per_selling_store",
+            "velocity",
+            f"retailer_a.{name_prefix}_units_per_selling_store.v1",
+            "v1",
+            "ratio_of_sums",
+            numerator=f"{name_prefix}_units",
+            denominator=f"{name_prefix}_selling_store_count",
+            grain=grain,
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+        MetricDefinition(
+            f"{name_prefix}_revenue_net_per_selling_store",
+            "velocity",
+            f"retailer_a.{name_prefix}_revenue_net_per_selling_store.v1",
+            "v1",
+            "ratio_of_sums",
+            numerator=f"{name_prefix}_revenue_net",
+            denominator=f"{name_prefix}_selling_store_count",
+            grain=grain,
+            entity_type=entity_type,
+            retailer_id="retailer_a",
+            rule_version="rules_v1",
+        ),
+    )
