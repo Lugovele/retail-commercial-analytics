@@ -1,0 +1,37 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "retail-commercial-analytics"
+version = "0.1.0"
+description = "Generic retail commercial analytics engine with private semantic configuration layers."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "polars",
+  "duckdb",
+  "pyarrow",
+  "pydantic",
+  "pyyaml",
+  "openpyxl",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "pytest-cov",
+  "ruff",
+  "mypy",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/retail_analytics"]
+
+[tool.ruff]
+line-length = 100
+src = ["src", "tests"]
+
+[tool.mypy]
+python_version = "3.11"
+packages = ["retail_analytics"]

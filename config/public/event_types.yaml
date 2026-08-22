@@ -1,0 +1,5 @@
+event_types:
+  - id: distribution_change
+    description: Neutral event type for configured distribution movement rules.
+  - id: velocity_change
+    description: Neutral event type for configured velocity movement rules.

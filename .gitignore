@@ -1,0 +1,43 @@
+# Private semantic/config layer
+config/private/
+data/private/
+data/raw/
+# Private documentation
+docs/private/
+
+
+# Client source files
+*.xlsx
+*.xls
+
+# Do not globally ignore all CSV files.
+# Public synthetic/demo CSV files may be committed.
+# Real private CSV mappings must live under ignored private directories.
+
+# Environment
+.env
+.env.*
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.tmp/

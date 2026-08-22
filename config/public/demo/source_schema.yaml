@@ -1,0 +1,10 @@
+source_id: demo_source_a
+retailer_id: retailer_a
+fields:
+  - source_sku_id
+  - source_store_id
+  - units
+  - revenue
+  - shelf_price
+  - input_price
+  - period

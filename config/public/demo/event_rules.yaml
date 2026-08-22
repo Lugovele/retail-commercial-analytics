@@ -1,0 +1,7 @@
+event_rules:
+  - id: retailer_a.distribution_change.v1
+    retailer_id: retailer_a
+    concept: distribution
+    metric_definition_id: retailer_a.numeric_distribution.v1
+    version: v1
+    description: Placeholder demo event rule without real thresholds.

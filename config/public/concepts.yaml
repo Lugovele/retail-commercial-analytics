@@ -1,0 +1,7 @@
+concepts:
+  - id: distribution
+    description: Neutral concept placeholder for availability or presence style metrics.
+  - id: velocity
+    description: Neutral concept placeholder for sales rate style metrics.
+  - id: retailer_margin
+    description: Neutral concept placeholder for commercial margin metrics.

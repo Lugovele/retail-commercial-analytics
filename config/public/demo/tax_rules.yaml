@@ -1,0 +1,5 @@
+tax_rules:
+  - id: retailer_a.tax_placeholder.v1
+    retailer_id: retailer_a
+    version: v1
+    description: Placeholder tax rule without real rates or mappings.

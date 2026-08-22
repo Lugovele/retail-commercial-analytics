@@ -1,0 +1,5 @@
+peer_rules:
+  - id: retailer_a.peer_group_placeholder.v1
+    retailer_id: retailer_a
+    version: v1
+    description: Placeholder peer grouping rule without real grouping logic.

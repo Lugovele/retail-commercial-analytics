@@ -1,0 +1,6 @@
+decision_rules:
+  - id: retailer_a.review_presence.v1
+    retailer_id: retailer_a
+    event_rule_id: retailer_a.distribution_change.v1
+    version: v1
+    description: Placeholder demo decision rule without real thresholds.

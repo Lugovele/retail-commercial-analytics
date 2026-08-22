@@ -1,0 +1,11 @@
+metric_definitions:
+  - id: retailer_a.numeric_distribution.v1
+    retailer_id: retailer_a
+    concept: distribution
+    version: v1
+    description: Placeholder demo definition using anonymous inputs only.
+  - id: retailer_a.velocity.v1
+    retailer_id: retailer_a
+    concept: velocity
+    version: v1
+    description: Placeholder demo definition using anonymous inputs only.

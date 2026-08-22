@@ -1,0 +1,5 @@
+action_types:
+  - id: review_presence
+    description: Neutral action type for configured presence review decisions.
+  - id: review_commercial_terms
+    description: Neutral action type for configured commercial review decisions.
