@@ -2,6 +2,7 @@ import polars as pl
 
 from retail_analytics.adapters.base import ConfiguredSourceAdapter
 from retail_analytics.normalization.columns import ColumnMapping
+from retail_analytics.normalization.stores import StoreAliasMapping
 from retail_analytics.pipeline.context import AnalysisContext
 
 
@@ -52,3 +53,57 @@ def test_unmapped_source_column_fails():
     assert not result.validation_report.is_valid
     assert any(issue.code == "unmapped_source_column" for issue in result.validation_report.fatal_errors)
     assert result.canonical_frame.is_empty()
+
+
+def test_allowed_unmapped_source_column_is_accepted():
+    raw = _raw().with_columns(pl.lit("allowed").alias("demo_allowed_extra"))
+    mapping = ColumnMapping(_mapping().columns, allowed_unmapped_source_columns=("demo_allowed_extra",))
+    result = ConfiguredSourceAdapter().to_canonical(raw, mapping, _context())
+    assert result.validation_report.is_valid
+    assert result.canonical_frame.height == 1
+
+
+def test_semantic_value_map_applies_boolean_values():
+    raw = _raw().with_columns(pl.Series("demo_private_label", ["YES_FLAG"]))
+    mapping = ColumnMapping(
+        _mapping().columns | {"demo_private_label": "private_label_flag"},
+        semantic_value_maps={"private_label_flag": {"YES_FLAG": True, "NO_FLAG": False}},
+    )
+    result = ConfiguredSourceAdapter().to_canonical(raw, mapping, _context())
+    assert result.validation_report.is_valid
+    assert result.canonical_frame.get_column("private_label_flag").to_list() == [True]
+
+
+def test_unknown_semantic_value_fails():
+    raw = _raw().with_columns(pl.Series("demo_private_label", ["UNKNOWN_FLAG"]))
+    mapping = ColumnMapping(
+        _mapping().columns | {"demo_private_label": "private_label_flag"},
+        semantic_value_maps={"private_label_flag": {"YES_FLAG": True, "NO_FLAG": False}},
+    )
+    result = ConfiguredSourceAdapter().to_canonical(raw, mapping, _context())
+    assert not result.validation_report.is_valid
+    assert any(issue.code == "unknown_semantic_value" for issue in result.validation_report.fatal_errors)
+    assert result.canonical_frame.is_empty()
+
+
+def test_store_alias_resolves_and_preserves_source_store_id():
+    aliases = StoreAliasMapping({"STORE_A_001": "STORE_A_CANONICAL"}, retailer_id="retailer_a", source_id="source_a", rule_version="rules_v1")
+    result = ConfiguredSourceAdapter().to_canonical(_raw(), _mapping(), _context(), store_aliases=aliases)
+    assert result.validation_report.is_valid
+    assert result.canonical_frame.get_column("source_store_id").to_list() == ["STORE_A_001"]
+    assert result.canonical_frame.get_column("canonical_store_id").to_list() == ["STORE_A_CANONICAL"]
+
+
+def test_store_alias_is_context_scoped():
+    aliases = StoreAliasMapping({"STORE_A_001": "STORE_A_CANONICAL"}, retailer_id="retailer_b", source_id="source_a", rule_version="rules_v1")
+    result = ConfiguredSourceAdapter().to_canonical(_raw(), _mapping(), _context(), store_aliases=aliases)
+    assert result.validation_report.is_valid
+    assert result.canonical_frame.get_column("canonical_store_id").to_list() == ["STORE_A_001"]
+
+
+def test_mapping_hash_includes_runtime_semantics():
+    base = ColumnMapping(_mapping().columns)
+    with_month_map = ColumnMapping(_mapping().columns, month_value_map={"JAN_LABEL": 1})
+    with_allowlist = ColumnMapping(_mapping().columns, allowed_unmapped_source_columns=("demo_allowed_extra",))
+    assert base.config_hash != with_month_map.config_hash
+    assert base.config_hash != with_allowlist.config_hash

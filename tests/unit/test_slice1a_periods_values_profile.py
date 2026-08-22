@@ -21,6 +21,13 @@ def test_invalid_month_fails():
     assert report.issues[0].code == "invalid_month"
 
 
+def test_invalid_year_with_configured_month_reports_validation_error():
+    normalized, report = normalize_period(pl.DataFrame({"year": ["bad"], "month": ["JAN_LABEL"], "source_row_number": [1]}), month_names={"JAN_LABEL": 1})
+    assert not report.is_valid
+    assert any(issue.code == "invalid_year" for issue in report.issues)
+    assert normalized.get_column("month").to_list() == [None]
+
+
 def test_numeric_fields_are_normalized():
     normalized, report = normalize_types(pl.DataFrame({"units": ["10"], "revenue_vat": ["25.5"], "source_row_number": [1]}))
     assert report.is_valid
@@ -32,6 +39,31 @@ def test_invalid_numeric_value_reports_validation_error():
     _, report = normalize_types(pl.DataFrame({"units": ["not_numeric"], "revenue_vat": ["25.5"], "source_row_number": [1]}))
     assert not report.is_valid
     assert any(issue.code == "invalid_numeric_value" for issue in report.issues)
+
+
+def test_optional_numeric_nulls_are_preserved():
+    normalized, report = normalize_types(pl.DataFrame({
+        "units": ["10"],
+        "revenue_vat": ["25.5"],
+        "shelf_price_vat": [None],
+        "input_price_vat": [""],
+        "source_row_number": [1],
+    }))
+    assert report.is_valid
+    assert normalized.get_column("shelf_price_vat").to_list() == [None]
+    assert normalized.get_column("input_price_vat").to_list() == [None]
+
+
+def test_required_numeric_null_reports_validation_error():
+    _, report = normalize_types(pl.DataFrame({"units": [None], "revenue_vat": ["25.5"], "source_row_number": [1]}))
+    assert not report.is_valid
+    assert any(issue.code == "null_numeric_value" and issue.field == "units" for issue in report.issues)
+
+
+def test_invalid_optional_numeric_reports_validation_error():
+    _, report = normalize_types(pl.DataFrame({"units": ["10"], "revenue_vat": ["25.5"], "shelf_price_vat": ["bad"], "source_row_number": [1]}))
+    assert not report.is_valid
+    assert any(issue.code == "invalid_numeric_value" and issue.field == "shelf_price_vat" for issue in report.issues)
 
 
 def test_blank_required_string_reports_validation_error():

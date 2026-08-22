@@ -31,6 +31,7 @@ def normalize_period(frame: pl.DataFrame, *, month_names: Mapping[str, int] | No
     """Add normalized month-start period from year and month columns."""
     issues: list[ValidationIssue] = []
     periods: list[date | None] = []
+    normalized_months: list[int | None] = []
     years = frame.get_column("year").to_list()
     months = frame.get_column("month").to_list()
     row_numbers = frame.get_column("source_row_number").to_list() if "source_row_number" in frame.columns else list(range(1, frame.height + 1))
@@ -40,11 +41,14 @@ def normalize_period(frame: pl.DataFrame, *, month_names: Mapping[str, int] | No
         except (TypeError, ValueError):
             issues.append(ValidationIssue("invalid_year", "Year must be coercible to an integer", field="year", source_row_number=int(row_number)))
             periods.append(None)
+            normalized_months.append(None)
             continue
         month = _parse_month(month_value, month_names)
         if month is None or not 1 <= month <= 12:
             issues.append(ValidationIssue("invalid_month", "Month must be between 1 and 12", field="month", source_row_number=int(row_number)))
             periods.append(None)
+            normalized_months.append(None)
             continue
+        normalized_months.append(month)
         periods.append(date(year, month, 1))
-    return frame.with_columns(pl.Series("period", periods, dtype=pl.Date)), ValidationReport(tuple(issues))
+    return frame.with_columns(pl.Series("month", normalized_months, dtype=pl.Int64), pl.Series("period", periods, dtype=pl.Date)), ValidationReport(tuple(issues))

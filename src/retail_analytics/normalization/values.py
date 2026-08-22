@@ -3,13 +3,14 @@ from __future__ import annotations
 
 import polars as pl
 
-from retail_analytics.schema.canonical import REQUIRED_STRING_COLUMNS
+from retail_analytics.schema.canonical import REQUIRED_INPUT_COLUMNS, REQUIRED_STRING_COLUMNS
 from retail_analytics.schema.validation import ValidationIssue, ValidationReport
 
 STRING_FIELDS = ("retailer_id", "source_id", "analysis_run_id", "source_store_id", "canonical_store_id", "source_sku_id", "canonical_product_id", "sku_name", "manufacturer", "brand", "category", "store_format", "region", "subcategory", "subcategory_2", "volume_band", "package", "carbonation")
 INTEGER_FIELDS = ("year", "month", "source_row_number")
 NUMERIC_FIELDS = ("units", "revenue_vat", "volume_l", "shelf_price_vat", "input_price_vat")
 BOOLEAN_FIELDS = ("private_label_flag",)
+REQUIRED_NUMERIC_FIELDS = tuple(field for field in NUMERIC_FIELDS if field in REQUIRED_INPUT_COLUMNS)
 
 def _row_numbers(frame: pl.DataFrame) -> list[int]:
     if "source_row_number" in frame.columns:
@@ -54,7 +55,8 @@ def normalize_types(frame: pl.DataFrame) -> tuple[pl.DataFrame, ValidationReport
         values_float: list[float | None] = []
         for raw, row_number in zip(output.get_column(field).to_list(), row_numbers, strict=True):
             if _is_blank(raw):
-                issues.append(ValidationIssue("null_numeric_value", f"{field} cannot be null", field=field, source_row_number=row_number))
+                if field in REQUIRED_NUMERIC_FIELDS:
+                    issues.append(ValidationIssue("null_numeric_value", f"{field} cannot be null", field=field, source_row_number=row_number))
                 values_float.append(None)
             else:
                 try:

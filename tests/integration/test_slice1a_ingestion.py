@@ -2,6 +2,7 @@ import polars as pl
 import pytest
 
 from retail_analytics.normalization.columns import ColumnMapping
+from retail_analytics.normalization.stores import StoreAliasMapping
 from retail_analytics.pipeline.context import AnalysisContext
 from retail_analytics.pipeline.slice1 import run_slice1a_ingestion
 from retail_analytics.schema.validation import ValidationError
@@ -100,3 +101,58 @@ def test_duplicate_candidate_fixture_reports_without_aggregation(tmp_path):
     result = run_slice1a_ingestion(raw_source=raw, mapping=_mapping(), context=_context("retailer_a", "source_a"), output_path=tmp_path / "duplicate.parquet")
     assert result.metadata.canonical_row_count == 2
     assert result.source_profile.duplicate_candidate_count == 2
+
+
+def test_ingestion_applies_runtime_mapping_semantics(tmp_path):
+    raw = pl.DataFrame({
+        "demo_year": [2026, 2026], "demo_month_label": ["JAN_LABEL", "FEB_LABEL"],
+        "demo_store_id": ["STORE_A_OLD", "STORE_A_002"],
+        "demo_sku_id": ["SKU_A_001", "SKU_A_002"],
+        "demo_sku_name": ["SKU_A_001", "SKU_A_002"],
+        "demo_manufacturer": ["MANUFACTURER_A", "MANUFACTURER_A"],
+        "demo_brand": ["BRAND_A", "BRAND_A"],
+        "demo_category": ["CATEGORY_A", "CATEGORY_A"],
+        "demo_private_label": ["YES_FLAG", "NO_FLAG"],
+        "demo_units": ["10", "20"],
+        "demo_revenue_vat": ["100.5", "210.0"],
+        "demo_shelf_price": [None, "12.5"],
+        "demo_input_price": ["5.0", None],
+        "demo_allowed_extra": ["ignored_a", "ignored_b"],
+    })
+    mapping = ColumnMapping(
+        {
+            "demo_year": "year", "demo_month_label": "month", "demo_store_id": "source_store_id",
+            "demo_sku_id": "source_sku_id", "demo_sku_name": "sku_name",
+            "demo_manufacturer": "manufacturer", "demo_brand": "brand", "demo_category": "category",
+            "demo_private_label": "private_label_flag", "demo_units": "units",
+            "demo_revenue_vat": "revenue_vat", "demo_shelf_price": "shelf_price_vat",
+            "demo_input_price": "input_price_vat",
+        },
+        month_value_map={"JAN_LABEL": 1, "FEB_LABEL": 2},
+        semantic_value_maps={"private_label_flag": {"YES_FLAG": True, "NO_FLAG": False}},
+        allowed_unmapped_source_columns=("demo_allowed_extra",),
+    )
+    aliases = StoreAliasMapping({"STORE_A_OLD": "STORE_A_001"}, retailer_id="retailer_a", source_id="source_a", rule_version="rules_v1")
+    result = run_slice1a_ingestion(
+        raw_source=raw,
+        mapping=mapping,
+        context=_context("retailer_a", "source_a"),
+        output_path=tmp_path / "runtime_semantics.parquet",
+        store_aliases=aliases,
+    )
+    data = read_canonical_parquet(result.canonical_data_path)
+    assert result.validation_report.is_valid
+    assert data.get_column("month").to_list() == [1, 2]
+    assert data.get_column("source_store_id").to_list() == ["STORE_A_OLD", "STORE_A_002"]
+    assert data.get_column("canonical_store_id").to_list() == ["STORE_A_001", "STORE_A_002"]
+    assert data.get_column("private_label_flag").to_list() == [True, False]
+    assert data.get_column("shelf_price_vat").to_list() == [None, 12.5]
+    assert data.get_column("input_price_vat").to_list() == [5.0, None]
+
+
+def test_invalid_month_label_from_mapping_fails(tmp_path):
+    mapping = ColumnMapping(_mapping().columns, month_value_map={"JAN_LABEL": 1})
+    raw = _raw().with_columns(pl.Series("demo_month", ["UNKNOWN_MONTH", "JAN_LABEL"]))
+    with pytest.raises(ValidationError) as error:
+        run_slice1a_ingestion(raw_source=raw, mapping=mapping, context=_context("retailer_a", "source_a"), output_path=tmp_path / "bad_month_label.parquet")
+    assert any(issue.code == "invalid_month" for issue in error.value.report.issues)

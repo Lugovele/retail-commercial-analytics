@@ -5,6 +5,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -18,6 +19,9 @@ class ColumnMapping:
     columns: dict[str, str]
     mapping_id: str | None = None
     version: str | None = None
+    month_value_map: dict[str, int] | None = None
+    semantic_value_maps: dict[str, dict[Any, Any]] | None = None
+    allowed_unmapped_source_columns: tuple[str, ...] = ()
 
     def validate(self) -> ValidationReport:
         issues: list[ValidationIssue] = []
@@ -40,7 +44,17 @@ class ColumnMapping:
 
     @property
     def config_hash(self) -> str:
-        payload = json.dumps(self.columns, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        payload = json.dumps(
+            {
+                "columns": self.columns,
+                "month_value_map": self.month_value_map or {},
+                "semantic_value_maps": self.semantic_value_maps or {},
+                "allowed_unmapped_source_columns": self.allowed_unmapped_source_columns,
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
         return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
 
 def load_column_mapping(path: str | Path) -> ColumnMapping:
@@ -52,4 +66,31 @@ def load_column_mapping(path: str | Path) -> ColumnMapping:
         columns={str(source): str(target) for source, target in raw_columns.items()},
         mapping_id=payload.get("mapping_id"),
         version=payload.get("version"),
+        month_value_map=_month_value_map(payload.get("month_value_map")),
+        semantic_value_maps=_semantic_value_maps(payload.get("semantic_value_maps")),
+        allowed_unmapped_source_columns=tuple(str(column) for column in payload.get("unmapped_source_columns", ())),
     )
+
+
+def _month_value_map(raw: object) -> dict[str, int] | None:
+    if not isinstance(raw, dict):
+        return None
+    values: dict[str, int] = {}
+    for key, value in raw.items():
+        if value is None or isinstance(value, bool):
+            continue
+        try:
+            values[str(key)] = int(value)
+        except (TypeError, ValueError):
+            continue
+    return values
+
+
+def _semantic_value_maps(raw: object) -> dict[str, dict[Any, Any]] | None:
+    if not isinstance(raw, dict):
+        return None
+    maps: dict[str, dict[Any, Any]] = {}
+    for field, value_map in raw.items():
+        if isinstance(value_map, dict):
+            maps[str(field)] = dict(value_map)
+    return maps
