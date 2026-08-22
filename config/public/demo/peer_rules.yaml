@@ -16,6 +16,7 @@ peer_rules:
     peer_level: BROAD_CATEGORY
     required_dimensions:
       - category
+    direct_peer_mode: RULE_POOL_ONLY
     top_n: 10
     ranking_metrics:
       - revenue_net

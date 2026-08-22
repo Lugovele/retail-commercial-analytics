@@ -55,11 +55,12 @@ def calculate_benchmark_features(
     for group in peer_groups.group_by(group_columns, maintain_order=True).agg(pl.col("peer_entity_id")).to_dicts():
         peer_ids = tuple(group["peer_entity_id"])
         target_id = group["target_entity_id"]
+        population_ids = sorted({*peer_ids, target_id})
         for metric_name in BENCHMARK_METRICS:
             metric_rows = metrics.filter(pl.col("metric_name") == metric_name)
             if group["reference_period"] is not None:
                 metric_rows = metric_rows.filter(pl.col("period") == group["reference_period"])
-            population = metric_rows.filter(pl.col("entity_id").is_in(list(peer_ids))).select(
+            population = metric_rows.filter(pl.col("entity_id").is_in(population_ids)).select(
                 "entity_id",
                 "metric_value",
                 "metric_definition_id",

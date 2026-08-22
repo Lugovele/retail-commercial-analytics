@@ -40,6 +40,7 @@ def _broad_rule() -> PeerRule:
         "retailer_a",
         "BROAD_CATEGORY",
         ("category",),
+        direct_peer_mode="RULE_POOL_ONLY",
         top_n=2,
     )
 
@@ -168,6 +169,15 @@ def test_broad_pool_contains_category_skus():
     result = build_peer_groups(_metrics(), _products(), (_broad_rule(),), segments, _context(), BenchmarkRequest())
 
     assert "SKU_A_002" in result.peer_groups.filter(pl.col("target_entity_id") == "SKU_A_001")["peer_entity_id"].to_list()
+    assert not result.quality_report.issues
+
+
+def test_broad_rule_accepts_legacy_default_mode():
+    legacy_rule = PeerRule("retailer_a.category_pool.v1", "rules_v1", "retailer_a", "BROAD_CATEGORY", ("category",), top_n=2)
+    result = build_peer_groups(_metrics(), _products(), (legacy_rule,), pl.DataFrame(), _context(), BenchmarkRequest())
+
+    assert not result.peer_groups.is_empty()
+    assert not any(issue.issue_code == "UNSUPPORTED_DIRECT_PEER_MODE" for issue in result.quality_report.issues)
 
 
 def test_top_n_pools_deduplicate_entities():
@@ -175,15 +185,69 @@ def test_top_n_pools_deduplicate_entities():
     result = build_peer_groups(_metrics(), _products(), (_broad_rule(),), segments, _context(), BenchmarkRequest())
 
     top = result.peer_groups.filter(pl.col("benchmark_scope") == "TOP_N")
+    assert set(top["pool_source"].to_list()) == {"RULE_POOL_UNION"}
     assert top.unique(["target_entity_id", "peer_entity_id", "benchmark_scope", "pool_source"]).height == top.height
+
+
+def test_top_n_union_combines_revenue_units_and_velocity():
+    rule = PeerRule(
+        "retailer_a.category_pool.v1",
+        "rules_v1",
+        "retailer_a",
+        "BROAD_CATEGORY",
+        ("category",),
+        direct_peer_mode="RULE_POOL_ONLY",
+        top_n=1,
+    )
+    metrics = _metrics().filter(~((pl.col("metric_name") == "units") & (pl.col("entity_id") == "SKU_A_004"))).filter(
+        ~((pl.col("metric_name") == "units_per_selling_store") & (pl.col("entity_id") == "SKU_A_005"))
+    )
+    metrics = pl.concat(
+        [
+            metrics,
+            pl.DataFrame([_metric_row("retailer_a", "source_a", date(2026, 2, 1), "SKU_A_004", "units", 999.0)]),
+            pl.DataFrame([_metric_row("retailer_a", "source_a", date(2026, 2, 1), "SKU_A_005", "units_per_selling_store", 999.0)]),
+        ],
+        how="diagonal",
+    )
+    result = build_peer_groups(metrics, _products(), (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
+
+    top = result.peer_groups.filter((pl.col("benchmark_scope") == "TOP_N") & (pl.col("target_entity_id") == "SKU_A_001"))
+    assert set(top["peer_entity_id"].to_list()) == {"SKU_A_002", "SKU_A_004", "SKU_A_005"}
 
 
 def test_pool_uses_all_entities_when_population_below_n():
     rule = PeerRule("retailer_a.category_pool.v1", "rules_v1", "retailer_a", "BROAD_CATEGORY", ("category",), top_n=10)
-    result = build_peer_groups(_metrics(), _products().filter(pl.col("category") == "CATEGORY_B"), (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
+    products = pl.DataFrame(
+        {
+            "analysis_run_id": ["run_a"] * 3,
+            "retailer_id": ["retailer_a"] * 3,
+            "source_id": ["source_a"] * 3,
+            "entity_id": ["SKU_A_008", "SKU_A_009", "SKU_A_010"],
+            "category": ["CATEGORY_B"] * 3,
+            "brand": ["BRAND_H", "BRAND_I", "BRAND_J"],
+            "manufacturer": ["MANUFACTURER_G", "MANUFACTURER_H", "MANUFACTURER_I"],
+            "carbonation": ["CARBONATED", "STILL", "CARBONATED"],
+            "volume_band": ["VOLUME_A", "VOLUME_B", "VOLUME_C"],
+            "package": ["PACKAGE_PET", "PACKAGE_CAN", "PACKAGE_BOX"],
+            "is_own_product": [False, False, False],
+        }
+    )
+    metrics = pl.DataFrame(
+        [
+            _metric_row("retailer_a", "source_a", date(2026, 2, 1), entity_id, metric_name, value)
+            for entity_id, values in {
+                "SKU_A_008": {"revenue_net": 30.0, "units": 3.0, "units_per_selling_store": 1.0},
+                "SKU_A_009": {"revenue_net": 20.0, "units": 2.0, "units_per_selling_store": 2.0},
+                "SKU_A_010": {"revenue_net": 10.0, "units": 1.0, "units_per_selling_store": 3.0},
+            }.items()
+            for metric_name, value in values.items()
+        ]
+    )
+    result = build_peer_groups(metrics, products, (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
 
     top = result.peer_groups.filter(pl.col("benchmark_scope") == "TOP_N")
-    assert set(top["peer_entity_id"].to_list()) == {"SKU_A_008"}
+    assert set(top.filter(pl.col("target_entity_id") == "SKU_A_008")["peer_entity_id"].to_list()) == {"SKU_A_009", "SKU_A_010"}
 
 
 def test_top_n_uses_selected_benchmark_period():
@@ -191,26 +255,94 @@ def test_top_n_uses_selected_benchmark_period():
     historical = _metric_row("retailer_a", "source_a", date(2026, 1, 1), "SKU_A_005", "revenue_net", 999.0)
     metrics = pl.concat([_metrics(), pl.DataFrame([historical])], how="diagonal")
     result = build_peer_groups(metrics, _products(), (_broad_rule(),), segments, _context(), BenchmarkRequest())
-    top_revenue = result.peer_groups.filter((pl.col("benchmark_scope") == "TOP_N") & (pl.col("pool_source") == "revenue_net"))
+    top_revenue = result.peer_groups.filter(pl.col("benchmark_scope") == "TOP_N")
 
     assert "SKU_A_005" not in top_revenue["peer_entity_id"].to_list()
 
 
-def test_top_n_scope_identity_includes_ranking_metric():
+def test_top_n_scope_identity_marks_rule_pool_union():
     rule = PeerRule(
         "retailer_a.category_pool.v1",
         "rules_v1",
         "retailer_a",
         "BROAD_CATEGORY",
         ("category",),
+        direct_peer_mode="RULE_POOL_ONLY",
         top_n=1,
         ranking_metrics=("revenue_net", "units_per_selling_store"),
     )
     result = build_peer_groups(_metrics(), _products(), (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
     top = result.peer_groups.filter((pl.col("benchmark_scope") == "TOP_N") & (pl.col("target_entity_id") == "SKU_A_001"))
 
-    assert set(top["pool_source"].to_list()) == {"revenue_net", "units_per_selling_store"}
-    assert len(set(top["benchmark_scope_id"].to_list())) == 2
+    assert set(top["pool_source"].to_list()) == {"RULE_POOL_UNION"}
+    assert len(set(top["benchmark_scope_id"].to_list())) == 1
+
+
+def test_broad_pool_excludes_own_products_and_self_pairs():
+    result = build_peer_groups(_metrics(), _products(), (_broad_rule(),), pl.DataFrame(), _context(), BenchmarkRequest())
+    target = result.peer_groups.filter(pl.col("target_entity_id") == "SKU_A_001")
+
+    assert "SKU_A_001" not in target["peer_entity_id"].to_list()
+    assert not target["is_own_product"].any()
+
+
+def test_broad_mode_does_not_apply_direct_filters():
+    rule = PeerRule(
+        "retailer_a.category_pool.v1",
+        "rules_v1",
+        "retailer_a",
+        "BROAD_CATEGORY",
+        ("category",),
+        direct_peer_mode="RULE_POOL_ONLY",
+        top_n=10,
+    )
+    result = build_peer_groups(_metrics(), _products(), (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
+    peers = result.peer_groups.filter((pl.col("benchmark_scope") == "TOP_N") & (pl.col("target_entity_id") == "SKU_A_001"))["peer_entity_id"].to_list()
+
+    assert "SKU_A_004" in peers
+    assert "SKU_A_005" in peers
+
+
+def test_broad_pool_does_not_cross_category_retailer_or_source():
+    products = pl.concat([_products(), _products("retailer_b"), _products(source_id="source_b")], how="diagonal")
+    metrics = pl.concat([_metrics(), _metrics("retailer_b"), _metrics(source_id="source_b")], how="diagonal")
+    result = build_peer_groups(metrics, products, (_broad_rule(),), pl.DataFrame(), _context(), BenchmarkRequest())
+
+    assert set(result.peer_groups["retailer_id"].unique().to_list()) == {"retailer_a"}
+    assert set(result.peer_groups["source_id"].unique().to_list()) == {"source_a"}
+    assert "SKU_A_008" not in result.peer_groups.filter(pl.col("target_entity_id") == "SKU_A_001")["peer_entity_id"].to_list()
+
+
+def test_broad_rule_version_and_config_hash_lineage_are_retained():
+    result = build_peer_groups(_metrics(), _products(), (_broad_rule(),), pl.DataFrame(), _context(), BenchmarkRequest(), config_hash="peer_hash")
+    row = result.peer_groups.filter(pl.col("benchmark_scope") == "TOP_N").row(0, named=True)
+
+    assert row["peer_rule_version"] == "rules_v1"
+    assert row["peer_config_hash"] == "peer_hash"
+    assert row["rule_version"] == "rules_v1"
+
+
+def test_broad_top_n_ties_are_deterministic_by_entity_id():
+    rule = PeerRule(
+        "retailer_a.category_pool.v1",
+        "rules_v1",
+        "retailer_a",
+        "BROAD_CATEGORY",
+        ("category",),
+        direct_peer_mode="RULE_POOL_ONLY",
+        top_n=1,
+        ranking_metrics=("revenue_net",),
+    )
+    metrics = _metrics().with_columns(
+        pl.when((pl.col("entity_id").is_in(["SKU_A_002", "SKU_A_003"])) & (pl.col("metric_name") == "revenue_net"))
+        .then(999.0)
+        .otherwise(pl.col("metric_value"))
+        .alias("metric_value")
+    )
+    result = build_peer_groups(metrics, _products(), (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
+    top = result.peer_groups.filter((pl.col("benchmark_scope") == "TOP_N") & (pl.col("target_entity_id") == "SKU_A_001"))
+
+    assert top["peer_entity_id"].to_list() == ["SKU_A_002"]
 
 
 def test_direct_peer_group_applies_configured_dimensions_and_excludes_self():
@@ -249,6 +381,31 @@ def test_unsupported_direct_peer_mode_reports_quality_issue():
 
     assert result.peer_groups.is_empty()
     assert any(issue.issue_code == "UNSUPPORTED_DIRECT_PEER_MODE" for issue in result.quality_report.issues)
+
+
+def test_direct_rule_pool_only_mode_remains_rejected():
+    rule = PeerRule(
+        "retailer_a.direct_peer.v1",
+        "rules_v1",
+        "retailer_a",
+        "DIRECT_COMPARABLE",
+        ("category",),
+        direct_peer_mode="RULE_POOL_ONLY",
+    )
+    result = build_peer_groups(_metrics(), _products(), (rule,), pl.DataFrame(), _context(), BenchmarkRequest())
+
+    assert result.peer_groups.is_empty()
+    assert any(issue.issue_code == "UNSUPPORTED_DIRECT_PEER_MODE" for issue in result.quality_report.issues)
+
+
+def test_public_broad_rule_pool_only_config_executes():
+    rules, config_hash = load_peer_rule_config("config/public/demo/peer_rules.yaml")
+    broad_rule = tuple(rule for rule in rules if rule.peer_level == "BROAD_CATEGORY")
+    result = build_peer_groups(_metrics(), _products(), broad_rule, pl.DataFrame(), _context(), BenchmarkRequest(), config_hash=config_hash)
+
+    assert not result.peer_groups.filter(pl.col("benchmark_scope") == "TOP_N").is_empty()
+    assert broad_rule[0].direct_peer_mode == "RULE_POOL_ONLY"
+    assert set(result.peer_groups["peer_config_hash"].unique().to_list()) == {config_hash}
 
 
 def test_rank_percentile_and_relative_price_features():

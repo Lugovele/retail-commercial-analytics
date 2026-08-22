@@ -49,20 +49,15 @@ def build_peer_groups(
         if not rule.required_dimensions:
             issues.append(QualityIssue("UNKNOWN_PEER_DIMENSION", "FATAL", 1, (), "Peer rule requires at least one dimension."))
             continue
-        if rule.direct_peer_mode != "DIRECT_ONLY":
-            issues.append(
-                QualityIssue(
-                    "UNSUPPORTED_DIRECT_PEER_MODE",
-                    "ERROR",
-                    1,
-                    (),
-                    f"Unsupported direct peer mode: {rule.direct_peer_mode}.",
-                )
-            )
-            continue
         if rule.peer_level == "BROAD_CATEGORY":
+            if rule.direct_peer_mode not in {"RULE_POOL_ONLY", "DIRECT_ONLY"}:
+                issues.append(_unsupported_peer_mode_issue(rule))
+                continue
             rows.extend(_broad_rows(products, metric_frame, rule, context, benchmark_period, config_hash))
         else:
+            if rule.direct_peer_mode != "DIRECT_ONLY":
+                issues.append(_unsupported_peer_mode_issue(rule))
+                continue
             direct_rows = _direct_rows(products, rule, context, benchmark_period, config_hash)
             rows.extend(direct_rows)
             empty_targets = products.height - len({row["target_entity_id"] for row in direct_rows})
@@ -80,14 +75,20 @@ def _broad_rows(
     config_hash: str,
 ) -> list[dict[str, Any]]:
     output: list[dict[str, Any]] = []
-    broad_pairs = _pairs(products, ("category",), include_self=True)
+    broad_pairs = [
+        row
+        for row in _pairs(products, ("category",), include_self=False)
+        if not row["peer_is_own_product"]
+    ]
     for row in broad_pairs:
         output.append(_peer_row(row, rule, context, benchmark_period, "BROAD_CATEGORY", "CATEGORY_POOL", config_hash))
+    competitor_products = products.filter(~pl.col("is_own_product"))
+    union_entities: set[str] = set()
     for metric_name in rule.ranking_metrics:
-        top_entities = _top_entities(metric_frame, products, context, benchmark_period, metric_name, rule.top_n)
-        for row in broad_pairs:
-            if row["peer_entity_id"] in top_entities:
-                output.append(_peer_row(row, rule, context, benchmark_period, "TOP_N", metric_name, config_hash))
+        union_entities.update(_top_entities(metric_frame, competitor_products, context, benchmark_period, metric_name, rule.top_n))
+    for row in broad_pairs:
+        if row["peer_entity_id"] in union_entities:
+            output.append(_peer_row(row, rule, context, benchmark_period, "TOP_N", "RULE_POOL_UNION", config_hash))
     return _dedupe(output)
 
 
@@ -188,6 +189,16 @@ def _dedupe(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
             seen.add(key)
             output.append(row)
     return output
+
+
+def _unsupported_peer_mode_issue(rule: PeerRule) -> QualityIssue:
+    return QualityIssue(
+        "UNSUPPORTED_DIRECT_PEER_MODE",
+        "ERROR",
+        1,
+        (),
+        f"Unsupported peer mode for {rule.peer_level}: {rule.direct_peer_mode}.",
+    )
 
 
 def _benchmark_period(price_segments: pl.DataFrame, request: BenchmarkRequest) -> object:
