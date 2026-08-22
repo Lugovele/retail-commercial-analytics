@@ -1,0 +1,15 @@
+mapping_id: demo_source_a_sellout_v1
+version: v1
+source_id: demo_source_a
+retailer_id: retailer_a
+columns:
+  demo_year: year
+  demo_month: month
+  demo_store_id: source_store_id
+  demo_sku_id: source_sku_id
+  demo_sku_name: sku_name
+  demo_manufacturer: manufacturer
+  demo_brand: brand
+  demo_category: category
+  demo_units: units
+  demo_revenue_vat: revenue_vat
