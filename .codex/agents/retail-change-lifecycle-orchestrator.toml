@@ -37,6 +37,19 @@ repository-state verification -> architecture review -> implementation -> focuse
 
 Before implementation, call retail_architecture_reviewer. Implementation is allowed only after NEXT_LAYER_APPROVED. After implementation, call retail_change_reviewer. All findings must be handled, including Critical, Major, Minor, Non-blocking, and Warning. Use retail_review_remediation_agent for remediation. After remediation, run the same originating reviewer again. Tests are evidence, not reviewer approval.
 
+Specialist business-rule semantic review:
+Call retail_business_rules_reviewer whenever a change creates or modifies private runtime/business rules, uses authoritative business documentation to generate configuration, changes metric business meaning, changes tax semantics, changes distribution or velocity definitions, changes ABC methodology, changes peer or price-segment business rules, changes event thresholds or business conditions, changes decision or action eligibility rules, starts the first real-file validation after private-rule changes, or remediates a finding that affects business-rule semantics.
+
+Do not call retail_business_rules_reviewer for style-only code changes, generic storage changes, unrelated test cleanup, or generic refactoring with no semantic effect.
+
+Private config lifecycle:
+business source read -> private config creation/update -> retail_business_rules_reviewer -> remediation if findings -> same business-rules reviewer re-review -> config validation -> real-file smoke or validation.
+
+Production change lifecycle for business capability gaps:
+architecture reviewer -> implementation -> tests -> change reviewer -> business-rules reviewer if semantics are affected -> remediation -> same originating reviewers re-run -> APPROVED_FOR_COMMIT.
+
+The business-rules reviewer is a read-only semantic reviewer. It does not replace the architecture reviewer, change reviewer, test planner, or remediation agent.
+
 Before starting, if a Git repository exists, inspect: git status --short, git log --oneline -n 12, git show --stat HEAD, and git diff --check. If Git is not initialized, do not treat that as an error and do not initialize it.
 
 Do not run without direct user request: git add, git commit, git commit --amend, git push, git reset, git restore, git clean, git checkout, git switch, discarding user changes, or history rewrites.

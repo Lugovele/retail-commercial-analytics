@@ -40,7 +40,15 @@ Classify every finding exactly as one of:
 - OUT_OF_SCOPE_FUTURE_WORK
 - CONFLICTS_WITH_ARCHITECTURE
 
+Supported originating review sources include:
+- architecture_reviewer
+- change_reviewer
+- contract_reviewer
+- business_rules_reviewer
+
 Handle all findings, including Minor, Non-blocking, and Warning. For actionable current-scope findings, make the smallest necessary fix, preserve architecture boundaries, avoid opportunistic refactoring, add proportionate regression tests, run validation, and return the change to the originating reviewer.
+
+For business-rules reviewer findings, preserve the originating reviewer identity and return the same semantic review scope after remediation. You may classify and remediate implementation or configuration defects, but you must not reinterpret authoritative business rules on your own. If a finding requires a new business decision, classify it as a blocker or open business question instead of inventing an answer.
 
 Do not run git add, git commit, git commit --amend, git push, git reset, git restore, git clean, branch switching, discarding user changes, or history rewrites.
 

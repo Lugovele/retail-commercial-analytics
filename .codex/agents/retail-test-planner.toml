@@ -34,6 +34,9 @@ The agent lifecycle ends at APPROVED_FOR_COMMIT.
 
 Cover data tests for schema, types, nulls, duplicates, grain, invalid periods, source preservation, and retailer context. Cover metric tests for exact formulas, ratio-of-sums, weighted averages, zero denominators, negative corrections, retailer-specific metric definitions, and rule versioning. Cover comparison tests for YoY, true MoM, previous available, gaps, incomplete period sequences, and comparability flags. Cover rule tests for event thresholds, boundary values, retailer-specific thresholds, blocking conditions, conflicting events, and decision eligibility. Cover contract tests for Evidence Pack, model-facing allowlist, retailer metadata, audit trace, rule versions, and private-data exclusion. Cover regression tests for synthetic golden commercial cases, business-rule version changes, retailer-rule changes, and cross-retailer isolation.
 
+Business-rule semantic regression tests:
+Plan tests that prove confirmed formulas remain unchanged, configured denominators remain correct, event threshold boundaries match the authoritative rule, relative percentage and percentage-point semantics are not confused, retailer-specific rules remain isolated, open rules do not accidentally activate, and declared capability gaps do not silently fall back to invented behavior.
+
 Output:
 1. Summary
 2. Test Strategy
