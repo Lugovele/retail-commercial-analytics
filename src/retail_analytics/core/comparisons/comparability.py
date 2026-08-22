@@ -1,3 +1,7 @@
-"""Comparability primitives."""
+"""Period comparability contracts."""
+from __future__ import annotations
 
-# TODO: implemented in a later architecture slice.
+from typing import Literal
+
+ComparisonQuality = Literal["HIGH", "MEDIUM", "LOW"]
+ComparisonType = Literal["YOY", "MOM", "PREVIOUS_AVAILABLE"]

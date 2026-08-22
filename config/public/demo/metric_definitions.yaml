@@ -1,11 +1,121 @@
-metric_definitions:
-  - id: retailer_a.numeric_distribution.v1
+rule_version: rules_v1
+metrics:
+  revenue_net:
+    concept: revenue
+    definition_id: retailer_a.revenue_net.v1
+    definition_version: v1
     retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: revenue_net
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  revenue_vat:
+    concept: revenue_vat
+    definition_id: retailer_a.revenue_vat.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: revenue_vat
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  units:
+    concept: units
+    definition_id: retailer_a.units.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: units
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  retailer_margin_abs:
+    concept: retailer_margin_abs
+    definition_id: retailer_a.margin_abs.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: sum
+    source_column: retailer_margin_abs
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  retailer_margin_pct:
+    concept: retailer_margin_pct
+    definition_id: retailer_a.margin_pct.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: retailer_margin_abs
+    denominator: revenue_net
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  weighted_shelf_price_vat:
+    concept: weighted_shelf_price_vat
+    definition_id: retailer_a.weighted_shelf_price_vat.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: weighted_average
+    value_column: shelf_price_vat
+    weight_column: units
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  weighted_input_price_vat:
+    concept: weighted_input_price_vat
+    definition_id: retailer_a.weighted_input_price_vat.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: weighted_average
+    value_column: input_price_vat
+    weight_column: units
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  selling_store_count:
+    concept: selling_store_count
+    definition_id: retailer_a.selling_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    condition:
+      units:
+        gt: 0
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  active_store_count:
+    concept: active_store_count
+    definition_id: retailer_a.active_store_count.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: distinct_count
+    distinct_column: canonical_store_id
+    grain: [period, category, canonical_product_id]
+    broadcast_grain: [period, category]
+    entity_type: sku
+  numeric_distribution:
     concept: distribution
-    version: v1
-    description: Placeholder demo definition using anonymous inputs only.
-  - id: retailer_a.velocity.v1
+    definition_id: retailer_a.numeric_distribution.v1
+    definition_version: v1
     retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: selling_store_count
+    denominator: active_store_count
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
+  units_per_selling_store:
     concept: velocity
-    version: v1
-    description: Placeholder demo definition using anonymous inputs only.
+    definition_id: retailer_a.units_per_selling_store.v1
+    definition_version: v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    aggregation: ratio_of_sums
+    numerator: units
+    denominator: selling_store_count
+    grain: [period, category, canonical_product_id]
+    entity_type: sku
