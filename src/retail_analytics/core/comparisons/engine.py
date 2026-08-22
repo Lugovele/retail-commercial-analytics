@@ -47,7 +47,19 @@ def compare_periods(
         base = scoped.filter(pl.col("period") == reference_period)
         keys = [
             column
-            for column in ["analysis_run_id", "retailer_id", "source_id", "metric_definition_id", "metric_definition_version", "entity_type", "entity_id", "category"]
+            for column in [
+                "analysis_run_id",
+                "retailer_id",
+                "source_id",
+                "rule_version",
+                "concept",
+                "metric_name",
+                "metric_definition_id",
+                "metric_definition_version",
+                "entity_type",
+                "entity_id",
+                "category",
+            ]
             if column in scoped.columns
         ]
         joined = current.join(base, on=keys, how="left", suffix="_base")

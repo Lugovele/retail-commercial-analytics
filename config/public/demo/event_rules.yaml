@@ -1,7 +1,209 @@
+rule_version: rules_v1
 event_rules:
-  - id: retailer_a.distribution_change.v1
+  - event_rule_id: retailer_a.revenue_decline.v1
     retailer_id: retailer_a
-    concept: distribution
-    metric_definition_id: retailer_a.numeric_distribution.v1
-    version: v1
-    description: Placeholder demo event rule without real thresholds.
+    rule_version: rules_v1
+    event_type: MATERIAL_REVENUE_DECLINE
+    event_family: GROWTH_DECLINE
+    input_source: comparison
+    required_features:
+      - revenue
+    comparison_types:
+      - YOY
+      - MOM
+      - PREVIOUS_AVAILABLE
+    entity_types:
+      - sku
+    conditions:
+      - field: delta_pct
+        operator: lte
+        value: -0.10
+    severity: HIGH
+    confidence: HIGH
+    observed_drivers:
+      - revenue_delta_pct
+
+  - event_rule_id: retailer_a.units_growth.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: MATERIAL_UNITS_GROWTH
+    event_family: GROWTH_DECLINE
+    input_source: comparison
+    required_features:
+      - units
+    conditions:
+      - field: delta_pct
+        operator: gte
+        value: 0.10
+    severity: MEDIUM
+    confidence: HIGH
+    observed_drivers:
+      - units_delta_pct
+
+  - event_rule_id: retailer_a.margin_decline.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: MATERIAL_MARGIN_DECLINE
+    event_family: GROWTH_DECLINE
+    input_source: comparison
+    required_features:
+      - retailer_margin_abs
+    conditions:
+      - field: delta_pct
+        operator: lte
+        value: -0.10
+    severity: HIGH
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.distribution_loss.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: DISTRIBUTION_LOSS
+    event_family: DISTRIBUTION
+    input_source: comparison
+    required_features:
+      - distribution
+    conditions:
+      - field: delta_pp
+        operator: lte
+        value: -0.05
+    severity: HIGH
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.velocity_loss.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: VELOCITY_LOSS
+    event_family: VELOCITY
+    input_source: comparison
+    required_features:
+      - velocity
+    conditions:
+      - field: delta_pct
+        operator: lte
+        value: -0.10
+    severity: HIGH
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.share_gain.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: SHARE_GAIN
+    event_family: SHARE
+    input_source: comparison
+    required_features:
+      - category_revenue_share
+    conditions:
+      - field: delta_pp
+        operator: gte
+        value: 0.02
+    severity: MEDIUM
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.price_increase.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: PRICE_INCREASE
+    event_family: PRICE
+    input_source: comparison
+    required_features:
+      - weighted_shelf_price_vat
+      - velocity
+      - distribution
+    conditions:
+      - field: weighted_shelf_price_vat_delta_pct
+        operator: gte
+        value: 0.10
+      - field: velocity_delta_pct
+        operator: lte
+        value: -0.10
+      - field: distribution_delta_pp
+        operator: between
+        value:
+          - -0.02
+          - 0.02
+    severity: MEDIUM
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.margin_pct_erosion.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: MARGIN_PCT_EROSION
+    event_family: MARGIN_PCT
+    input_source: comparison
+    required_features:
+      - retailer_margin_pct
+    conditions:
+      - field: delta_pp
+        operator: lte
+        value: -0.02
+    severity: HIGH
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.abc_class_change.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: ABC_CLASS_CHANGE
+    event_family: PORTFOLIO
+    input_source: abc
+    required_features:
+      - abc_revenue
+    conditions:
+      - field: label_changed
+        operator: eq
+        value: true
+    severity: INFO
+    confidence: HIGH
+
+  - event_rule_id: retailer_a.peer_outperformance.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: PEER_OUTPERFORMANCE
+    event_family: BENCHMARK
+    input_source: benchmark
+    required_features:
+      - revenue_net
+    conditions:
+      - field: percentile
+        operator: gte
+        value: 0.80
+    severity: MEDIUM
+    confidence: MEDIUM
+
+  - event_rule_id: retailer_a.high_velocity_low_distribution.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: HIGH_VELOCITY_LOW_DISTRIBUTION
+    event_family: BENCHMARK
+    input_source: benchmark
+    required_features:
+      - units_per_selling_store
+    conditions:
+      - field: percentile
+        operator: gte
+        value: 0.80
+      - field: population_size
+        operator: gte
+        value: 2
+    severity: MEDIUM
+    confidence: MEDIUM
+
+  - event_rule_id: retailer_a.price_pressure_pattern.v1
+    retailer_id: retailer_a
+    rule_version: rules_v1
+    event_type: PRICE_PRESSURE_PATTERN
+    event_family: PATTERN_CANDIDATE
+    input_source: comparison
+    required_features:
+      - weighted_shelf_price_vat
+    conditions:
+      - field: delta_pct
+        operator: gte
+        value: 0.10
+    severity: MEDIUM
+    confidence: MEDIUM
+    hypothesis_candidates:
+      - PRICE_ELASTICITY
+    optional_evidence:
+      - promo_calendar
+      - stock
