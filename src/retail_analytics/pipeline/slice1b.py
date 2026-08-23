@@ -18,6 +18,7 @@ from retail_analytics.economics.tax import (
     load_tax_rule_config,
     normalize_tax,
 )
+from retail_analytics.economics.tax_semantics import classify_tax_semantics
 from retail_analytics.pipeline.context import AnalysisContext
 from retail_analytics.quality.checks import (
     ReconciliationResult,
@@ -49,9 +50,15 @@ def run_slice1b_normalization(
     """Enrich canonical rows without aggregation, repair, or source mutation."""
     tax_config_result = _resolve_tax_rules(tax_rules)
     resolved_rules = tax_config_result.rules
-    tax_result = normalize_tax(canonical_frame, resolved_rules, context)
+    semantic_report = QualityReport()
+    tax_input_frame = canonical_frame
+    if tax_config_result.tax_semantic_mapping is not None:
+        semantic_result = classify_tax_semantics(canonical_frame, tax_config_result.tax_semantic_mapping)
+        semantic_report = semantic_result.quality_report
+        tax_input_frame = semantic_result.frame
+    tax_result = normalize_tax(tax_input_frame, resolved_rules, context)
     economics_result = calculate_retailer_economics(tax_result.frame, context)
-    quality_report = tax_config_result.quality_report.extend(tax_result.quality_report).extend(
+    quality_report = tax_config_result.quality_report.extend(semantic_report).extend(tax_result.quality_report).extend(
         economics_result.quality_report
     ).extend(
         run_quality_checks(economics_result.frame, context)

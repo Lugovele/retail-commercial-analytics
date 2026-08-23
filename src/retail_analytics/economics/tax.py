@@ -10,8 +10,9 @@ from pathlib import Path
 from typing import Any
 
 import polars as pl
-import yaml
+import yaml  # type: ignore[import-untyped]
 
+from retail_analytics.economics.tax_semantics import TaxSemanticMapping, parse_tax_semantic_mapping
 from retail_analytics.pipeline.context import AnalysisContext
 from retail_analytics.quality.report import QualityIssue, QualityReport
 
@@ -56,6 +57,7 @@ class TaxNormalizationResult:
 class TaxRuleConfigResult:
     rules: tuple[TaxRule, ...]
     quality_report: QualityReport
+    tax_semantic_mapping: TaxSemanticMapping | None = None
 
 
 def load_tax_rule_config(path: str | Path) -> TaxRuleConfigResult:
@@ -92,23 +94,22 @@ def load_tax_rule_config(path: str | Path) -> TaxRuleConfigResult:
                 )
             ),
         )
+    semantic_mapping, semantic_report = parse_tax_semantic_mapping(payload)
     raw_rules = payload.get("rules", payload.get("tax_rules", ()))
     config_rule_version = payload.get("rule_version")
     if not isinstance(raw_rules, list):
+        issue = QualityIssue(
+            "invalid_tax_rule_config",
+            "FATAL",
+            1,
+            (),
+            "Tax rule config must define rules as a list.",
+            "rules",
+        )
         return TaxRuleConfigResult(
             (),
-            QualityReport(
-                (
-                    QualityIssue(
-                        "invalid_tax_rule_config",
-                        "FATAL",
-                        1,
-                        (),
-                        "Tax rule config must define rules as a list.",
-                        "rules",
-                    ),
-                )
-            ),
+            semantic_report.extend(QualityReport((issue,))),
+            semantic_mapping,
         )
 
     rules: list[TaxRule] = []
@@ -148,7 +149,7 @@ def load_tax_rule_config(path: str | Path) -> TaxRuleConfigResult:
                 source_id=raw_rule.get("source_id"),
             )
         )
-    return TaxRuleConfigResult(tuple(rules), QualityReport(tuple(issues)))
+    return TaxRuleConfigResult(tuple(rules), semantic_report.extend(QualityReport(tuple(issues))), semantic_mapping)
 
 
 def load_tax_rules(path: str | Path) -> tuple[TaxRule, ...]:
