@@ -106,10 +106,49 @@ def test_absolute_metric_delta_pp_is_null():
     assert row["delta_pp"].to_list() == [None]
 
 
+def test_network_scoped_share_delta_pp():
+    frame = _metric_frame().with_columns(
+        pl.lit("network_revenue_share").alias("concept"),
+        pl.lit("retailer_a.category.revenue_net.v1.share").alias("metric_definition_id"),
+        pl.lit("category").alias("grain_id"),
+    )
+
+    result = compare_periods(frame, (ComparisonRequest("YOY", date(2026, 1, 1)),), _context())
+    row = result.comparisons.filter(pl.col("entity_id") == "SKU_A_001")
+
+    assert row["delta_pp"].to_list() == [50.0]
+
+
 def test_comparisons_do_not_cross_retailer_boundary():
     result = compare_periods(_metric_frame(), (ComparisonRequest("YOY", date(2026, 1, 1)),), _context("retailer_b"))
 
     assert result.comparisons.is_empty()
+
+
+def test_comparisons_do_not_cross_grain_boundary():
+    frame = pl.DataFrame(
+        {
+            "analysis_run_id": ["run_a"] * 4,
+            "retailer_id": ["retailer_a"] * 4,
+            "source_id": ["source_a"] * 4,
+            "period": [date(2025, 1, 1), date(2026, 1, 1), date(2025, 1, 1), date(2026, 1, 1)],
+            "category": ["CATEGORY_STANDARD"] * 4,
+            "entity_type": ["category", "category", "brand", "brand"],
+            "entity_id": ["CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD"],
+            "grain_id": ["category", "category", "brand", "brand"],
+            "concept": ["revenue"] * 4,
+            "metric_name": ["revenue_net"] * 4,
+            "metric_definition_id": ["retailer_a.revenue_net.v1"] * 4,
+            "metric_definition_version": ["v1"] * 4,
+            "metric_config_hash": ["hash"] * 4,
+            "metric_value": [100.0, 150.0, 10.0, 30.0],
+        }
+    )
+
+    result = compare_periods(frame, (ComparisonRequest("YOY", date(2026, 1, 1)),), _context())
+
+    assert result.comparisons.filter(pl.col("grain_id") == "category")["reference_value"].to_list() == [100.0]
+    assert result.comparisons.filter(pl.col("grain_id") == "brand")["reference_value"].to_list() == [10.0]
 
 
 def test_abc_revenue_uses_80_15_5():

@@ -38,6 +38,7 @@ class MetricDefinition:
     broadcast_grain: tuple[str, ...] | None = None
     share_denominator_scope: str | None = None
     entity_type: str = "sku"
+    grain_id: str | None = None
     retailer_id: str | None = None
     source_id: str | None = None
     rule_version: str | None = None
@@ -105,6 +106,7 @@ def load_metric_definition_config(path: str | Path) -> MetricRegistry:
                 broadcast_grain=tuple(raw["broadcast_grain"]) if "broadcast_grain" in raw else None,
                 share_denominator_scope=raw.get("share_denominator_scope"),
                 entity_type=str(raw.get("entity_type", "sku")),
+                grain_id=raw.get("grain_id"),
                 retailer_id=raw.get("retailer_id"),
                 source_id=raw.get("source_id"),
                 rule_version=raw.get("rule_version", config_rule_version),

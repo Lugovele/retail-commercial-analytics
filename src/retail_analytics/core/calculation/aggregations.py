@@ -64,58 +64,80 @@ def calculate_metric_share(
     *,
     value_concepts: Sequence[str] = ("revenue", "units", "retailer_margin_abs"),
 ) -> MetricsResult:
-    """Calculate category-relative shares for SKU/brand/manufacturer metric rows."""
+    """Calculate configured denominator-scope shares for metric rows."""
     if metric_frame.is_empty():
         return MetricsResult(pl.DataFrame(), QualityReport())
     base = metric_frame.filter(pl.col("concept").is_in(list(value_concepts)))
+    if "share_denominator_scope" in base.columns:
+        base = base.filter(pl.col("share_denominator_scope").is_not_null())
+    else:
+        base = base.filter(pl.col("entity_type").is_in(["sku", "brand", "manufacturer"]))
+        base = base.with_columns(pl.lit("category").alias("share_denominator_scope"))
     if base.is_empty():
         return MetricsResult(pl.DataFrame(), QualityReport())
 
-    total_keys = [
+    frames: list[pl.DataFrame] = []
+    issues: list[QualityIssue] = []
+    for scope in sorted(base.get_column("share_denominator_scope").drop_nulls().unique().to_list()):
+        scoped = base.filter(pl.col("share_denominator_scope") == scope)
+        total_keys = _share_total_keys(scoped, str(scope))
+        if not total_keys:
+            continue
+        totals = scoped.group_by(total_keys).agg(pl.col("metric_value").sum().alias("share_total"))
+        joined = scoped.join(
+            totals,
+            on=total_keys,
+            how="left",
+        )
+        zero_count = joined.filter(pl.col("share_total") == 0).height
+        if zero_count:
+            issues.append(
+                QualityIssue(
+                    "ZERO_SHARE_DENOMINATOR",
+                    "WARNING",
+                    zero_count,
+                    (),
+                    f"{scope} share denominator is zero.",
+                )
+            )
+        frames.append(_share_rows(joined, str(scope)))
+    if not frames:
+        return MetricsResult(pl.DataFrame(), QualityReport(tuple(issues)))
+    return MetricsResult(pl.concat(frames, how="diagonal"), QualityReport(tuple(issues)))
+
+
+def _share_total_keys(frame: pl.DataFrame, scope: str) -> list[str]:
+    keys = [
         "analysis_run_id",
         "retailer_id",
         "source_id",
         "period",
-        "category",
         "entity_type",
         "concept",
         "metric_definition_id",
         "metric_definition_version",
+        "grain_id",
     ]
-    totals = base.group_by(total_keys).agg(pl.col("metric_value").sum().alias("category_total"))
-    joined = base.join(
-        totals,
-        on=total_keys,
-        how="left",
-    )
+    if scope == "category":
+        keys.append("category")
+    return [key for key in keys if key in frame.columns]
+
+
+def _share_rows(joined: pl.DataFrame, scope: str) -> pl.DataFrame:
     share = joined.with_columns(
-        pl.when(pl.col("category_total") == 0)
+        pl.when(pl.col("share_total") == 0)
         .then(None)
-        .otherwise(pl.col("metric_value") / pl.col("category_total"))
+        .otherwise(pl.col("metric_value") / pl.col("share_total"))
         .alias("metric_value"),
         pl.col("metric_value").alias("numerator_value"),
-        pl.col("category_total").alias("denominator_value"),
+        pl.col("share_total").alias("denominator_value"),
         pl.col("concept").replace({"retailer_margin_abs": "margin"}).alias("__share_base_concept"),
     ).with_columns(
-        (pl.lit("category_") + pl.col("__share_base_concept") + pl.lit("_share")).alias("concept"),
+        (pl.lit(scope) + pl.lit("_") + pl.col("__share_base_concept") + pl.lit("_share")).alias("concept"),
         (pl.col("metric_definition_id") + pl.lit(".share")).alias("metric_definition_id"),
         pl.lit("share").alias("aggregation"),
-    ).drop(["category_total", "__share_base_concept"])
-    zero_count = joined.filter(pl.col("category_total") == 0).height
-    issues = (
-        (
-            QualityIssue(
-                "ZERO_SHARE_DENOMINATOR",
-                "WARNING",
-                zero_count,
-                (),
-                "Category share denominator is zero.",
-            ),
-        )
-        if zero_count
-        else ()
-    )
-    return MetricsResult(share, QualityReport(issues))
+    ).drop(["share_total", "__share_base_concept"])
+    return share
 
 
 def _calculate_one(
@@ -235,6 +257,8 @@ def _add_metadata(
         pl.lit(definition.aggregation).alias("aggregation"),
         pl.lit(context.rule_version).alias("rule_version"),
         pl.lit(definition.entity_type).alias("entity_type"),
+        pl.lit(definition.grain_id or _default_grain_id(definition)).alias("grain_id"),
+        pl.lit(_share_denominator_scope(definition), dtype=pl.Utf8).alias("share_denominator_scope"),
     )
     if "canonical_product_id" in result.columns:
         result = result.with_columns(pl.col("canonical_product_id").alias("entity_id"))
@@ -244,9 +268,25 @@ def _add_metadata(
         result = result.with_columns(pl.col("manufacturer").alias("entity_id"))
     elif "category" in result.columns:
         result = result.with_columns(pl.col("category").alias("entity_id"))
+    elif "canonical_store_id" in result.columns:
+        result = result.with_columns(pl.col("canonical_store_id").alias("entity_id"))
     else:
         result = result.with_columns(pl.lit("ALL").alias("entity_id"))
     return result
+
+
+def _default_grain_id(definition: MetricDefinition) -> str:
+    if definition.entity_type:
+        return definition.entity_type
+    return "__".join(definition.grain)
+
+
+def _share_denominator_scope(definition: MetricDefinition) -> str | None:
+    if definition.share_denominator_scope is not None:
+        return definition.share_denominator_scope
+    if definition.entity_type in {"sku", "brand", "manufacturer"}:
+        return "category"
+    return None
 
 
 def _derived_ratio_from_metrics(

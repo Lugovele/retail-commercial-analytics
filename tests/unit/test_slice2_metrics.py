@@ -376,7 +376,120 @@ def test_multi_grain_distribution_is_retailer_and_source_isolated():
     assert set(result.metrics["source_id"].unique().to_list()) == {"source_a"}
 
 
-def _sum_definition(column: str, concept: str, *, grain=("period", "category", "canonical_product_id"), entity_type="sku") -> MetricDefinition:
+def test_dashboard_additive_metrics_cover_required_grains():
+    result = calculate_metrics(_hierarchy_frame(), _dashboard_grain_definitions(), _context())
+
+    expected_revenue = {
+        ("network", "ALL"): 275.0,
+        ("category", "CATEGORY_STANDARD"): 250.0,
+        ("category", "CATEGORY_REDUCED"): 25.0,
+        ("manufacturer", "MANUFACTURER_A"): 150.0,
+        ("manufacturer", "MANUFACTURER_B"): 100.0,
+        ("manufacturer", "MANUFACTURER_C"): 25.0,
+        ("brand", "BRAND_A"): 100.0,
+        ("brand", "BRAND_B"): 50.0,
+        ("brand", "BRAND_C"): 100.0,
+        ("brand", "BRAND_D"): 25.0,
+        ("sku", "SKU_A_001"): 100.0,
+        ("sku", "SKU_A_002"): 50.0,
+        ("sku", "SKU_A_003"): 100.0,
+        ("sku", "SKU_A_004"): 25.0,
+        ("store", "STORE_A_001"): 230.0,
+        ("store", "STORE_A_002"): 45.0,
+    }
+    for (grain_id, entity_id), expected in expected_revenue.items():
+        row = result.metrics.filter(
+            (pl.col("grain_id") == grain_id)
+            & (pl.col("entity_id") == entity_id)
+            & (pl.col("metric_name") == "revenue_net")
+        )
+        assert row["metric_value"].to_list() == [expected]
+
+
+def test_margin_pct_is_ratio_of_sums_for_every_dashboard_grain():
+    result = calculate_metrics(_hierarchy_frame(), _dashboard_grain_definitions(), _context())
+
+    for grain_id, entity_id, expected in [
+        ("network", "ALL", 80.0 / 275.0),
+        ("category", "CATEGORY_STANDARD", 75.0 / 250.0),
+        ("manufacturer", "MANUFACTURER_A", 45.0 / 150.0),
+        ("brand", "BRAND_A", 40.0 / 100.0),
+        ("sku", "SKU_A_001", 40.0 / 100.0),
+        ("store", "STORE_A_001", 69.0 / 230.0),
+    ]:
+        row = result.metrics.filter(
+            (pl.col("grain_id") == grain_id)
+            & (pl.col("entity_id") == entity_id)
+            & (pl.col("metric_name").str.ends_with("retailer_margin_pct"))
+        )
+        assert round(row["metric_value"][0], 10) == round(expected, 10)
+
+
+def test_store_grain_does_not_generate_distribution_or_velocity():
+    result = calculate_metrics(_hierarchy_frame(), _dashboard_grain_definitions(), _context())
+
+    store_metrics = result.metrics.filter(pl.col("grain_id") == "store")
+
+    assert not store_metrics.filter(pl.col("concept") == "distribution").height
+    assert not store_metrics.filter(pl.col("concept") == "velocity").height
+
+
+def test_hierarchy_revenue_reconciles_to_network():
+    result = calculate_metrics(_hierarchy_frame(), _dashboard_grain_definitions(), _context())
+    revenue = result.metrics.filter(pl.col("metric_name") == "revenue_net")
+    network = revenue.filter(pl.col("grain_id") == "network")["metric_value"].sum()
+
+    for grain_id in ["category", "manufacturer", "brand", "sku", "store"]:
+        assert revenue.filter(pl.col("grain_id") == grain_id)["metric_value"].sum() == network
+
+
+def test_category_share_uses_network_denominator_when_configured():
+    definitions = (
+        _sum_definition(
+            "revenue_net",
+            "revenue",
+            grain=("period", "category"),
+            entity_type="category",
+            grain_id="category",
+            share_denominator_scope="network",
+        ),
+    )
+    result = calculate_metrics(_hierarchy_frame(), definitions, _context())
+    share = calculate_metric_share(result.metrics)
+
+    reduced = share.metrics.filter(pl.col("entity_id") == "CATEGORY_REDUCED")
+    assert reduced["concept"].to_list() == ["network_revenue_share"]
+    assert reduced["metric_value"].to_list() == [25.0 / 275.0]
+
+
+def test_store_metrics_do_not_generate_shares_without_explicit_scope():
+    definitions = (
+        _sum_definition("revenue_net", "revenue", grain=("period", "canonical_store_id"), entity_type="store", grain_id="store"),
+    )
+    result = calculate_metrics(_hierarchy_frame(), definitions, _context())
+    share = calculate_metric_share(result.metrics)
+
+    assert share.metrics.is_empty()
+
+
+def test_metric_rows_preserve_grain_lineage():
+    result = calculate_metrics(_hierarchy_frame(), _dashboard_grain_definitions(), _context(), metric_config_hash="hash_a")
+
+    row = result.metrics.filter((pl.col("grain_id") == "brand") & (pl.col("entity_id") == "BRAND_A")).head(1)
+
+    assert row["metric_config_hash"].to_list() == ["hash_a"]
+    assert row["grain_id"].to_list() == ["brand"]
+
+
+def _sum_definition(
+    column: str,
+    concept: str,
+    *,
+    grain=("period", "category", "canonical_product_id"),
+    entity_type="sku",
+    grain_id: str | None = None,
+    share_denominator_scope: str | None = None,
+) -> MetricDefinition:
     return MetricDefinition(
         column,
         concept,
@@ -386,6 +499,8 @@ def _sum_definition(column: str, concept: str, *, grain=("period", "category", "
         source_column=column,
         grain=grain,
         entity_type=entity_type,
+        grain_id=grain_id,
+        share_denominator_scope=share_denominator_scope,
         retailer_id="retailer_a",
         rule_version="rules_v1",
     )
@@ -549,3 +664,103 @@ def _grain_metric_definitions(entity_type: str, grain: tuple[str, ...], *, prefi
             rule_version="rules_v1",
         ),
     )
+
+
+def _hierarchy_frame() -> pl.DataFrame:
+    return pl.DataFrame(
+        {
+            "analysis_run_id": ["run_a"] * 5,
+            "retailer_id": ["retailer_a"] * 5,
+            "source_id": ["source_a"] * 5,
+            "period": [date(2026, 1, 1)] * 5,
+            "category": [
+                "CATEGORY_STANDARD",
+                "CATEGORY_STANDARD",
+                "CATEGORY_STANDARD",
+                "CATEGORY_STANDARD",
+                "CATEGORY_REDUCED",
+            ],
+            "brand": ["BRAND_A", "BRAND_B", "BRAND_C", "BRAND_C", "BRAND_D"],
+            "manufacturer": [
+                "MANUFACTURER_A",
+                "MANUFACTURER_A",
+                "MANUFACTURER_B",
+                "MANUFACTURER_B",
+                "MANUFACTURER_C",
+            ],
+            "canonical_product_id": ["SKU_A_001", "SKU_A_002", "SKU_A_003", "SKU_A_003", "SKU_A_004"],
+            "canonical_store_id": ["STORE_A_001", "STORE_A_001", "STORE_A_001", "STORE_A_002", "STORE_A_002"],
+            "units": [10.0, 5.0, 8.0, 2.0, 1.0],
+            "revenue_net": [100.0, 50.0, 80.0, 20.0, 25.0],
+            "revenue_vat": [120.0, 60.0, 96.0, 24.0, 27.5],
+            "retailer_margin_abs": [40.0, 5.0, 24.0, 6.0, 5.0],
+            "shelf_price_vat": [12.0, 12.0, 15.0, 15.0, 30.0],
+            "input_price_vat": [8.0, 11.0, 10.0, 10.0, 24.0],
+        }
+    )
+
+
+def _dashboard_grain_definitions() -> tuple[MetricDefinition, ...]:
+    definitions: list[MetricDefinition] = []
+    grains = {
+        "network": ("period",),
+        "category": ("period", "category"),
+        "manufacturer": ("period", "category", "manufacturer"),
+        "brand": ("period", "category", "brand"),
+        "sku": ("period", "category", "canonical_product_id"),
+        "store": ("period", "canonical_store_id"),
+    }
+    share_scopes = {"category": "network", "manufacturer": "category", "brand": "category", "sku": "category"}
+    for grain_id, grain in grains.items():
+        prefix = grain_id
+        entity_type = grain_id
+        definitions.extend(
+            [
+                _sum_definition(
+                    "revenue_net",
+                    "revenue",
+                    grain=grain,
+                    entity_type=entity_type,
+                    grain_id=grain_id,
+                    share_denominator_scope=share_scopes.get(grain_id),
+                ),
+                _sum_definition(
+                    "units",
+                    "units",
+                    grain=grain,
+                    entity_type=entity_type,
+                    grain_id=grain_id,
+                    share_denominator_scope=share_scopes.get(grain_id),
+                ),
+                _sum_definition(
+                    "retailer_margin_abs",
+                    "retailer_margin_abs",
+                    grain=grain,
+                    entity_type=entity_type,
+                    grain_id=grain_id,
+                    share_denominator_scope=share_scopes.get(grain_id),
+                ),
+                MetricDefinition(
+                    f"{prefix}_retailer_margin_pct",
+                    "retailer_margin_pct",
+                    f"retailer_a.{prefix}_retailer_margin_pct.v1",
+                    "v1",
+                    "ratio_of_sums",
+                    numerator="retailer_margin_abs",
+                    denominator="revenue_net",
+                    grain=grain,
+                    entity_type=entity_type,
+                    grain_id=grain_id,
+                    retailer_id="retailer_a",
+                    rule_version="rules_v1",
+                ),
+            ]
+        )
+    for grain_id, grain in {
+        "category": ("period", "category"),
+        "manufacturer": ("period", "category", "manufacturer"),
+        "brand": ("period", "category", "brand"),
+        "sku": ("period", "category", "canonical_product_id"),
+    }.items():
+        definitions.extend(_grain_metric_definitions(grain_id, grain))
+    return tuple(definitions)

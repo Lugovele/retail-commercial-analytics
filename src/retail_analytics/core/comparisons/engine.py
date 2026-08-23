@@ -56,6 +56,7 @@ def compare_periods(
                 "metric_name",
                 "metric_definition_id",
                 "metric_definition_version",
+                "grain_id",
                 "entity_type",
                 "entity_id",
                 "category",
@@ -84,7 +85,10 @@ def compare_periods(
                 .then(None)
                 .otherwise((pl.col("metric_value") - pl.col("metric_value_base")) / pl.col("metric_value_base"))
                 .alias("delta_pct"),
-                pl.when(pl.col("concept").is_in(["distribution", "retailer_margin_pct", "category_revenue_share", "category_units_share", "category_margin_share"]))
+                pl.when(
+                    pl.col("concept").is_in(["distribution", "retailer_margin_pct"])
+                    | pl.col("concept").str.ends_with("_share")
+                )
                 .then(pl.col("metric_value") - pl.col("metric_value_base"))
                 .otherwise(None)
                 .alias("delta_pp"),
