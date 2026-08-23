@@ -10,7 +10,23 @@ from retail_analytics.mart.builds import (
     write_mart_build_metadata,
     write_mart_build_metadata_dataset,
 )
+from retail_analytics.mart.comparison_universe import (
+    ComparativePatternSignal,
+    DeclineSpeedResult,
+    DeltaStatus,
+    MarketSegmentDelta,
+    MarketSegmentUniverse,
+    calculate_decline_speed_ratio,
+    calculate_market_segment_delta,
+    filter_market_universe,
+    private_label_growth_while_portfolio_declines,
+)
 from retail_analytics.mart.duckdb import query_metric_facts
+from retail_analytics.mart.geography import (
+    UNKNOWN_REGION,
+    RegionalMetricRow,
+    calculate_regional_summary,
+)
 from retail_analytics.mart.metric_catalog import (
     CatalogIssueSeverity,
     CatalogValidationIssue,
@@ -36,6 +52,15 @@ from retail_analytics.mart.metric_facts import (
     write_mart_metric_fact_dataset,
     write_mart_metric_facts,
 )
+from retail_analytics.mart.portfolio import (
+    ActiveSkuSummary,
+    BrandVsCategoryComparison,
+    CategoryShareResult,
+    ShareMetric,
+    calculate_active_sku_summary,
+    calculate_category_share,
+    compare_brand_to_category,
+)
 from retail_analytics.mart.query import (
     ComparisonMode,
     ComparisonResult,
@@ -50,6 +75,7 @@ from retail_analytics.mart.query import (
     QualityPolicy,
     QueryLimitation,
 )
+from retail_analytics.mart.rankings import ManufacturerRankRow, RankingScope, rank_manufacturers
 from retail_analytics.mart.scoped_metrics import (
     ScopedMetricsResult,
     calculate_private_label_scope_set,
@@ -63,8 +89,13 @@ from retail_analytics.mart.scopes import (
 )
 
 __all__ = [
+    "UNKNOWN_REGION",
+    "ActiveSkuSummary",
+    "BrandVsCategoryComparison",
     "CatalogIssueSeverity",
     "CatalogValidationIssue",
+    "CategoryShareResult",
+    "ComparativePatternSignal",
     "ComparisonMode",
     "ComparisonResult",
     "CoverageStatus",
@@ -72,7 +103,12 @@ __all__ = [
     "DashboardMartQueryService",
     "DashboardMetricQueryRequest",
     "DashboardMetricQueryResponse",
+    "DeclineSpeedResult",
+    "DeltaStatus",
     "EffectiveMetricCatalogEntry",
+    "ManufacturerRankRow",
+    "MarketSegmentDelta",
+    "MarketSegmentUniverse",
     "MartBuildMetadata",
     "MartBuildStatus",
     "MetricAvailabilityStatus",
@@ -88,13 +124,23 @@ __all__ = [
     "QualityPolicy",
     "QueryLimitation",
     "RangeAggregationStrategy",
+    "RankingScope",
+    "RegionalMetricRow",
     "ScopedMetricsResult",
+    "ShareMetric",
     "apply_private_label_scope",
     "build_mart_metric_facts",
+    "calculate_active_sku_summary",
+    "calculate_category_share",
+    "calculate_decline_speed_ratio",
+    "calculate_market_segment_delta",
     "calculate_private_label_scope_set",
     "calculate_private_label_scoped_metrics",
+    "calculate_regional_summary",
     "catalog_entry_for_fact",
+    "compare_brand_to_category",
     "duplicate_semantic_identities",
+    "filter_market_universe",
     "load_private_metric_catalog_overrides",
     "load_public_metric_catalog",
     "mart_build_id",
@@ -102,8 +148,10 @@ __all__ = [
     "mart_build_metadata_to_frame",
     "merge_metric_catalog",
     "metric_fact_semantic_identity_columns",
+    "private_label_growth_while_portfolio_declines",
     "query_metric_facts",
     "range_strategy_for_metric",
+    "rank_manufacturers",
     "read_mart_build_metadata",
     "read_mart_metric_facts",
     "scope_identity_hash",
