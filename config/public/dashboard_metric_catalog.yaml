@@ -1,0 +1,146 @@
+metrics:
+  - metric_concept: revenue_vat
+    default_display_label: Gross revenue
+    description: VAT-inclusive revenue from deterministic metric outputs.
+    format: currency
+    dashboard_group: sales
+    default_range_aggregation_strategy: sum_available_periods
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: revenue
+    default_display_label: Net revenue
+    description: Net revenue from deterministic metric outputs.
+    format: currency
+    dashboard_group: sales
+    default_range_aggregation_strategy: sum_available_periods
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: units
+    default_display_label: Units
+    description: Sold units from deterministic metric outputs.
+    format: decimal
+    dashboard_group: sales
+    default_range_aggregation_strategy: sum_available_periods
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: retailer_margin_abs
+    default_display_label: Retailer margin
+    description: Absolute retailer margin from deterministic metric outputs.
+    format: currency
+    dashboard_group: economics
+    default_range_aggregation_strategy: sum_available_periods
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: retailer_margin_pct
+    default_display_label: Retailer margin percent
+    description: Retailer margin ratio, range-safe only from stored numerator and denominator.
+    format: percent
+    dashboard_group: economics
+    default_range_aggregation_strategy: ratio_of_sums
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: weighted_shelf_price_vat
+    default_display_label: Weighted shelf price
+    description: Weighted shelf price from deterministic metric outputs.
+    format: currency
+    dashboard_group: price
+    default_range_aggregation_strategy: weighted_ratio_of_sums
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: weighted_input_price_vat
+    default_display_label: Weighted input price
+    description: Weighted input price from deterministic metric outputs.
+    format: currency
+    dashboard_group: price
+    default_range_aggregation_strategy: weighted_ratio_of_sums
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+  - metric_concept: selling_store_count
+    default_display_label: Selling stores
+    description: Period-level selling store count.
+    format: integer
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: active_store_count
+    default_display_label: Active stores
+    description: Period-level active store count.
+    format: integer
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: distribution
+    default_display_label: Numeric distribution
+    description: Period-level distribution; arbitrary selected-range recomputation is not declared.
+    format: percent
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: velocity
+    default_display_label: Velocity
+    description: Period-level velocity; arbitrary selected-range recomputation is not declared.
+    format: ratio
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: revenue_velocity
+    default_display_label: Revenue velocity
+    description: Period-level revenue velocity.
+    format: currency
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: margin_velocity
+    default_display_label: Margin velocity
+    description: Period-level margin velocity.
+    format: currency
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: sku_count
+    default_display_label: SKU count
+    description: Period-level distinct SKU count.
+    format: integer
+    dashboard_group: assortment
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: brand_count
+    default_display_label: Brand count
+    description: Period-level distinct brand count.
+    format: integer
+    dashboard_group: assortment
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: category_count
+    default_display_label: Category count
+    description: Period-level distinct category count.
+    format: integer
+    dashboard_group: assortment
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable]
+  - metric_concept: category_revenue_share
+    default_display_label: Category revenue share
+    description: Share metric; selected-range support requires declared numerator and denominator scope.
+    format: percent
+    dashboard_group: share
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_requires_declared_scope]
+  - metric_concept: category_units_share
+    default_display_label: Category units share
+    description: Share metric; selected-range support requires declared numerator and denominator scope.
+    format: percent
+    dashboard_group: share
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_requires_declared_scope]
+  - metric_concept: category_margin_share
+    default_display_label: Category margin share
+    description: Share metric; selected-range support requires declared numerator and denominator scope.
+    format: percent
+    dashboard_group: share
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_requires_declared_scope]
