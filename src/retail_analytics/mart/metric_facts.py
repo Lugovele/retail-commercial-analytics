@@ -13,6 +13,7 @@ from typing import Any
 import polars as pl
 
 from retail_analytics.mart.builds import MartBuildMetadata
+from retail_analytics.mart.scopes import PrivateLabelScope
 
 
 class RangeAggregationStrategy(StrEnum):
@@ -33,6 +34,7 @@ MART_METRIC_FACT_SCHEMA = {
     "source_revision_id": pl.Utf8,
     "analysis_run_id": pl.Utf8,
     "mart_build_id": pl.Utf8,
+    "private_label_scope": pl.Utf8,
     "period_grain": pl.Utf8,
     "period_start": pl.Date,
     "period_end": pl.Date,
@@ -69,6 +71,7 @@ def metric_fact_semantic_identity_columns(*, include_mart_build_id: bool = True)
         "retailer_id",
         "source_id",
         *lineage,
+        "private_label_scope",
         "period_grain",
         "period_start",
         "period_end",
@@ -119,6 +122,7 @@ def build_mart_metric_facts(
     created_at: datetime | None = None,
     quality_status: str = "valid",
     quality_flags: str | None = None,
+    private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE,
 ) -> pl.DataFrame:
     """Project existing metric rows into mart metric facts without recalculation."""
 
@@ -132,12 +136,14 @@ def build_mart_metric_facts(
     _validate_source_revision_mapping(normalized_input, source_revision_id, build_metadata)
 
     period_grain = build_metadata.period_grain or "month"
+    resolved_private_label_scope = PrivateLabelScope(private_label_scope)
     timestamp = created_at or datetime.now(UTC)
     input_columns = frozenset(normalized_input.columns)
     projected = _with_optional_columns(normalized_input.clone())
     projected = projected.with_columns(
         _source_revision_expr(source_revision_id, input_columns).alias("source_revision_id"),
         pl.lit(build_metadata.mart_build_id).alias("mart_build_id"),
+        _private_label_scope_expr(resolved_private_label_scope, input_columns).alias("private_label_scope"),
         _period_start_expr().alias("period_start"),
         pl.lit(period_grain).alias("period_grain"),
         pl.col("concept").alias("metric_concept"),
@@ -302,6 +308,12 @@ def _source_revision_expr(source_revision_id: str | Mapping[str, str] | None, in
     if isinstance(source_revision_id, str):
         return pl.lit(source_revision_id)
     return pl.col("source_id").replace_strict(dict(source_revision_id), default=None).cast(pl.Utf8)
+
+
+def _private_label_scope_expr(scope: PrivateLabelScope, input_columns: frozenset[str]) -> pl.Expr:
+    if "private_label_scope" in input_columns:
+        return pl.col("private_label_scope").cast(pl.Utf8)
+    return pl.lit(scope.value)
 
 
 def _range_strategy_for_row(row: dict[str, Any]) -> RangeAggregationStrategy:

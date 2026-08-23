@@ -9,6 +9,7 @@ from retail_analytics.mart import (
     DashboardGroup,
     MetricAvailabilityStatus,
     MetricFormat,
+    PrivateLabelScope,
     PrivateMetricCatalogOverride,
     PublicMetricCatalogEntry,
     RangeAggregationStrategy,
@@ -182,6 +183,47 @@ overrides:
 
     assert overrides[0].retailer_id == "retailer_a"
     assert overrides[0].availability_status == MetricAvailabilityStatus.READY
+    assert overrides[0].private_label_scope_support == ()
+
+
+def test_private_override_without_scope_support_does_not_expand_public_restriction(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "metric_catalog.yaml"
+    path.write_text(
+        """
+overrides:
+  - retailer_id: retailer_a
+    source_id: source_a
+    metric_definition_id: retailer_a.revenue.v1
+    metric_definition_version: v1
+    metric_concept: revenue
+    grain_support: [network]
+    period_support: [month]
+    availability_status: READY
+""",
+        encoding="utf-8",
+    )
+    public = (
+        PublicMetricCatalogEntry(
+            metric_concept="revenue",
+            default_display_label="Revenue",
+            description="Synthetic catalog entry.",
+            format=MetricFormat.CURRENCY,
+            dashboard_group=DashboardGroup.SALES,
+            default_range_aggregation_strategy=RangeAggregationStrategy.SUM_AVAILABLE_PERIODS,
+            private_label_scope_support=(PrivateLabelScope.INCLUDE,),
+        ),
+    )
+
+    merged = merge_metric_catalog(
+        public,
+        load_private_metric_catalog_overrides(path),
+        retailer_id="retailer_a",
+        source_id="source_a",
+    )
+
+    assert merged[0].private_label_scope_support == (PrivateLabelScope.INCLUDE,)
 
 
 def test_merge_raises_on_invalid_catalog() -> None:

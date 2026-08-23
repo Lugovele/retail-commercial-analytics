@@ -6,6 +6,7 @@ import polars as pl
 import pytest
 
 from retail_analytics.mart import (
+    PrivateLabelScope,
     RangeAggregationStrategy,
     build_mart_metric_facts,
     duplicate_semantic_identities,
@@ -33,6 +34,7 @@ def test_lineage_and_metric_identity_are_preserved() -> None:
     assert row["source_revision_id"] == "revision_a"
     assert row["analysis_run_id"] == "analysis_a"
     assert row["mart_build_id"] == _build().mart_build_id
+    assert row["private_label_scope"] == PrivateLabelScope.INCLUDE
     assert row["metric_definition_id"] == "retailer_a.revenue.v1"
     assert row["metric_definition_version"] == "v1"
     assert row["metric_config_hash"] == "metric_hash_a"
@@ -84,6 +86,7 @@ def test_semantic_identity_includes_definition_and_build_lineage() -> None:
     columns = metric_fact_semantic_identity_columns()
 
     assert "mart_build_id" in columns
+    assert "private_label_scope" in columns
     assert "metric_definition_id" in columns
     assert "metric_definition_version" in columns
     assert "metric_config_hash" in columns
@@ -99,6 +102,25 @@ def test_old_and_new_source_revision_facts_remain_distinguishable() -> None:
     assert duplicate_semantic_identities(combined).is_empty()
     assert set(combined["source_revision_id"].to_list()) == {"revision_a", "revision_b"}
     assert set(combined["mart_build_id"].to_list()) == {"build_a", "build_b"}
+
+
+def test_private_label_scoped_facts_do_not_collide() -> None:
+    include = build_mart_metric_facts(
+        _metrics(),
+        build_metadata=_build(),
+        source_revision_id="revision_a",
+        private_label_scope=PrivateLabelScope.INCLUDE,
+    )
+    exclude = build_mart_metric_facts(
+        _metrics(),
+        build_metadata=_build(),
+        source_revision_id="revision_a",
+        private_label_scope=PrivateLabelScope.EXCLUDE,
+    )
+    combined = pl.concat([include, exclude])
+
+    assert duplicate_semantic_identities(combined).is_empty()
+    assert set(combined["private_label_scope"].to_list()) == {"INCLUDE", "EXCLUDE"}
 
 
 def _build(build_id: str | None = None) -> MartBuildMetadata:

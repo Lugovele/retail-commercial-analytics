@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import Any, cast
 
 import polars as pl
 import pytest
@@ -14,6 +15,7 @@ from retail_analytics.mart import (
     MartBuildMetadata,
     MartBuildStatus,
     PeriodMode,
+    PrivateLabelScope,
     RangeAggregationStrategy,
     write_mart_metric_facts,
 )
@@ -35,6 +37,8 @@ def test_single_period_query_returns_multiple_metrics_with_lineage(tmp_path) -> 
         "distribution",
     }
     assert response.metric_definition_lineage
+    assert response.private_label_scope == PrivateLabelScope.INCLUDE
+    assert response.request_scope["private_label_scope"] == "INCLUDE"
 
 
 def test_lineage_can_be_omitted(tmp_path) -> None:
@@ -343,6 +347,7 @@ def test_yoy_comparison_uses_same_calendar_month(tmp_path) -> None:
 
     assert response.comparisons[0].comparison_period_start == date(2025, 1, 1)
     assert response.comparisons[0].quality_status == "HIGH"
+    assert response.comparisons[0].private_label_scope == PrivateLabelScope.INCLUDE
 
 
 def test_comparison_works_when_lineage_is_omitted(tmp_path) -> None:
@@ -442,6 +447,107 @@ def test_range_comparison_returns_limitation(tmp_path) -> None:
     assert "range_comparison_unsupported" in {item.issue_code for item in response.limitations}
 
 
+def test_private_label_scope_filters_materialized_facts(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    include = _facts()
+    exclude = _facts(private_label_scope=PrivateLabelScope.EXCLUDE).with_columns(
+        pl.when(pl.col("metric_concept") == "revenue")
+        .then(pl.lit(60.0))
+        .otherwise(pl.col("value"))
+        .alias("value")
+    )
+    only = _facts(private_label_scope=PrivateLabelScope.ONLY).with_columns(
+        pl.when(pl.col("metric_concept") == "revenue")
+        .then(pl.lit(40.0))
+        .otherwise(pl.col("value"))
+        .alias("value")
+    )
+    write_mart_metric_facts(pl.concat([include, exclude, only]), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(),))
+
+    response = service.query(
+        _request(
+            PeriodMode.SINGLE_PERIOD,
+            date(2025, 1, 1),
+            date(2025, 1, 1),
+            metric_concepts=("revenue",),
+            private_label_scope=PrivateLabelScope.EXCLUDE,
+        )
+    )
+
+    assert response.private_label_scope == PrivateLabelScope.EXCLUDE
+    assert response.metric_results[0].value == 60.0
+
+
+def test_private_label_scope_applies_to_comparison_periods(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    include = pl.concat([_facts(periods=(date(2025, 1, 1),)), _facts(periods=(date(2026, 1, 1),))])
+    exclude = pl.concat(
+        [
+            _facts(periods=(date(2025, 1, 1),), private_label_scope=PrivateLabelScope.EXCLUDE),
+            _facts(periods=(date(2026, 1, 1),), private_label_scope=PrivateLabelScope.EXCLUDE),
+        ]
+    ).with_columns(
+        pl.when((pl.col("metric_concept") == "revenue") & (pl.col("period_start") == date(2025, 1, 1)))
+        .then(pl.lit(60.0))
+        .when((pl.col("metric_concept") == "revenue") & (pl.col("period_start") == date(2026, 1, 1)))
+        .then(pl.lit(90.0))
+        .otherwise(pl.col("value"))
+        .alias("value")
+    )
+    write_mart_metric_facts(pl.concat([include, exclude]), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        _request(
+            PeriodMode.SINGLE_PERIOD,
+            date(2026, 1, 1),
+            date(2026, 1, 1),
+            metric_concepts=("revenue",),
+            comparison_mode=ComparisonMode.YOY,
+            private_label_scope=PrivateLabelScope.EXCLUDE,
+        )
+    )
+
+    assert response.comparisons[0].private_label_scope == PrivateLabelScope.EXCLUDE
+    assert response.comparisons[0].current_value == 90.0
+    assert response.comparisons[0].comparison_value == 60.0
+
+
+def test_non_include_scope_on_unscoped_facts_returns_limitation(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    facts = _facts().drop("private_label_scope")
+    facts.write_parquet(path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(),))
+
+    response = service.query(
+        _request(
+            PeriodMode.SINGLE_PERIOD,
+            date(2025, 1, 1),
+            date(2025, 1, 1),
+            metric_concepts=("revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    assert response.metric_results == ()
+    assert "private_label_scope_not_materialized" in {item.issue_code for item in response.limitations}
+
+
+def test_invalid_private_label_scope_is_rejected() -> None:
+    with pytest.raises(ValueError, match="UNKNOWN"):
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2025, 1, 1),
+            date_to=date(2025, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            private_label_scope=cast(Any, "UNKNOWN"),
+        )
+
+
 def test_unsupported_period_grain_gets_explicit_limitation(tmp_path) -> None:
     path = tmp_path / "facts.parquet"
     facts = _facts().with_columns(pl.lit("week").alias("period_grain"))
@@ -474,6 +580,7 @@ def _request(
     metric_concepts: tuple[str, ...] = (),
     include_lineage: bool = True,
     comparison_mode: ComparisonMode = ComparisonMode.NONE,
+    private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE,
 ) -> DashboardMetricQueryRequest:
     return DashboardMetricQueryRequest(
         retailer_id="retailer_a",
@@ -486,6 +593,7 @@ def _request(
         metric_concepts=metric_concepts,
         include_lineage=include_lineage,
         comparison_mode=comparison_mode,
+        private_label_scope=private_label_scope,
     )
 
 
@@ -522,6 +630,7 @@ def _facts(
     include_share: bool = False,
     include_velocity: bool = False,
     metric_suffix: str = "v1",
+    private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE,
 ) -> pl.DataFrame:
     rows: list[dict[str, object]] = []
     revenue_values = {
@@ -555,7 +664,16 @@ def _facts(
     for period in periods:
         rows.extend(
             [
-                _fact(period, "revenue", revenue_values[period], "sum", build_id, retailer_id, metric_suffix=metric_suffix),
+                _fact(
+                    period,
+                    "revenue",
+                    revenue_values[period],
+                    "sum",
+                    build_id,
+                    retailer_id,
+                    metric_suffix=metric_suffix,
+                    private_label_scope=private_label_scope,
+                ),
                 _fact(
                     period,
                     "retailer_margin_pct",
@@ -566,6 +684,7 @@ def _facts(
                     numerator=margin_num[period],
                     denominator=revenue_values[period],
                     metric_suffix=metric_suffix,
+                    private_label_scope=private_label_scope,
                 ),
                 _fact(
                     period,
@@ -577,6 +696,7 @@ def _facts(
                     numerator=weighted_num[period],
                     denominator=weights[period],
                     metric_suffix=metric_suffix,
+                    private_label_scope=private_label_scope,
                 ),
                 _fact(
                     period,
@@ -589,6 +709,7 @@ def _facts(
                     denominator=10.0,
                     strategy=RangeAggregationStrategy.PERIOD_ONLY,
                     metric_suffix=metric_suffix,
+                    private_label_scope=private_label_scope,
                 ),
             ]
         )
@@ -606,6 +727,7 @@ def _facts(
                     share_scope="network",
                     strategy=RangeAggregationStrategy.RECOMPUTE_SHARE_SCOPE,
                     metric_suffix=metric_suffix,
+                    private_label_scope=private_label_scope,
                 )
             )
         if include_velocity:
@@ -621,6 +743,7 @@ def _facts(
                     denominator=10.0,
                     strategy=RangeAggregationStrategy.PERIOD_ONLY,
                     metric_suffix=metric_suffix,
+                    private_label_scope=private_label_scope,
                 )
             )
     return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
@@ -639,6 +762,7 @@ def _fact(
     share_scope: str | None = None,
     strategy: RangeAggregationStrategy | None = None,
     metric_suffix: str = "v1",
+    private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE,
 ) -> dict[str, object]:
     actual_strategy = strategy or {
         "sum": RangeAggregationStrategy.SUM_AVAILABLE_PERIODS,
@@ -652,6 +776,7 @@ def _fact(
         "source_revision_id": "revision_a",
         "analysis_run_id": "analysis_a",
         "mart_build_id": build_id,
+        "private_label_scope": private_label_scope.value,
         "period_grain": "month",
         "period_start": period,
         "period_end": date(period.year, period.month, 28),

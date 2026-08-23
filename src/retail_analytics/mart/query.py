@@ -21,6 +21,7 @@ from retail_analytics.mart.metric_catalog import (
     catalog_entry_for_fact,
 )
 from retail_analytics.mart.metric_facts import RangeAggregationStrategy
+from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
 
 
 class PeriodMode(StrEnum):
@@ -76,6 +77,13 @@ class DashboardMetricQueryRequest:
     quality_policy: QualityPolicy = QualityPolicy.INCLUDE_ALL
     include_lineage: bool = True
     mart_build_id: str | None = None
+    private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "period_mode", PeriodMode(self.period_mode))
+        object.__setattr__(self, "comparison_mode", ComparisonMode(self.comparison_mode))
+        object.__setattr__(self, "quality_policy", QualityPolicy(self.quality_policy))
+        object.__setattr__(self, "private_label_scope", PrivateLabelScope(self.private_label_scope))
 
 
 @dataclass(frozen=True)
@@ -123,6 +131,7 @@ class MetricQueryResult:
     period_values: tuple[PeriodValue, ...]
     lineage: MetricDefinitionLineage | None
     limitations: tuple[str, ...] = ()
+    private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
 
 
 @dataclass(frozen=True)
@@ -140,6 +149,7 @@ class ComparisonResult:
     pct_delta: float | None
     quality_status: str
     gap_periods: int
+    private_label_scope: PrivateLabelScope
 
 
 @dataclass(frozen=True)
@@ -170,6 +180,8 @@ class DashboardMetricQueryResponse:
     mart_build_id: str
     analysis_run_ids: tuple[str, ...]
     metric_definition_lineage: tuple[MetricDefinitionLineage, ...]
+    private_label_scope: PrivateLabelScope
+    scope_identity_hash: str
 
 
 class DashboardMartQueryService:
@@ -187,6 +199,7 @@ class DashboardMartQueryService:
         self.catalog = catalog
         self.mart_builds = mart_builds
         self.source_ledger = source_ledger
+        self._fact_columns: set[str] | None = None
 
     def query(self, request: DashboardMetricQueryRequest) -> DashboardMetricQueryResponse:
         """Return dashboard-ready metric results without redefining metric formulas."""
@@ -194,12 +207,13 @@ class DashboardMartQueryService:
         mart_build_id = self._resolve_build_id(request)
         self._validate_active_revision_scope(request, mart_build_id)
         fetch_start = _comparison_fetch_start(request)
+        limitations = list(self._private_label_scope_materialization_limitations(request))
         raw = self._read_facts(request, mart_build_id=mart_build_id, period_start=fetch_start)
         requested = _filter_requested_periods(raw, request)
         self._validate_fact_active_revisions(requested, request)
         _reject_source_revision_ambiguity(requested)
         _reject_duplicate_fact_contributors(requested)
-        limitations = list(self._period_grain_limitations(request))
+        limitations.extend(self._period_grain_limitations(request))
         limitations.extend(self._catalog_limitations(requested, request))
         requested_periods = _expected_periods(request, requested)
         available_periods = tuple(
@@ -233,6 +247,7 @@ class DashboardMartQueryService:
                 "metric_definition_ids": request.metric_definition_ids,
                 "period_mode": request.period_mode.value,
                 "comparison_mode": request.comparison_mode.value,
+                "private_label_scope": request.private_label_scope.value,
             },
             requested_period_start=min(requested_periods) if requested_periods else request.date_from,
             requested_period_end=max(requested_periods) if requested_periods else request.date_to,
@@ -247,6 +262,8 @@ class DashboardMartQueryService:
             mart_build_id=mart_build_id,
             analysis_run_ids=analysis_run_ids,
             metric_definition_lineage=lineage,
+            private_label_scope=request.private_label_scope,
+            scope_identity_hash=scope_identity_hash(private_label_scope=request.private_label_scope),
         )
 
     def _resolve_build_id(self, request: DashboardMetricQueryRequest) -> str:
@@ -349,6 +366,11 @@ class DashboardMartQueryService:
         mart_build_id: str,
         period_start: date | None,
     ) -> pl.DataFrame:
+        if (
+            request.private_label_scope != PrivateLabelScope.INCLUDE
+            and not self._facts_have_private_label_scope()
+        ):
+            return pl.DataFrame()
         clauses = [
             "retailer_id = ?",
             "source_id = ?",
@@ -369,6 +391,9 @@ class DashboardMartQueryService:
         if request.date_to is not None:
             clauses.append("period_start <= CAST(? AS DATE)")
             params.append(request.date_to.isoformat())
+        if self._facts_have_private_label_scope():
+            clauses.append("private_label_scope = ?")
+            params.append(request.private_label_scope.value)
         _add_in_filter(clauses, params, "entity_id", request.entity_ids)
         _add_in_filter(clauses, params, "metric_concept", request.metric_concepts)
         _add_in_filter(clauses, params, "metric_definition_id", request.metric_definition_ids)
@@ -458,6 +483,15 @@ class DashboardMartQueryService:
                         metric_concept=entry.metric_concept,
                     )
                 )
+            if request.private_label_scope not in entry.private_label_scope_support:
+                limitations.append(
+                    QueryLimitation(
+                        "metric_not_supported_for_private_label_scope",
+                        f"Metric is not supported for private_label_scope={request.private_label_scope.value}",
+                        metric_definition_id=entry.metric_definition_id,
+                        metric_concept=entry.metric_concept,
+                    )
+                )
             fact_strategy = RangeAggregationStrategy(str(row["range_aggregation_strategy"]))
             if entry.range_aggregation_strategy != fact_strategy:
                 limitations.append(
@@ -481,6 +515,24 @@ class DashboardMartQueryService:
                     )
                 )
         return tuple(_dedupe_limitations(limitations))
+
+    def _private_label_scope_materialization_limitations(
+        self,
+        request: DashboardMetricQueryRequest,
+    ) -> tuple[QueryLimitation, ...]:
+        if self._facts_have_private_label_scope() or request.private_label_scope == PrivateLabelScope.INCLUDE:
+            return ()
+        return (
+            QueryLimitation(
+                "private_label_scope_not_materialized",
+                "Mart facts do not contain private_label_scope for scoped analytical queries.",
+            ),
+        )
+
+    def _facts_have_private_label_scope(self) -> bool:
+        if self._fact_columns is None:
+            self._fact_columns = _duckdb_columns(self.metric_facts_path)
+        return "private_label_scope" in self._fact_columns
 
     def _period_grain_limitations(
         self,
@@ -548,6 +600,7 @@ def _metric_results(
                 period_values=period_values,
                 lineage=lineage,
                 limitations=tuple(item.issue_code for item in result_limitations),
+                private_label_scope=request.private_label_scope,
             )
         )
     return tuple(results), tuple(_dedupe_limitations(limitations))
@@ -698,6 +751,7 @@ def _comparisons(
                 pct_delta=pct_delta,
                 quality_status=quality,
                 gap_periods=gap,
+                private_label_scope=request.private_label_scope,
             )
         )
     return tuple(comparisons), ()
@@ -718,6 +772,8 @@ def _comparison_target(frame: pl.DataFrame, request: DashboardMetricQueryRequest
 
 
 def _filter_requested_periods(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
+    if frame.is_empty():
+        return frame
     result = frame
     if request.date_from is not None:
         result = result.filter(pl.col("period_start") >= request.date_from)
@@ -786,6 +842,7 @@ def _comparison_identity(row: dict[str, Any]) -> tuple[Any, ...]:
         row["retailer_id"],
         row["source_id"],
         row["mart_build_id"],
+        row.get("private_label_scope"),
         row["grain_id"],
         row["entity_id"],
         row["parent_entity_ids"],
@@ -828,6 +885,8 @@ def _reject_duplicate_fact_contributors(frame: pl.DataFrame) -> None:
         "rule_version",
         "source_revision_id",
     ]
+    if "private_label_scope" in frame.columns:
+        identity_columns.insert(3, "private_label_scope")
     duplicates = frame.group_by(identity_columns).len().filter(pl.col("len") > 1)
     if not duplicates.is_empty():
         raise ValueError("Duplicate mart fact contributors detected for a query scope")
@@ -902,6 +961,11 @@ def _duckdb_path(path: Path) -> str:
     if path.is_dir():
         raw = f"{raw}/**/*.parquet"
     return raw
+
+
+def _duckdb_columns(path: Path) -> set[str]:
+    rows = duckdb.sql("DESCRIBE SELECT * FROM read_parquet(?) LIMIT 0", params=[_duckdb_path(path)]).fetchall()
+    return {str(row[0]) for row in rows}
 
 
 def _float_or_none(value: Any) -> float | None:

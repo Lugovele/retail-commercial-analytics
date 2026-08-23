@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -10,6 +11,7 @@ from typing import Any
 import yaml  # type: ignore[import-untyped]
 
 from retail_analytics.mart.metric_facts import RangeAggregationStrategy
+from retail_analytics.mart.scopes import PrivateLabelScope
 
 
 class MetricFormat(StrEnum):
@@ -76,6 +78,7 @@ class PublicMetricCatalogEntry:
     default_range_aggregation_strategy: RangeAggregationStrategy
     default_comparison_support: tuple[str, ...] = ("NONE",)
     generic_limitations: tuple[str, ...] = ()
+    private_label_scope_support: tuple[PrivateLabelScope, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -103,6 +106,7 @@ class PrivateMetricCatalogOverride:
     limitations: tuple[str, ...] = ()
     rule_version: str | None = None
     metric_config_hash: str | None = None
+    private_label_scope_support: tuple[PrivateLabelScope, ...] = ()
 
     @property
     def identity_key(self) -> tuple[str, str | None, str, str, str | None, str | None]:
@@ -144,6 +148,7 @@ class EffectiveMetricCatalogEntry:
     limitations: tuple[str, ...]
     rule_version: str | None
     metric_config_hash: str | None
+    private_label_scope_support: tuple[PrivateLabelScope, ...]
     default_visible: bool = True
     sort_order: int | None = None
 
@@ -151,6 +156,11 @@ class EffectiveMetricCatalogEntry:
 SUPPORTED_GRAINS = frozenset({"network", "category", "manufacturer", "brand", "sku", "store"})
 SUPPORTED_PERIOD_GRAINS = frozenset({"day", "week", "month", "quarter", "year"})
 SUPPORTED_COMPARISONS = frozenset({"NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE"})
+DEFAULT_PRIVATE_LABEL_SCOPE_SUPPORT = (
+    PrivateLabelScope.INCLUDE,
+    PrivateLabelScope.EXCLUDE,
+    PrivateLabelScope.ONLY,
+)
 
 
 def load_public_metric_catalog(path: str | Path) -> tuple[PublicMetricCatalogEntry, ...]:
@@ -303,6 +313,8 @@ def _merge_entry(
         limitations=limitations,
         rule_version=override.rule_version,
         metric_config_hash=override.metric_config_hash,
+        private_label_scope_support=override.private_label_scope_support
+        or public.private_label_scope_support,
     )
 
 
@@ -387,6 +399,9 @@ def _public_entry(row: dict[str, Any]) -> PublicMetricCatalogEntry:
         ),
         default_comparison_support=tuple(row.get("default_comparison_support") or ("NONE",)),
         generic_limitations=tuple(row.get("generic_limitations") or ()),
+        private_label_scope_support=_private_label_scope_tuple(
+            row.get("private_label_scope_support") or DEFAULT_PRIVATE_LABEL_SCOPE_SUPPORT
+        ),
     )
 
 
@@ -417,7 +432,19 @@ def _private_override(row: dict[str, Any]) -> PrivateMetricCatalogOverride:
         limitations=tuple(row.get("limitations") or ()),
         rule_version=_optional_str(row.get("rule_version")),
         metric_config_hash=_optional_str(row.get("metric_config_hash")),
+        private_label_scope_support=_private_label_scope_tuple(row.get("private_label_scope_support")),
     )
+
+
+def _private_label_scope_tuple(values: object) -> tuple[PrivateLabelScope, ...]:
+    raw_values: tuple[object, ...]
+    if isinstance(values, str):
+        raw_values = (values,)
+    elif isinstance(values, Iterable):
+        raw_values = tuple(values)
+    else:
+        raw_values = ()
+    return tuple(PrivateLabelScope(str(value)) for value in raw_values)
 
 
 def _iter_entries(payload: dict[str, Any], key: str) -> tuple[dict[str, Any], ...]:

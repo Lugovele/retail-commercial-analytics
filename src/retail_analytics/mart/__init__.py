@@ -50,6 +50,17 @@ from retail_analytics.mart.query import (
     QualityPolicy,
     QueryLimitation,
 )
+from retail_analytics.mart.scoped_metrics import (
+    ScopedMetricsResult,
+    calculate_private_label_scope_set,
+    calculate_private_label_scoped_metrics,
+)
+from retail_analytics.mart.scopes import (
+    PrivateLabelScope,
+    PrivateLabelScopeResult,
+    apply_private_label_scope,
+    scope_identity_hash,
+)
 
 __all__ = [
     "CatalogIssueSeverity",
@@ -70,12 +81,18 @@ __all__ = [
     "MetricQueryResult",
     "PeriodMode",
     "PeriodValue",
+    "PrivateLabelScope",
+    "PrivateLabelScopeResult",
     "PrivateMetricCatalogOverride",
     "PublicMetricCatalogEntry",
     "QualityPolicy",
     "QueryLimitation",
     "RangeAggregationStrategy",
+    "ScopedMetricsResult",
+    "apply_private_label_scope",
     "build_mart_metric_facts",
+    "calculate_private_label_scope_set",
+    "calculate_private_label_scoped_metrics",
     "catalog_entry_for_fact",
     "duplicate_semantic_identities",
     "load_private_metric_catalog_overrides",
@@ -89,6 +106,7 @@ __all__ = [
     "range_strategy_for_metric",
     "read_mart_build_metadata",
     "read_mart_metric_facts",
+    "scope_identity_hash",
     "validate_metric_catalog",
     "write_mart_build_metadata",
     "write_mart_build_metadata_dataset",
