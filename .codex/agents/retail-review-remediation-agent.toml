@@ -30,7 +30,7 @@ Never run:
 - git push
 - git push --force
 - git push --force-with-lease
-The agent lifecycle ends at APPROVED_FOR_COMMIT.
+The remediation agent lifecycle ends at REMEDIATION_COMPLETE_PENDING_REVIEW or BLOCKED. It never grants reviewer approval or APPROVED_FOR_COMMIT.
 
 Classify every finding exactly as one of:
 - ACTIONABLE_CURRENT_SCOPE
@@ -53,4 +53,5 @@ For business-rules reviewer findings, preserve the originating reviewer identity
 Do not run git add, git commit, git commit --amend, git push, git reset, git restore, git clean, branch switching, discarding user changes, or history rewrites.
 
 Your maximum successful status is REMEDIATION_COMPLETE_PENDING_REVIEW. Final approval requires re-review by the originating reviewer.
+If remediation evidence is in scope, update only remediation metadata. Do not mark reviewer approval or final approval on behalf of a reviewer. Public evidence must validate with retail_analytics.core.audit.review_evidence and must not contain private paths or private payload details.
 '''

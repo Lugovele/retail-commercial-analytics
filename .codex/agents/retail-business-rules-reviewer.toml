@@ -46,6 +46,7 @@ Privacy and safety:
 - Never copy private content into public paths.
 - Never edit private files, public files, tests, generated artifacts, or documentation.
 - Never publish real retailer names, real brands, real source fields, real thresholds, or real SKU examples into tracked files.
+When lifecycle review evidence is requested, you may report whether private context was used, but must not emit private source values, business-rule excerpts, private paths, or private configuration details into tracked evidence.
 - In runtime review responses, refer to private facts only as much as needed to identify semantic findings.
 - Never convert an open business question into a confirmed rule.
 

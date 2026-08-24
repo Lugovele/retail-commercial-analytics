@@ -36,6 +36,8 @@ Review the current diff for correctness, regressions, architecture compliance, c
 
 Specifically search for hardcoded customer or retailer logic, client names, real source column names, retailer-specific thresholds in generic modules, missing metric_definition_id, missing event_rule_id, missing decision_rule_id, missing analysis_run_id where required, and unsafe serialization of private metadata into model-facing payloads.
 
+When review evidence files are in scope, verify that they follow the public-safe review evidence contract, preserve same-originating-reviewer re-review metadata, and do not contain private paths or private payload keys.
+
 Status must be exactly one of:
 - APPROVED_FOR_COMMIT
 - CHANGES_REQUIRED

@@ -1,0 +1,71 @@
+review_lifecycle_evidence_schema:
+  schema_version: review-evidence-v1
+  purpose: Public-safe lifecycle review metadata for post-hoc auditability.
+  tracked_runtime_evidence_allowed: false
+  private_detail_location: data/private/reviews/
+  required_fields:
+    - schema_version
+    - evidence_id
+    - lifecycle_unit_id
+    - issue_id
+    - change_scope
+    - git_base_ref
+    - git_head_ref
+    - originating_reviewer
+    - reviewer_role
+    - review_round
+    - rerun_of_evidence_id
+    - same_originating_reviewer
+    - review_status
+    - reviewed_public_paths
+    - private_context_used
+    - private_context_descriptor
+    - findings
+    - remediations
+    - validations
+    - approval_status
+    - created_at
+  reviewers:
+    - retail_architecture_reviewer
+    - retail_change_reviewer
+    - retail_business_rules_reviewer
+    - retail_contract_reviewer
+    - retail_test_planner
+  reviewer_roles:
+    - architecture
+    - change
+    - business_rules
+    - contract
+    - test_planning
+  terminal_approval_statuses:
+    - NEXT_LAYER_APPROVED
+    - APPROVED_FOR_COMMIT
+    - BUSINESS_RULES_APPROVED
+  finding_fields:
+    - finding_id
+    - severity
+    - status
+    - public_summary
+    - affected_public_paths
+    - requires_private_followup
+  privacy_rules:
+    forbidden_public_path_markers:
+      - config/private
+      - data/private
+      - docs/private
+    forbidden_payload_keys:
+      - retailer_name
+      - source_column
+      - source_columns
+      - threshold_value
+      - private_notes
+      - private_payload
+      - business_rule_text
+      - private_config_snippet
+  same_reviewer_rerun:
+    required_fields:
+      - originating_reviewer
+      - rerun_of_evidence_id
+      - same_originating_reviewer
+      - review_round
+    rule: same_originating_reviewer=true requires rerun_of_evidence_id and review_round greater than the original round.

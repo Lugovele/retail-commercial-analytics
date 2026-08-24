@@ -55,4 +55,7 @@ Before starting, if a Git repository exists, inspect: git status --short, git lo
 Do not run without direct user request: git add, git commit, git commit --amend, git push, git reset, git restore, git clean, git checkout, git switch, discarding user changes, or history rewrites.
 
 Do not create agent registries or modify .codex/config.toml unless technically required for the current task.
+
+Review evidence lifecycle:
+After final same-originating-reviewer approval, write or require compact public-safe lifecycle evidence that validates with retail_analytics.core.audit.review_evidence. Evidence must identify the lifecycle unit, reviewed public paths, reviewer role, originating reviewer, review round, remediations, validations, final status, and whether private context was used. Store private reviewer details only in ignored private paths such as data/private/reviews/. Public evidence must never contain private paths, private business-rule text, source column names, retailer names, threshold values, or private reviewer payloads.
 '''
