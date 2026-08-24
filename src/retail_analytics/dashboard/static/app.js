@@ -11,6 +11,7 @@ const state = {
   chartMetric: "revenue",
   previewGrain: "category",
   tablePageSize: 40,
+  overviewPreviewRowLimit: 8,
   sortColumn: "Оборот",
   sortDirection: "desc",
   activeProvenanceConcept: "revenue"
@@ -19,13 +20,64 @@ const state = {
 const primaryKpis = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"];
 const additiveContributionMetrics = ["revenue_vat", "revenue", "units", "retailer_margin_abs"];
 const chartMetrics = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "weighted_shelf_price_vat"];
-const diagnosticGroups = [
-  { title: "Продажи", concepts: ["revenue", "units"] },
-  { title: "Цена", concepts: ["weighted_shelf_price_vat", "weighted_input_price_vat"] },
-  { title: "Присутствие", concepts: ["selling_store_count", "distribution", "velocity"] },
-  { title: "Экономика", concepts: ["retailer_margin_abs", "retailer_margin_pct"] },
-  { title: "Структура", concepts: ["category_revenue_share", "sku_count"] }
-];
+const secondaryContextByGrain = {
+  network: ["selling_store_count", "weighted_shelf_price_vat", "sku_count"],
+  category: ["selling_store_count", "weighted_shelf_price_vat", "velocity"],
+  manufacturer: ["selling_store_count", "weighted_shelf_price_vat", "category_revenue_share"],
+  brand: ["category_revenue_share", "selling_store_count", "velocity"],
+  sku: ["selling_store_count", "weighted_shelf_price_vat", "velocity"],
+  store: ["sku_count", "revenue", "units"]
+};
+const driverBucketsByGrain = {
+  network: [
+    { title: "Объём", concepts: ["units"] },
+    { title: "Цена", concepts: ["weighted_shelf_price_vat"] },
+    { title: "Присутствие", concepts: ["selling_store_count", "distribution"] },
+    { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+    { title: "Экономика", concepts: ["retailer_margin_pct", "retailer_margin_abs"] },
+    { title: "Структура", concepts: ["sku_count", "brand_count", "category_count"] }
+  ],
+  category: [
+    { title: "Объём", concepts: ["units"] },
+    { title: "Цена", concepts: ["weighted_shelf_price_vat"] },
+    { title: "Присутствие", concepts: ["distribution", "selling_store_count"] },
+    { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+    { title: "Экономика", concepts: ["retailer_margin_pct", "retailer_margin_abs"] },
+    { title: "Структура", concepts: ["sku_count", "brand_count"] }
+  ],
+  manufacturer: [
+    { title: "Объём", concepts: ["units"] },
+    { title: "Цена", concepts: ["weighted_shelf_price_vat"] },
+    { title: "Присутствие", concepts: ["distribution", "selling_store_count"] },
+    { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+    { title: "Экономика", concepts: ["retailer_margin_pct", "retailer_margin_abs"] },
+    { title: "Структура", concepts: ["category_revenue_share", "sku_count"] }
+  ],
+  brand: [
+    { title: "Объём", concepts: ["units"] },
+    { title: "Цена", concepts: ["weighted_shelf_price_vat"] },
+    { title: "Присутствие", concepts: ["distribution", "selling_store_count"] },
+    { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+    { title: "Экономика", concepts: ["retailer_margin_pct", "retailer_margin_abs"] },
+    { title: "Структура", concepts: ["category_revenue_share", "sku_count"] }
+  ],
+  sku: [
+    { title: "Объём", concepts: ["units"] },
+    { title: "Цена", concepts: ["weighted_shelf_price_vat"] },
+    { title: "Присутствие", concepts: ["selling_store_count", "distribution"] },
+    { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+    { title: "Экономика", concepts: ["retailer_margin_pct", "retailer_margin_abs"] },
+    { title: "Структура", concepts: ["selling_store_count"] }
+  ],
+  store: [
+    { title: "Объём", concepts: ["units"] },
+    { title: "Цена", concepts: ["weighted_shelf_price_vat"] },
+    { title: "Присутствие", concepts: ["sku_count"] },
+    { title: "Скорость", concepts: [] },
+    { title: "Экономика", concepts: ["retailer_margin_pct", "retailer_margin_abs"] },
+    { title: "Структура", concepts: ["sku_count", "brand_count"] }
+  ]
+};
 const previewColumns = {
   category: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count", "selling_store_count"],
   manufacturer: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
@@ -293,7 +345,8 @@ function buildQueryPayload(grain, entityIds, metricConcepts) {
 
 function buildContributionPayload() {
   if (state.periodMode !== "COMPARE") return null;
-  if (!additiveContributionMetrics.includes(state.chartMetric)) return null;
+  const metricConcept = contributionMetricForOverview();
+  if (!metricConcept) return null;
   const comparison = state.summaryResponse?.comparisons?.[0];
   if (!comparison?.comparison_period_start) return null;
   const parentEntityIds = entityIdsForSummary();
@@ -308,11 +361,11 @@ function buildContributionPayload() {
     parent_grain_id: state.currentGrain,
     parent_entity_id: parentEntityId,
     child_grain_id: state.previewGrain,
-    metric_concept: state.chartMetric,
+    metric_concept: metricConcept,
     comparison_mode: selectedComparisonMode(),
     private_label_scope: document.getElementById("private-label-scope").value,
     mart_build_id: retailer.default_mart_build_id,
-    limit: state.tablePageSize
+    limit: state.overviewPreviewRowLimit
   };
 }
 
@@ -321,7 +374,12 @@ function backendPeriodMode() {
 }
 
 function overviewConcepts() {
-  return [...new Set([...primaryKpis, ...chartMetrics, ...diagnosticGroups.flatMap((group) => group.concepts)])]
+  return [...new Set([
+    ...primaryKpis,
+    ...chartMetrics,
+    ...Object.values(secondaryContextByGrain).flat(),
+    ...Object.values(driverBucketsByGrain).flatMap((groups) => groups.flatMap((group) => group.concepts))
+  ])]
     .filter((concept) => catalogEntry(concept));
 }
 
@@ -334,6 +392,7 @@ function renderOverview() {
   renderBreadcrumb();
   renderChartMetricOptions();
   renderKpis();
+  renderKpiSecondaryContext();
   renderChart();
   renderDiagnosis();
   renderAttention();
@@ -368,6 +427,32 @@ function renderKpis() {
     button.addEventListener("click", () => openProvenance(concept));
     card.appendChild(button);
     return card;
+  }));
+}
+
+function renderKpiSecondaryContext() {
+  const container = document.getElementById("kpi-secondary");
+  const concepts = (secondaryContextByGrain[state.currentGrain] || [])
+    .filter((concept) => visibleSummaryResult(concept))
+    .slice(0, 3);
+  if (!concepts.length) {
+    container.replaceChildren();
+    return;
+  }
+  container.replaceChildren(...concepts.map((concept) => {
+    const result = summaryResultFor(concept);
+    const entry = catalogEntry(concept);
+    const item = document.createElement("article");
+    item.className = "secondary-metric";
+    appendText(item, "span", displayLabel(concept));
+    appendText(item, "strong", compactMetricText(result, entry));
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "inline-link";
+    button.textContent = "Откуда?";
+    button.addEventListener("click", () => openProvenance(concept));
+    item.appendChild(button);
+    return item;
   }));
 }
 
@@ -445,29 +530,35 @@ function buildSvgChart(points, entry) {
 
 function renderDiagnosis() {
   const grid = document.getElementById("diagnosis-grid");
-  grid.replaceChildren(...diagnosticGroups.map((group) => {
+  const usedConcepts = new Set();
+  const cards = [];
+  (driverBucketsByGrain[state.currentGrain] || driverBucketsByGrain.network).forEach((group) => {
+    const concept = representativeConcept(group.concepts, usedConcepts);
+    if (!concept) return;
+    usedConcepts.add(concept);
     const card = document.createElement("article");
     card.className = "diagnosis-card";
     appendText(card, "h3", group.title);
-    const list = document.createElement("ul");
-    group.concepts.forEach((concept) => {
-      const result = summaryResultFor(concept);
-      const entry = catalogEntry(concept);
-      if (!entry) return;
-      const item = document.createElement("li");
-      const label = document.createElement("span");
-      label.textContent = entry.display_label;
-      item.appendChild(label);
-      const value = document.createElement("strong");
-      value.textContent = result ? compactMetricText(result, entry) : "Недоступно";
-      item.appendChild(value);
-      if (result?.limitations?.length) item.title = "Показатель доступен только по отдельным периодам.";
-      list.appendChild(item);
-    });
-    if (!list.children.length) appendText(card, "p", "Для выбранного среза нет поддержанных показателей.");
-    card.appendChild(list);
-    return card;
-  }));
+    const result = summaryResultFor(concept);
+    const entry = catalogEntry(concept);
+    appendText(card, "span", displayLabel(concept));
+    appendText(card, "strong", compactMetricText(result, entry));
+    appendText(card, "p", movementText(result, entry));
+    if (result?.provenance) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "inline-link";
+      button.textContent = "Откуда?";
+      button.addEventListener("click", () => openProvenance(concept));
+      card.appendChild(button);
+    }
+    cards.push(card);
+  });
+  if (!cards.length) {
+    replaceWithMessage(grid, "empty-state", "Для выбранного среза нет поддержанных показателей.");
+    return;
+  }
+  grid.replaceChildren(...cards);
 }
 
 function renderAttention() {
@@ -480,7 +571,7 @@ function renderAttention() {
     list.replaceChildren(empty);
     return;
   }
-  list.replaceChildren(...items.slice(0, 4).map((item) => {
+  list.replaceChildren(...items.slice(0, 3).map((item) => {
     const node = document.createElement("article");
     node.className = `attention-item ${item.kind || ""}`;
     appendText(node, "strong", item.title);
@@ -507,6 +598,8 @@ function renderOverviewTable() {
   const headers = [grainLabels[state.previewGrain], ...concepts.map(displayLabel)];
   if (!state.tableResponse?.metric_results?.length) {
     renderMessageRow(table, "За выбранный период данных нет.");
+    document.getElementById("table-title").textContent = "Объекты в выбранном срезе";
+    document.getElementById("table-context").textContent = tableContextText(0, contributionFallbackReason());
     return;
   }
   const entities = [...new Set(state.tableResponse.metric_results.map((result) => result.entity_id))];
@@ -520,10 +613,11 @@ function renderOverviewTable() {
   });
   renderRows(table, headers, rows, {
     onFirstCellClick: (entityId) => drillIntoEntity(String(entityId)),
-    rowLimit: state.tablePageSize
+    rowLimit: state.overviewPreviewRowLimit
   });
   const caption = table.createCaption();
-  caption.textContent = `Показаны первые ${Math.min(rows.length, state.tablePageSize)} из ${entities.length}`;
+  caption.textContent = `Показаны первые ${Math.min(rows.length, state.overviewPreviewRowLimit)} из ${entities.length}`;
+  document.getElementById("table-title").textContent = "Объекты в выбранном срезе";
   document.getElementById("table-context").textContent = tableContextText(entities.length, contributionFallbackReason());
 }
 
@@ -534,6 +628,7 @@ function hasContributionRows() {
 
 function renderContributionTable(table) {
   const metric = catalogEntry(state.contributionResponse.metric_concept);
+  document.getElementById("table-title").textContent = "Где произошло изменение?";
   const headers = [
     grainLabels[state.previewGrain],
     "Текущий период",
@@ -552,7 +647,7 @@ function renderContributionTable(table) {
   });
   thead.appendChild(headRow);
   const tbody = document.createElement("tbody");
-  state.contributionResponse.rows.slice(0, state.tablePageSize).forEach((row) => {
+  state.contributionResponse.rows.slice(0, state.overviewPreviewRowLimit).forEach((row) => {
     const tr = document.createElement("tr");
     const entityCell = document.createElement("td");
     const entityButton = document.createElement("button");
@@ -584,12 +679,12 @@ function renderContributionTable(table) {
   });
   table.replaceChildren(thead, tbody);
   const caption = table.createCaption();
-  caption.textContent = `Сортировка: наибольшее абсолютное изменение · ${displayLabel(state.contributionResponse.metric_concept)}`;
+  caption.textContent = `Показаны первые ${Math.min(state.contributionResponse.rows.length, state.overviewPreviewRowLimit)} · сортировка по абсолютному изменению`;
   const zeroNote = state.contributionResponse.status === "TOTAL_DELTA_ZERO"
     ? " Вклад в общее изменение не рассчитывается: итоговое изменение равно нулю."
     : "";
   document.getElementById("table-context").textContent =
-    `Объекты с наибольшим вкладом в изменение. ${contributionMixedSignNote()}${zeroNote}`.trim();
+    `Объекты с наибольшим вкладом в изменение. Ранжирование по изменению: ${displayLabel(state.contributionResponse.metric_concept)}. ${contributionMixedSignNote()}${zeroNote}`.trim();
 }
 
 function renderContextStrip() {
@@ -625,23 +720,16 @@ function renderSkeletons() {
     card.className = "kpi-card is-loading";
     return card;
   }));
+  document.getElementById("kpi-secondary").replaceChildren();
   replaceWithMessage(document.getElementById("chart-box"), "loading-state", "Загрузка динамики...");
 }
 
 function attentionItems() {
   const items = [];
-  if (state.summaryResponse.coverage_status === "PARTIAL") {
+  if (state.summaryResponse.coverage_status === "PARTIAL" && state.summaryResponse.missing_periods.length) {
     items.push({
-      title: "Покрытие периода неполное",
-      text: `${state.summaryResponse.available_periods.length} доступно · ${state.summaryResponse.missing_periods.length} пропущено`,
-      kind: "warning"
-    });
-  }
-  const periodOnly = state.summaryResponse.limitations.find((item) => item.issue_code === "range_aggregation_period_only");
-  if (periodOnly) {
-    items.push({
-      title: "Есть показатели только по периодам",
-      text: "Часть показателей доступна только по отдельным периодам.",
+      title: "Неполное покрытие данных",
+      text: `${state.summaryResponse.available_periods.length} периодов с данными · ${state.summaryResponse.missing_periods.length} пропущено`,
       kind: "warning"
     });
   }
@@ -651,15 +739,6 @@ function attentionItems() {
       title: "Нет периода сравнения",
       text: "Для выбранного периода нет подходящего референса.",
       kind: "warning"
-    });
-  }
-  const revenue = summaryResultFor("revenue");
-  const revenueComparison = revenue && comparisonFor(state.summaryResponse, revenue);
-  if (revenueComparison) {
-    items.push({
-      title: "Наблюдение по обороту",
-      text: `${formatDeltaValue(revenueComparison.delta, "currency")} · ${formatValue(revenueComparison.pct_delta, "percent")}`,
-      concept: "revenue"
     });
   }
   return items;
@@ -823,7 +902,7 @@ function entityIdsForSummary() {
 }
 
 function entityIdsForPreview() {
-  return firstEntityIds(state.previewGrain, state.tablePageSize);
+  return firstEntityIds(state.previewGrain, state.overviewPreviewRowLimit);
 }
 
 function firstEntityIds(grain, limit) {
@@ -838,8 +917,24 @@ function displayLabel(concept) {
   return catalogEntry(concept)?.display_label || concept;
 }
 
+function contributionMetricForOverview() {
+  if (additiveContributionMetrics.includes(state.chartMetric)) return state.chartMetric;
+  return catalogEntry("revenue") ? "revenue" : null;
+}
+
 function summaryResultFor(concept) {
   return state.summaryResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
+function visibleSummaryResult(concept) {
+  const result = summaryResultFor(concept);
+  if (!result || !catalogEntry(concept)) return null;
+  if (state.periodMode === "DATE_RANGE" && result.limitations?.includes("range_aggregation_period_only")) return null;
+  return result;
+}
+
+function representativeConcept(concepts, excludedConcepts = new Set()) {
+  return concepts.find((concept) => !excludedConcepts.has(concept) && visibleSummaryResult(concept)) || null;
 }
 
 function tableResultFor(concept, entityId) {
@@ -871,6 +966,7 @@ function kpiContextText(comparison, entry) {
 }
 
 function compactMetricText(result, entry) {
+  if (!result || !entry) return "Недоступно";
   const comparison = comparisonFor(state.summaryResponse, result);
   if (state.periodMode === "COMPARE" && comparison) {
     const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
@@ -878,6 +974,18 @@ function compactMetricText(result, entry) {
   }
   if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
   return formatValue(result.value, entry.format);
+}
+
+function movementText(result, entry) {
+  if (!result || !entry) return "Показатель недоступен для выбранного среза.";
+  if (state.periodMode === "DATE_RANGE") return "Показано за доступные периоды диапазона.";
+  if (state.periodMode === "SINGLE_PERIOD") return "Состояние за выбранный период.";
+  const comparison = comparisonFor(state.summaryResponse, result);
+  if (!comparison) return "Нет подходящего периода сравнения.";
+  const threshold = entry.format === "percent" ? 0.0001 : 0;
+  if (comparison.delta > threshold) return "Растёт относительно периода сравнения.";
+  if (comparison.delta < -threshold) return "Снижается относительно периода сравнения.";
+  return "Без изменения относительно периода сравнения.";
 }
 
 function metricCellText(result, entry, response) {

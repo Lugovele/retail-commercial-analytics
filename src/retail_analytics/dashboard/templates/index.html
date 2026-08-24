@@ -141,12 +141,13 @@
             <article class="kpi-card is-loading"></article>
             <article class="kpi-card is-loading"></article>
           </section>
+          <section class="kpi-secondary" id="kpi-secondary" aria-label="Контекст по срезу"></section>
 
           <section class="overview-main">
             <article class="surface chart-panel">
               <div class="panel-heading">
                 <div>
-                  <h2>Динамика показателя</h2>
+                  <h2>Динамика</h2>
                   <p id="chart-context">Фактические доступные периоды без заполнения пропусков.</p>
                 </div>
                 <div class="chart-actions">
@@ -160,33 +161,13 @@
               <div class="chart-box" id="chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
               <div class="chart-footnote" id="chart-footnote"></div>
             </article>
-
-            <aside class="surface attention-panel" aria-label="Что проверить">
-              <div class="panel-heading tight">
-                <div>
-                  <h2>Что проверить</h2>
-                  <p>Только подтверждённые наблюдения и ограничения.</p>
-                </div>
-              </div>
-              <div class="attention-list" id="attention-list"></div>
-            </aside>
           </section>
 
-          <section class="surface diagnosis-panel" aria-label="Картина изменений">
+          <section class="surface table-panel" aria-label="Где произошло изменение">
             <div class="panel-heading">
               <div>
-                <h2>Картина изменений</h2>
-                <p>Описывает сопутствующие движения показателей, без причинных выводов.</p>
-              </div>
-            </div>
-            <div class="diagnosis-grid" id="diagnosis-grid"></div>
-          </section>
-
-          <section class="surface table-panel" aria-label="Где смотреть">
-            <div class="panel-heading">
-              <div>
-                <h2>Где смотреть</h2>
-                <p id="table-context">Объекты в выбранном срезе.</p>
+                <h2 id="table-title">Где произошло изменение?</h2>
+                <p id="table-context">Объекты с наибольшим вкладом в изменение.</p>
               </div>
               <div class="table-actions">
                 <label class="control compact">
@@ -204,6 +185,26 @@
             <div class="table-wrap">
               <table id="overview-table"></table>
             </div>
+          </section>
+
+          <section class="surface diagnosis-panel" aria-label="Картина изменений">
+            <div class="panel-heading">
+              <div>
+                <h2>Картина изменений</h2>
+                <p>Показывает, какие бизнес-показатели изменились одновременно с результатом.</p>
+              </div>
+            </div>
+            <div class="diagnosis-grid" id="diagnosis-grid"></div>
+          </section>
+
+          <section class="surface attention-panel" aria-label="Что проверить">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Что проверить</h2>
+                <p>Подтверждённые наблюдения и вопросы к качеству данных.</p>
+              </div>
+            </div>
+            <div class="attention-list" id="attention-list"></div>
           </section>
         </section>
       </main>

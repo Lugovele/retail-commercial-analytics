@@ -250,7 +250,8 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "period-b-derived" in html
     assert "private-label-scope" in html
     assert "Картина изменений" in html
-    assert "Где смотреть" in html
+    assert "Где произошло изменение?" in html
+    assert "Объекты с наибольшим вкладом в изменение" in html
     assert "Что проверить" in html
     assert 'id="period-b"' not in html
 
@@ -379,6 +380,7 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "state.options.periods" in script
     assert "state.tablePageSize: 50" not in script
     assert "tablePageSize: 40" in script
+    assert "overviewPreviewRowLimit: 8" in script
     assert "entityIdsForSummary" in script
     assert "entityIdsForPreview" in script
     assert "canActivateSummaryGrain(targetGrain)" in script
@@ -411,6 +413,9 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "child_delta / parent_delta" not in script
     assert "contribution_share = " not in script
     assert "Вклад в изменение" in script
+    assert "Где произошло изменение?" in script
+    assert "Объекты в выбранном срезе" in script
+    assert "Ранжирование по изменению:" in script
     assert "Для выбранного показателя вклад в изменение не рассчитывается." in script
     assert "Для этой пары уровней вклад пока недоступен." in script
 
@@ -426,6 +431,38 @@ def test_overview_uses_exactly_four_primary_kpi_concepts() -> None:
     assert "primaryKpis.map" in script
     assert "revenue_velocity" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
     assert "distribution" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
+
+
+def test_overview_decision_layout_uses_contribution_and_driver_guardrails() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    assert html.index('id="kpi-grid"') < html.index('class="surface chart-panel"')
+    assert html.index('id="chart-box"') < html.index('id="table-title"')
+    assert html.index('id="overview-table"') < html.index('id="diagnosis-grid"')
+    assert html.index('id="diagnosis-grid"') < html.index('id="attention-list"')
+    assert "contributionMetricForOverview()" in script
+    assert 'return catalogEntry("revenue") ? "revenue" : null;' in script
+    assert "state.overviewPreviewRowLimit" in script
+    assert "driverBucketsByGrain" in script
+    assert "Объём" in script
+    assert "Цена" in script
+    assert "Присутствие" in script
+    assert "Скорость" in script
+    assert "Экономика" in script
+    assert "Структура" in script
+    assert "причина" not in script.lower()
+    assert "из-за" not in script.lower()
+    assert "вызвано" not in script.lower()
+    assert "привело к" not in script.lower()
+    assert "существен" not in script.lower()
+    assert "Без изменения относительно периода сравнения." in script
+    assert "const usedConcepts = new Set();" in script
+    assert "representativeConcept(group.concepts, usedConcepts)" in script
+    assert "!excludedConcepts.has(concept)" in script
+    assert ".slice(0, 3).map" in script
+    assert "Есть показатели только по периодам" not in script
+    assert "Изменение оборота" not in script
 
 
 def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:

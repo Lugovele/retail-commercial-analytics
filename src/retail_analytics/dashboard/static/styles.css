@@ -458,6 +458,31 @@ input {
   gap: var(--space-3);
 }
 
+.kpi-secondary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  min-height: 0;
+}
+
+.secondary-metric {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(219, 227, 238, 0.78);
+  border-radius: var(--radius-sm);
+}
+
+.secondary-metric strong {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
 .kpi-card {
   min-width: 0;
   min-height: 132px;
@@ -502,7 +527,7 @@ input {
 .overview-main {
   display: grid;
   min-width: 0;
-  grid-template-columns: minmax(0, 2.5fr) minmax(280px, 0.85fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-3);
 }
 
@@ -638,29 +663,30 @@ input {
 }
 
 .diagnosis-grid {
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
 }
 
-.diagnosis-card ul {
+.diagnosis-card {
   display: grid;
+  align-content: start;
   gap: var(--space-2);
-  padding: 0;
-  margin: 0;
-  list-style: none;
 }
 
-.diagnosis-card li {
-  display: flex;
-  justify-content: space-between;
-  gap: var(--space-2);
+.diagnosis-card > span {
   color: var(--text-secondary);
   font-size: 12px;
 }
 
-.diagnosis-card li strong {
+.diagnosis-card strong {
   color: var(--text-primary);
   font-variant-numeric: tabular-nums;
-  text-align: right;
+  font-size: 15px;
+}
+
+.diagnosis-card p {
+  margin-bottom: 0;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .table-wrap {
@@ -854,6 +880,10 @@ th:first-child {
   .diagnosis-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+
+  .kpi-secondary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 1024px) {
@@ -888,6 +918,7 @@ th:first-child {
   }
 
   .kpi-grid,
+  .kpi-secondary,
   .period-fields,
   .filter-grid,
   .diagnosis-grid {
