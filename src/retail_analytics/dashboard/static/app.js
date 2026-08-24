@@ -5,6 +5,7 @@ const state = {
   summaryResponse: null,
   tableResponse: null,
   contributionResponse: null,
+  activeView: "overview",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
@@ -134,11 +135,7 @@ function bindStaticControls() {
 
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
-      if (button.getAttribute("aria-disabled") === "true") {
-        showToast("Раздел будет раскрыт в следующей фазе интерфейса.");
-        return;
-      }
-      document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("is-active", item === button));
+      setActiveView(button.dataset.view);
     });
   });
   document.querySelectorAll("[data-header-action]").forEach((button) => {
@@ -177,12 +174,31 @@ async function initializeDashboard() {
     updatePeriodPanels();
     updatePrivateLabelTerminology();
     updatePreviewGrain();
+    setActiveView(state.activeView);
     renderChartMetricOptions();
     await runOverviewQuery();
   } catch (error) {
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
+}
+
+function setActiveView(view) {
+  const target = view || "overview";
+  state.activeView = target;
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    const isActive = button.dataset.view === target;
+    button.classList.toggle("is-active", isActive);
+    if (isActive) {
+      button.setAttribute("aria-current", "page");
+    } else {
+      button.removeAttribute("aria-current");
+    }
+  });
+  document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+    const isActive = panel.dataset.viewPanel === target;
+    panel.classList.toggle("is-hidden", !isActive);
+  });
 }
 
 function setupRetailerControl() {

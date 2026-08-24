@@ -233,10 +233,31 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     )
 
     assert "Аналитика продаж" in html
-    assert "Обзор" in html
-    assert "Рынок и ассортимент" in html
+    nav_body = html.split('<nav class="workflow-nav"', 1)[1].split("</nav>", 1)[0]
+    nav_labels = (
+        "Обзор",
+        "Продажи и драйверы",
+        "Портфель и рынок",
+        "Точки продаж",
+        "Сигналы",
+        "Данные",
+    )
+    positions = [nav_body.index(label) for label in nav_labels]
+    assert positions == sorted(positions)
+    assert nav_body.count('class="nav-item') == 6
+    assert "data-view=\"overview\"" in nav_body
+    assert "data-view=\"sales_drivers\"" in nav_body
+    assert "data-view=\"portfolio_market\"" in nav_body
+    assert "data-view=\"stores\"" in nav_body
+    assert "data-view=\"signals\"" in nav_body
+    assert "data-view=\"data\"" in nav_body
+    assert 'aria-current="page"' in nav_body
+    assert "Рынок и ассортимент" not in html
+    assert "Данные и качество" not in html
+    assert "География" not in nav_body
+    assert "Разбор" not in nav_body
     assert "Сигналы" in html
-    assert "Данные и качество" in html
+    assert "Данные" in html
     assert "Рекомендации" not in html
     assert "Показатели" not in html
     assert "Бизнес-оценки" not in html
@@ -254,6 +275,47 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "Объекты с наибольшим вкладом в изменение" in html
     assert "Что проверить" in html
     assert 'id="period-b"' not in html
+
+
+def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    expected_panels = (
+        'data-view-panel="overview"',
+        'data-view-panel="sales_drivers"',
+        'data-view-panel="portfolio_market"',
+        'data-view-panel="stores"',
+        'data-view-panel="signals"',
+        'data-view-panel="data"',
+    )
+    assert all(panel in html for panel in expected_panels)
+    assert "Раздел будет подключён" in html
+    assert "загрузок, покрытия, качества данных и аудита" in html
+    shell_text = html.split('<section class="dashboard-view section-shell', 1)[1]
+    forbidden_shell_terms = (
+        "backend",
+        "runtime",
+        "capability",
+        "projection",
+        "grain",
+        "entity",
+        "route",
+        "catalog",
+        "рекомендац",
+        "AI",
+    )
+    assert not any(term in shell_text for term in forbidden_shell_terms)
+    assert 'activeView: "overview"' in script
+    assert "function setActiveView(view)" in script
+    assert 'button.setAttribute("aria-current", "page");' in script
+    assert 'button.removeAttribute("aria-current");' in script
+    assert 'panel.dataset.viewPanel === target' in script
+    assert "showToast(\"Раздел будет раскрыт" not in script
+    nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-header-action]")', 1)[0]
+    assert "runOverviewQuery" not in nav_handler
+    assert "resetAllEntityFilters" not in nav_handler
+    assert "private-label-scope" not in nav_handler
 
 
 def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> None:

@@ -17,10 +17,12 @@
         </div>
       </header>
       <nav class="workflow-nav" aria-label="Разделы аналитики">
-        <button type="button" class="nav-item is-active" data-view="overview">Обзор</button>
-        <button type="button" class="nav-item" data-view="market" aria-disabled="true" title="Будет раскрыто в следующей фазе">Рынок и ассортимент</button>
-        <button type="button" class="nav-item" data-view="signals" aria-disabled="true" title="Полный список сигналов будет раскрыт позже">Сигналы</button>
-        <button type="button" class="nav-item" data-view="data" aria-disabled="true" title="Данные и качество будут раскрыты позже">Данные и качество</button>
+        <button type="button" class="nav-item is-active" data-view="overview" aria-current="page">Обзор</button>
+        <button type="button" class="nav-item" data-view="sales_drivers">Продажи и драйверы</button>
+        <button type="button" class="nav-item" data-view="portfolio_market">Портфель и рынок</button>
+        <button type="button" class="nav-item" data-view="stores">Точки продаж</button>
+        <button type="button" class="nav-item" data-view="signals">Сигналы</button>
+        <button type="button" class="nav-item" data-view="data">Данные</button>
       </nav>
       <div class="system-state visually-hidden" id="system-state" role="status">Загрузка данных</div>
 
@@ -134,7 +136,10 @@
           <button type="button" class="crumb" data-drill-grain="sku">SKU</button>
         </section>
 
-        <section class="overview-layout" id="overview-view">
+        <section class="overview-layout dashboard-view" id="overview-view" data-view-panel="overview" aria-labelledby="overview-title">
+          <div class="screen-heading visually-hidden">
+            <h2 id="overview-title">Обзор</h2>
+          </div>
           <section class="kpi-grid" id="kpi-grid" aria-label="Ключевые показатели">
             <article class="kpi-card is-loading"></article>
             <article class="kpi-card is-loading"></article>
@@ -206,6 +211,46 @@
             </div>
             <div class="attention-list" id="attention-list"></div>
           </section>
+        </section>
+
+        <section class="dashboard-view section-shell is-hidden" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
+          <div class="section-shell-content">
+            <p class="eyebrow">диагностика продаж</p>
+            <h2 id="sales-drivers-title">Продажи и драйверы</h2>
+            <p>Раздел будет подключён на следующем этапе. Здесь будут собраны показатели результата, объёма, цены, присутствия, скорости продаж, экономики и структуры.</p>
+          </div>
+        </section>
+
+        <section class="dashboard-view section-shell is-hidden" data-view-panel="portfolio_market" aria-labelledby="portfolio-market-title">
+          <div class="section-shell-content">
+            <p class="eyebrow">позиция в категории</p>
+            <h2 id="portfolio-market-title">Портфель и рынок</h2>
+            <p>Раздел будет подключён после подготовки экранов для долей, места в категории, ассортимента и сравнения с рынком.</p>
+          </div>
+        </section>
+
+        <section class="dashboard-view section-shell is-hidden" data-view-panel="stores" aria-labelledby="stores-title">
+          <div class="section-shell-content">
+            <p class="eyebrow">торговые точки</p>
+            <h2 id="stores-title">Точки продаж</h2>
+            <p>Раздел будет подключён для анализа продаж, экономики и ассортимента по торговым точкам.</p>
+          </div>
+        </section>
+
+        <section class="dashboard-view section-shell is-hidden" data-view-panel="signals" aria-labelledby="signals-title">
+          <div class="section-shell-content">
+            <p class="eyebrow">что требует внимания</p>
+            <h2 id="signals-title">Сигналы</h2>
+            <p>Раздел будет подключён для подтверждённых сигналов, наблюдений и вопросов к качеству данных.</p>
+          </div>
+        </section>
+
+        <section class="dashboard-view section-shell is-hidden" data-view-panel="data" aria-labelledby="data-title">
+          <div class="section-shell-content">
+            <p class="eyebrow">данные и аудит</p>
+            <h2 id="data-title">Данные</h2>
+            <p>Раздел будет подключён для просмотра загрузок, покрытия, качества данных и аудита.</p>
+          </div>
         </section>
       </main>
     </div>
