@@ -243,11 +243,12 @@ def load_dashboard_runtime_config(
     base = config_path.parent
     config_mode = DashboardRuntimeMode(str(payload.get("mode") or selected_mode))
     retailers = tuple(_runtime_retailer(row) for row in payload.get("retailers") or ())
-    public_catalog_path = (
-        _config_path(payload.get("public_metric_catalog_path"), base)
-        if payload.get("public_metric_catalog_path")
-        else Path("config/public/dashboard_metric_catalog.yaml")
-    )
+    public_catalog_path = Path("config/public/dashboard_metric_catalog.yaml")
+    if payload.get("public_metric_catalog_path"):
+        configured_public_catalog_path = _config_path(payload.get("public_metric_catalog_path"), base)
+        if configured_public_catalog_path is None:
+            raise ValueError("public_metric_catalog_path must resolve to a path")
+        public_catalog_path = configured_public_catalog_path
     return DashboardRuntimeConfig(
         mode=config_mode,
         metric_facts_path=_config_path(payload.get("metric_facts_path"), base),
@@ -274,6 +275,10 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
     missing_paths = [str(path) for path in required_paths if path is None or not path.exists()]
     if missing_paths:
         raise FileNotFoundError(f"Dashboard private runtime paths do not exist: {missing_paths}")
+    assert config.metric_facts_path is not None
+    assert config.mart_builds_path is not None
+    assert config.source_ledger_path is not None
+    assert config.private_metric_catalog_path is not None
     public_catalog = load_public_metric_catalog(config.public_metric_catalog_path)
     private_overrides = load_private_metric_catalog_overrides(config.private_metric_catalog_path)
     catalog = tuple(
