@@ -413,29 +413,63 @@ function renderSignals() {
 function openProvenance() {
   const result = resultFor(state.chartMetric) || state.response.metric_results[0];
   const content = document.getElementById("provenance-content");
-  const lineage = result?.lineage || state.response.metric_definition_lineage[0] || {};
-  const fields = {
-    "Current scope": JSON.stringify(state.response.request_scope),
-    "Metric/business concept": result?.metric_concept || "n/a",
-    "Definition": lineage.metric_definition_id || "n/a",
-    "Formula / strategy": result?.range_aggregation_strategy || "n/a",
-    "Numerator": result?.numerator_value ?? "n/a",
-    "Denominator": result?.denominator_value ?? "n/a",
-    "Comparison periods": state.response.comparisons.map((item) => `${item.current_period_start} / ${item.comparison_period_start}`).join(", ") || "n/a",
-    "Business rule": lineage.rule_version || "n/a",
-    "Metric definition version": lineage.metric_definition_version || "n/a",
-    "Analysis run": state.response.analysis_run_ids.join(", "),
-    "Mart build": state.response.mart_build_id,
-    "Source row count": "Provided by backend audit metadata when available"
-  };
+  const provenance = result?.provenance;
   content.replaceChildren();
-  Object.entries(fields).forEach(([key, value]) => {
+  if (!provenance) {
+    appendText(content, "dt", "Provenance");
+    appendText(content, "dd", "Backend provenance is unavailable for this value.");
+  }
+  Object.entries(provenanceFields(provenance || {})).forEach(([key, value]) => {
     appendText(content, "dt", key);
     appendText(content, "dd", String(value));
   });
   document.getElementById("provenance-drawer").classList.add("is-open");
   document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
   document.getElementById("scrim").classList.add("is-open");
+}
+
+function provenanceFields(provenance) {
+  const scope = provenance.current_analytical_scope || {};
+  const metric = provenance.metric || {};
+  const value = provenance.value || {};
+  const comparison = provenance.comparison || {};
+  const rule = provenance.business_rule || {};
+  const run = provenance.run_lineage || {};
+  const source = provenance.source_evidence || {};
+  const quality = provenance.quality || {};
+  return {
+    "Current analytical scope": compactJson(scope),
+    "Retailer / source": [scope.retailer_id, scope.source_id].filter(Boolean).join(" / ") || "n/a",
+    "Period or comparison periods": compactJson({
+      requested: scope.requested_periods,
+      available: scope.available_periods,
+      missing: scope.missing_periods,
+      comparison: comparison.periods
+    }),
+    "Grain / entity": [scope.grain_id, scope.entity_id].filter(Boolean).join(" / ") || "n/a",
+    "Metric concept": metric.metric_concept || "n/a",
+    "Metric definition": [metric.metric_definition_id, metric.metric_definition_version, metric.metric_config_hash].filter(Boolean).join(" / ") || "n/a",
+    "Value": value.value ?? "n/a",
+    "Numerator": value.numerator_value ?? "n/a",
+    "Denominator": value.denominator_value ?? "n/a",
+    "Aggregation / range strategy": value.range_aggregation_strategy || "n/a",
+    "Comparison type / quality": [comparison.comparison_mode, (comparison.quality_statuses || []).join(", ") || comparison.status].filter(Boolean).join(" / "),
+    "Business rule": [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "n/a",
+    "Analysis run": (run.analysis_run_ids || []).join(", ") || "n/a",
+    "Mart build": run.mart_build_id || "n/a",
+    "Source revision": (run.source_revision_ids || []).join(", ") || "n/a",
+    "Source evidence": source.status || "n/a",
+    "Quality flags": compactJson(quality),
+    "Scope including STM": scope.private_label_scope || "n/a",
+    "Missing provenance fields": (provenance.missing_fields || []).join(", ") || "None"
+  };
+}
+
+function compactJson(value) {
+  if (value === null || value === undefined) return "n/a";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "None";
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
 }
 
 function closeProvenance() {

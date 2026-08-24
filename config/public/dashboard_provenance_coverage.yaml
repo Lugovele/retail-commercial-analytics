@@ -1,0 +1,1010 @@
+version: dashboard_provenance_coverage.v1
+status_values:
+- COMPLETE
+- PARTIAL
+- NOT_APPLICABLE
+- BLOCKED
+trace_levels:
+- current_analytical_scope
+- retailer_source
+- period_or_comparison_periods
+- grain_entity
+- metric_concept
+- metric_definition_id_version_hash
+- value
+- numerator
+- denominator
+- aggregation_range_strategy
+- comparison_type_quality
+- business_rule_id_version
+- analysis_run
+- mart_build
+- source_revision
+- source_rows_evidence_reference
+- quality_flags
+- private_label_scope
+evidence_chain:
+- Исходные данные
+- Показатель
+- Сравнение
+- Бизнес-правило
+- Бизнес-оценка / сигнал
+- Рекомендация
+coverage:
+- concept_id: revenue_vat
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: NOT_APPLICABLE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Продажи
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: revenue
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: NOT_APPLICABLE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Продажи
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: units
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: NOT_APPLICABLE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Продажи
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: retailer_margin_abs
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: NOT_APPLICABLE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Экономика
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: retailer_margin_pct
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Экономика
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: weighted_shelf_price_vat
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Цена
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: weighted_input_price_vat
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Цена
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: selling_store_count
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: active_store_count
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - network
+    - category
+- concept_id: distribution
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: velocity
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: revenue_velocity
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: margin_velocity
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: sku_count
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Структура
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - brand
+    - store
+- concept_id: brand_count
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Структура
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - network
+    - category
+    - manufacturer
+    - store
+- concept_id: category_count
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Структура
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - network
+    - manufacturer
+    - store
+- concept_id: category_revenue_share
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Доли
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - manufacturer
+    - brand
+    - sku
+- concept_id: category_units_share
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Доли
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - manufacturer
+    - brand
+    - sku
+- concept_id: category_margin_share
+  fact_type: mart_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - business_rule_id
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Доли
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - manufacturer
+    - brand
+    - sku
+- concept_id: manufacturer_rank_revenue
+  fact_type: mart.rankings.rank_manufacturers
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Рейтинги
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - manufacturer
+- concept_id: manufacturer_rank_units
+  fact_type: mart.rankings.rank_manufacturers
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Рейтинги
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - manufacturer
+- concept_id: manufacturer_population_count
+  fact_type: mart.rankings.rank_manufacturers
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Рейтинги
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - manufacturer
+- concept_id: active_sku_count
+  fact_type: mart.portfolio.calculate_active_sku_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Структура
+    availability_status: READY
+    presentation_level: TOP_KPI
+    grain_support:
+    - network
+    - category
+- concept_id: historical_peak_active_sku_count
+  fact_type: mart.portfolio.calculate_active_sku_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Структура
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - network
+    - category
+- concept_id: active_sku_change_pct
+  fact_type: mart.portfolio.calculate_active_sku_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Структура
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - network
+    - category
+- concept_id: brand_category_delta_gap_pp
+  fact_type: mart.portfolio.compare_brand_to_category
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Структура
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - brand
+- concept_id: brand_delta_pct
+  fact_type: mart.portfolio.compare_brand_to_category
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Структура
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - brand
+- concept_id: category_delta_pct
+  fact_type: mart.portfolio.compare_brand_to_category
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Структура
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+- concept_id: market_segment_delta_pct
+  fact_type: mart.comparison_universe.calculate_market_segment_delta
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Конкуренты
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - network
+    - category
+- concept_id: decline_speed_ratio
+  fact_type: mart.comparison_universe.calculate_decline_speed_ratio
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Конкуренты
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - network
+    - category
+- concept_id: private_label_growth_while_portfolio_declines
+  fact_type: mart.comparison_universe.private_label_growth_while_portfolio_declines
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Сигналы
+    group: Конкуренты
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - network
+    - category
+- concept_id: regional_revenue
+  fact_type: mart.geography.calculate_regional_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: География
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - store
+- concept_id: regional_units
+  fact_type: mart.geography.calculate_regional_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: География
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - store
+- concept_id: regional_margin_abs
+  fact_type: mart.geography.calculate_regional_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: География
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - store
+- concept_id: regional_share_revenue
+  fact_type: mart.geography.calculate_regional_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: География
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - store
+- concept_id: abc
+  fact_type: core.scoring.abc
+  coverage_status: PARTIAL
+  scope: PARTIAL
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: ABC
+    availability_status: PARTIAL
+    presentation_level: AUDIT_ONLY
+    grain_support:
+    - sku
+- concept_id: broad_competitors
+  fact_type: core.benchmarking.peer_groups
+  coverage_status: PARTIAL
+  scope: PARTIAL
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Конкуренты
+    availability_status: PARTIAL
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - sku
+- concept_id: direct_peers
+  fact_type: core.benchmarking.peer_groups
+  coverage_status: PARTIAL
+  scope: PARTIAL
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: Конкуренты
+    availability_status: PARTIAL
+    presentation_level: AUDIT_ONLY
+    grain_support:
+    - sku
+- concept_id: events_signals
+  fact_type: core.events
+  coverage_status: PARTIAL
+  scope: PARTIAL
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Сигналы
+    group: Сигналы
+    availability_status: PARTIAL
+    presentation_level: AUDIT_ONLY
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+- concept_id: geography
+  fact_type: mart.geography.calculate_regional_summary
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - dashboard_query_provenance_object
+  - source_row_ids
+  UI_provenance_supported: false
+  applicability:
+    tab: Бизнес-оценки
+    group: География
+    availability_status: PARTIAL
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - store
+- concept_id: recommendations
+  fact_type: none
+  coverage_status: NOT_APPLICABLE
+  scope: NOT_APPLICABLE
+  definition: NOT_APPLICABLE
+  components: NOT_APPLICABLE
+  comparison: NOT_APPLICABLE
+  rule: NOT_APPLICABLE
+  run: NOT_APPLICABLE
+  source_evidence: NOT_APPLICABLE
+  quality: NOT_APPLICABLE
+  missing_fields:
+  - backend_capability_not_available
+  UI_provenance_supported: false
+  applicability:
+    tab: Рекомендации
+    group: Рекомендации
+    availability_status: NOT_AVAILABLE
+    presentation_level: AUDIT_ONLY
+    grain_support: []

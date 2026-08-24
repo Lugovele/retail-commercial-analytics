@@ -155,6 +155,7 @@ def _metric_result(result: Any) -> dict[str, Any]:
         "lineage": _lineage(result.lineage) if result.lineage is not None else None,
         "limitations": list(result.limitations),
         "private_label_scope": result.private_label_scope.value,
+        "provenance": _json_ready(result.provenance.payload) if result.provenance is not None else None,
     }
 
 
@@ -229,8 +230,12 @@ def _date_text(value: date | None) -> str | None:
 
 
 def _json_ready(value: Any) -> Any:
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, tuple):
-        return list(value)
+        return [_json_ready(item) for item in value]
+    if isinstance(value, list):
+        return [_json_ready(item) for item in value]
     if isinstance(value, dict):
         return {key: _json_ready(item) for key, item in value.items()}
     return value

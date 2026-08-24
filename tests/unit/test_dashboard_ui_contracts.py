@@ -9,6 +9,7 @@ from retail_analytics.dashboard import (
     DashboardUiQueryPayload,
     build_backend_query_request,
     build_synthetic_dashboard_runtime,
+    serialize_dashboard_query_response,
 )
 from retail_analytics.mart import ComparisonMode, PeriodMode, PrivateLabelScope
 
@@ -81,10 +82,14 @@ def test_synthetic_runtime_queries_backend_with_scope_and_lineage(tmp_path) -> N
     )
 
     response = runtime.query_service.query(request)
+    payload = serialize_dashboard_query_response(response)
 
     assert response.private_label_scope == PrivateLabelScope.ONLY
     assert response.request_scope["private_label_scope"] == "ONLY"
     assert response.metric_definition_lineage
+    assert response.metric_results[0].provenance is not None
+    assert payload["metric_results"][0]["provenance"]["current_analytical_scope"]["private_label_scope"] == "ONLY"
+    assert payload["metric_results"][0]["provenance"]["source_evidence"]["status"] == "PARTIAL_AGGREGATED_FACT_NO_ROW_IDS"
     assert response.missing_periods
     assert "range_aggregation_period_only" in {item.issue_code for item in response.limitations}
 
@@ -173,3 +178,18 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "retailer_margin_pct" in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
+
+
+def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "const provenance = result?.provenance" in script
+    assert "provenanceFields(provenance" in script
+    assert "current_analytical_scope" in script
+    assert "source_evidence" in script
+    assert "Provided by backend audit metadata" not in script
+    assert "const lineage = result?.lineage" not in script

@@ -39,6 +39,15 @@ def test_single_period_query_returns_multiple_metrics_with_lineage(tmp_path) -> 
     assert response.metric_definition_lineage
     assert response.private_label_scope == PrivateLabelScope.INCLUDE
     assert response.request_scope["private_label_scope"] == "INCLUDE"
+    provenance = response.metric_results[0].provenance
+    assert provenance is not None
+    assert provenance.payload["current_analytical_scope"]["private_label_scope"] == "INCLUDE"
+    assert provenance.payload["metric"]["metric_definition_id"]
+    assert provenance.payload["value"]["range_aggregation_strategy"]
+    assert provenance.payload["run_lineage"]["mart_build_id"] == "build_a"
+    assert provenance.payload["run_lineage"]["source_revision_ids"] == ("revision_a",)
+    assert provenance.payload["source_evidence"]["status"] == "PARTIAL_AGGREGATED_FACT_NO_ROW_IDS"
+    assert "source_row_ids" in provenance.payload["missing_fields"]
 
 
 def test_lineage_can_be_omitted(tmp_path) -> None:
@@ -57,6 +66,8 @@ def test_lineage_can_be_omitted(tmp_path) -> None:
 
     assert response.metric_definition_lineage == ()
     assert all(result.lineage is None for result in response.metric_results)
+    assert all(result.provenance is not None for result in response.metric_results)
+    assert all("metric_definition_id" in result.provenance.payload["missing_fields"] for result in response.metric_results)
 
 
 def test_date_range_sums_additive_metrics(tmp_path) -> None:

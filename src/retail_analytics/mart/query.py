@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import calendar
 from collections import defaultdict
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
 from pathlib import Path
@@ -116,6 +116,13 @@ class MetricDefinitionLineage:
 
 
 @dataclass(frozen=True)
+class MetricProvenanceTrace:
+    """Structured backend provenance for a dashboard-visible value."""
+
+    payload: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class MetricQueryResult:
     """Aggregated or period-only metric result."""
 
@@ -132,6 +139,7 @@ class MetricQueryResult:
     lineage: MetricDefinitionLineage | None
     limitations: tuple[str, ...] = ()
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
+    provenance: MetricProvenanceTrace | None = None
 
 
 @dataclass(frozen=True)
@@ -234,6 +242,17 @@ class DashboardMartQueryService:
         limitations.extend(comparison_limitations)
         analysis_run_ids = tuple(sorted(set(requested.get_column("analysis_run_id").to_list()))) if not requested.is_empty() else ()
         quality_flags = _quality_flags(requested)
+        metric_results = _attach_provenance(
+            metric_results,
+            request=request,
+            mart_build_id=mart_build_id,
+            analysis_run_ids=analysis_run_ids,
+            requested_periods=requested_periods,
+            available_periods=available_periods,
+            missing_periods=missing_periods,
+            comparisons=comparisons,
+            response_quality_flags=quality_flags,
+        )
         lineage = tuple(result.lineage for result in metric_results if request.include_lineage and result.lineage is not None)
 
         return DashboardMetricQueryResponse(
@@ -755,6 +774,183 @@ def _comparisons(
             )
         )
     return tuple(comparisons), ()
+
+
+def _attach_provenance(
+    metric_results: tuple[MetricQueryResult, ...],
+    *,
+    request: DashboardMetricQueryRequest,
+    mart_build_id: str,
+    analysis_run_ids: tuple[str, ...],
+    requested_periods: tuple[date, ...],
+    available_periods: tuple[date, ...],
+    missing_periods: tuple[date, ...],
+    comparisons: tuple[ComparisonResult, ...],
+    response_quality_flags: tuple[str, ...],
+) -> tuple[MetricQueryResult, ...]:
+    return tuple(
+        replace(
+            result,
+            provenance=MetricProvenanceTrace(
+                _provenance_payload(
+                    result,
+                    request=request,
+                    mart_build_id=mart_build_id,
+                    analysis_run_ids=analysis_run_ids,
+                    requested_periods=requested_periods,
+                    available_periods=available_periods,
+                    missing_periods=missing_periods,
+                    comparisons=comparisons,
+                    response_quality_flags=response_quality_flags,
+                )
+            ),
+        )
+        for result in metric_results
+    )
+
+
+def _provenance_payload(
+    result: MetricQueryResult,
+    *,
+    request: DashboardMetricQueryRequest,
+    mart_build_id: str,
+    analysis_run_ids: tuple[str, ...],
+    requested_periods: tuple[date, ...],
+    available_periods: tuple[date, ...],
+    missing_periods: tuple[date, ...],
+    comparisons: tuple[ComparisonResult, ...],
+    response_quality_flags: tuple[str, ...],
+) -> dict[str, Any]:
+    lineage = result.lineage
+    period_source_revisions = tuple(sorted({period.source_revision_id for period in result.period_values}))
+    period_analysis_runs = tuple(sorted({period.analysis_run_id for period in result.period_values}))
+    quality_statuses = tuple(sorted({period.quality_status for period in result.period_values}))
+    quality_flags = tuple(
+        sorted(
+            {
+                flag
+                for flag in (*response_quality_flags, *(period.quality_flags for period in result.period_values))
+                if flag
+            }
+        )
+    )
+    result_comparisons = tuple(
+        item
+        for item in comparisons
+        if item.entity_id == result.entity_id
+        and lineage is not None
+        and item.metric_definition_id == lineage.metric_definition_id
+        and item.private_label_scope == result.private_label_scope
+    )
+    comparison_payload = {
+        "comparison_mode": request.comparison_mode.value,
+        "status": _comparison_provenance_status(request, result_comparisons),
+        "quality_statuses": tuple(sorted({item.quality_status for item in result_comparisons})),
+        "periods": tuple(
+            {
+                "current_period_start": item.current_period_start,
+                "comparison_period_start": item.comparison_period_start,
+                "gap_periods": item.gap_periods,
+            }
+            for item in result_comparisons
+        ),
+    }
+    missing_fields = list(_lineage_missing_fields(lineage))
+    if not result_comparisons and request.comparison_mode != ComparisonMode.NONE:
+        missing_fields.extend(("comparison_periods", "comparison_quality"))
+    if lineage is None or not lineage.rule_version:
+        missing_fields.append("business_rule_version")
+    missing_fields.extend(("business_rule_id", "source_row_ids"))
+
+    return {
+        "current_analytical_scope": {
+            "retailer_id": request.retailer_id,
+            "source_id": request.source_id,
+            "period_mode": request.period_mode.value,
+            "period_grain": request.period_grain,
+            "requested_periods": requested_periods,
+            "available_periods": available_periods,
+            "missing_periods": missing_periods,
+            "grain_id": result.grain_id,
+            "entity_id": result.entity_id,
+            "entity_ids": request.entity_ids,
+            "private_label_scope": request.private_label_scope.value,
+            "scope_identity_hash": scope_identity_hash(private_label_scope=request.private_label_scope),
+        },
+        "metric": {
+            "metric_concept": result.metric_concept,
+            "metric_name": result.metric_name,
+            "metric_definition_id": lineage.metric_definition_id if lineage is not None else None,
+            "metric_definition_version": lineage.metric_definition_version if lineage is not None else None,
+            "metric_config_hash": lineage.metric_config_hash if lineage is not None else None,
+            "semantic_family": lineage.semantic_family if lineage is not None else None,
+            "semantic_compatibility_version": lineage.semantic_compatibility_version if lineage is not None else None,
+            "cross_retailer_comparable": lineage.cross_retailer_comparable if lineage is not None else None,
+        },
+        "value": {
+            "value": result.value,
+            "numerator_value": result.numerator_value,
+            "denominator_value": result.denominator_value,
+            "aggregation_strategy": result.range_aggregation_strategy.value,
+            "range_aggregation_strategy": result.range_aggregation_strategy.value,
+            "share_scope": result.share_scope,
+            "period_values": tuple(
+                {
+                    "period_start": period.period_start,
+                    "period_end": period.period_end,
+                    "business_period_id": period.business_period_id,
+                    "value": period.value,
+                    "numerator_value": period.numerator_value,
+                    "denominator_value": period.denominator_value,
+                    "quality_status": period.quality_status,
+                }
+                for period in result.period_values
+            ),
+        },
+        "comparison": comparison_payload,
+        "business_rule": {
+            "business_rule_id": None,
+            "business_rule_version": lineage.rule_version if lineage is not None else None,
+        },
+        "run_lineage": {
+            "analysis_run_ids": analysis_run_ids or period_analysis_runs,
+            "mart_build_id": mart_build_id,
+            "source_revision_ids": period_source_revisions,
+        },
+        "source_evidence": {
+            "status": "PARTIAL_AGGREGATED_FACT_NO_ROW_IDS",
+            "period_fact_count": len(result.period_values),
+            "source_revision_ids": period_source_revisions,
+            "source_row_ids": (),
+        },
+        "quality": {
+            "quality_statuses": quality_statuses,
+            "quality_flags": quality_flags,
+            "result_limitations": result.limitations,
+        },
+        "missing_fields": tuple(dict.fromkeys(missing_fields)),
+    }
+
+
+def _comparison_provenance_status(
+    request: DashboardMetricQueryRequest,
+    comparisons: tuple[ComparisonResult, ...],
+) -> str:
+    if request.comparison_mode == ComparisonMode.NONE:
+        return "NOT_APPLICABLE"
+    return "COMPLETE" if comparisons else "PARTIAL"
+
+
+def _lineage_missing_fields(lineage: MetricDefinitionLineage | None) -> tuple[str, ...]:
+    if lineage is not None:
+        return ()
+    return (
+        "metric_definition_id",
+        "metric_definition_version",
+        "metric_config_hash",
+        "semantic_family",
+        "semantic_compatibility_version",
+    )
 
 
 def _comparison_target(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> date | None:
