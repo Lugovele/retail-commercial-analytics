@@ -217,9 +217,9 @@ async function loadOptions() {
 }
 
 async function refreshRuntimeOptions({ resetPeriods = false, resetEntities = false } = {}) {
+  if (resetEntities) resetAllEntityFilters();
   await loadOptions();
   populatePeriodSelects(resetPeriods);
-  if (resetEntities) resetAllEntityFilters();
   populateEntityFilters();
 }
 
@@ -640,6 +640,9 @@ function resetAllEntityFilters() {
     const search = document.getElementById(`${id}-search`);
     if (search) search.value = "";
   });
+  state.currentGrain = "network";
+  updateBreadcrumb();
+  updatePreviewGrain();
 }
 
 function applyFilterDrilldown(filterId) {
@@ -707,13 +710,13 @@ function selectedParentFiltersForGrain(grain) {
 }
 
 function entityIdsForSummary() {
-  if (state.currentGrain === "network") return ["network"];
+  if (state.currentGrain === "network") return firstEntityIds("network", 1);
   const selected = document.getElementById(`${state.currentGrain}-filter`)?.value;
   if (selected) return [selected];
   state.currentGrain = "network";
   updateBreadcrumb();
   updatePreviewGrain();
-  return ["network"];
+  return firstEntityIds("network", 1);
 }
 
 function entityIdsForPreview() {

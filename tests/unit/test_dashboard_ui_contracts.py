@@ -337,7 +337,8 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "entityIdsForPreview" in script
     assert "canActivateSummaryGrain(targetGrain)" in script
     assert 'state.currentGrain = "network";' in script
-    assert "return firstEntityIds(state.currentGrain, 1)" not in script
+    assert 'if (state.currentGrain === "network") return firstEntityIds("network", 1);' in script
+    assert 'return ["network"]' not in script
     assert "selectedParentFiltersForGrain" in script
     assert "Показаны первые" in script
     assert "CATEGORY_STANDARD" not in script
@@ -385,6 +386,12 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert "async function loadOptions()" in script
     assert "populatePeriodSelects" in script
     assert "populateEntityFilters" in script
+    refresh_body = script.split("async function refreshRuntimeOptions", 1)[1].split("function populatePeriodSelects", 1)[0]
+    assert refresh_body.index("if (resetEntities) resetAllEntityFilters();") < refresh_body.index("await loadOptions();")
+    reset_body = script.split("function resetAllEntityFilters", 1)[1].split("function applyFilterDrilldown", 1)[0]
+    assert 'state.currentGrain = "network";' in reset_body
+    assert "updateBreadcrumb();" in reset_body
+    assert "updatePreviewGrain();" in reset_body
     assert "resetChildFilters(id)" in script
     assert "await refreshRuntimeOptions();" in script
     assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
