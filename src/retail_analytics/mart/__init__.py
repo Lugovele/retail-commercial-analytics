@@ -21,6 +21,16 @@ from retail_analytics.mart.comparison_universe import (
     filter_market_universe,
     private_label_growth_while_portfolio_declines,
 )
+from retail_analytics.mart.contribution import (
+    ADDITIVE_CONTRIBUTION_METRICS,
+    AdditiveContributionService,
+    ContributionQueryRequest,
+    ContributionQueryResponse,
+    ContributionRow,
+    ContributionRowStatus,
+    ContributionStatus,
+    MetricDefinitionIdentity,
+)
 from retail_analytics.mart.duckdb import query_metric_facts
 from retail_analytics.mart.geography import (
     UNKNOWN_REGION,
@@ -90,8 +100,10 @@ from retail_analytics.mart.scopes import (
 )
 
 __all__ = [
+    "ADDITIVE_CONTRIBUTION_METRICS",
     "UNKNOWN_REGION",
     "ActiveSkuSummary",
+    "AdditiveContributionService",
     "BrandVsCategoryComparison",
     "CatalogIssueSeverity",
     "CatalogValidationIssue",
@@ -99,6 +111,11 @@ __all__ = [
     "ComparativePatternSignal",
     "ComparisonMode",
     "ComparisonResult",
+    "ContributionQueryRequest",
+    "ContributionQueryResponse",
+    "ContributionRow",
+    "ContributionRowStatus",
+    "ContributionStatus",
     "CoverageStatus",
     "DashboardGroup",
     "DashboardMartQueryService",
@@ -113,6 +130,7 @@ __all__ = [
     "MartBuildMetadata",
     "MartBuildStatus",
     "MetricAvailabilityStatus",
+    "MetricDefinitionIdentity",
     "MetricDefinitionLineage",
     "MetricFormat",
     "MetricProvenanceTrace",

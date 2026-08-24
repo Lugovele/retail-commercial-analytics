@@ -17,14 +17,21 @@ from retail_analytics.dashboard.runtime import (
 )
 from retail_analytics.dashboard.schemas import (
     build_backend_query_request,
+    build_contribution_request,
+    serialize_contribution_response,
     serialize_dashboard_query_response,
 )
+from retail_analytics.mart import AdditiveContributionService
 
 
 def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIApplication:
     """Create a small WSGI app for local dashboard use and integration tests."""
 
     resolved_runtime = runtime or build_dashboard_runtime()
+    contribution_service = AdditiveContributionService(
+        resolved_runtime.query_service.metric_facts_path,
+        mart_builds=resolved_runtime.query_service.mart_builds,
+    )
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
         method = str(environ.get("REQUEST_METHOD", "GET")).upper()
@@ -71,6 +78,11 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 request = build_backend_query_request(payload)
                 response = resolved_runtime.query_service.query(request)
                 return _json_response(start_response, serialize_dashboard_query_response(response))
+            if method == "POST" and path == "/api/dashboard/contribution":
+                payload = _read_json(environ)
+                contribution_request = build_contribution_request(payload)
+                contribution_response = contribution_service.contribution(contribution_request)
+                return _json_response(start_response, serialize_contribution_response(contribution_response))
             return _json_response(start_response, {"error": "not_found"}, status="404 Not Found")
         except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError) as exc:
             return _json_response(

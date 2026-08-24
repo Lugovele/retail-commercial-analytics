@@ -153,6 +153,7 @@ availability supports them.
 | `regional_units` | Продажи региона, шт. | Regional unit sales over selected period/range. | decimal | Бизнес-оценки | География | OPTIONAL_COLUMN | region | Requires mapped region field. |
 | `regional_margin_abs` | Маржа региона | Regional absolute margin over selected period/range. | currency | Бизнес-оценки | География | OPTIONAL_COLUMN | region | Requires mapped region field. |
 | `regional_share_revenue` | Доля региона в обороте | Region revenue divided by scoped total revenue. | percent | Бизнес-оценки | География | DEFAULT_TABLE | region | Recomputed from scoped totals; do not average period shares. |
+| `contribution_to_delta` | Вклад в изменение | Additive child contribution to selected parent comparison-period delta. | percent | Обзор | Продажи | DEFAULT_TABLE | network→category; category→manufacturer/brand/SKU | Only for additive metrics: revenue, revenue_vat, units, retailer_margin_abs. Not causal. |
 
 ## Partial Or Audit-Only Concepts
 
@@ -180,6 +181,19 @@ availability supports them.
 
 `%` and `п.п.` must not be interchanged. Share deltas and margin-rate deltas use
 percentage points for absolute difference; relative growth rates use percent.
+
+Contribution wording:
+
+| Field | User-facing label |
+| --- | --- |
+| contribution concept | Вклад в изменение |
+| current value | Текущий период |
+| reference value | Период сравнения |
+| delta | Изменение |
+| contribution share | Вклад в изменение, % |
+
+Contribution percentages may be above `100%` or below `0%` when contributors
+offset each other. Do not label signed contribution as good/bad.
 
 ## Unsupported Presentation Claims
 

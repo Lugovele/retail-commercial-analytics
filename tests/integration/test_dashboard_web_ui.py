@@ -126,6 +126,66 @@ def test_dashboard_range_query_returns_missing_periods_without_zero_fill(tmp_pat
     }
 
 
+def test_dashboard_contribution_route_returns_structured_rows(tmp_path: Path) -> None:
+    app = create_dashboard_wsgi_app(build_synthetic_dashboard_runtime(tmp_path))
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/contribution",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "current_period": "2026-06-01",
+            "reference_period": "2025-06-01",
+            "period_grain": "month",
+            "parent_grain_id": "network",
+            "parent_entity_id": "network",
+            "child_grain_id": "category",
+            "metric_concept": "revenue",
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["status"] in {"READY", "TOTAL_DELTA_ZERO"}
+    assert response["metric_concept"] == "revenue"
+    assert response["rows"]
+    assert response["rows"][0]["provenance"]["calculation"]["formula"] == "child_delta / parent_delta"
+    assert response["rows"][0]["provenance"]["metric"]["parent_definition"]["metric_definition_id"]
+    assert response["rows"][0]["provenance"]["metric"]["child_definition"]["metric_definition_id"]
+    assert response["rows"][0]["provenance"]["run_lineage"]["mart_build_id"] == "build_dashboard_synthetic"
+    assert response["rows"][0]["provenance"]["source_evidence"]["status"] == "PARTIAL_AGGREGATED_FACT_NO_ROW_IDS"
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/contribution",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "current_period": "2026-06-01",
+            "reference_period": "2025-06-01",
+            "period_grain": "month",
+            "parent_grain_id": "network",
+            "parent_entity_id": "network",
+            "child_grain_id": "category",
+            "metric_concept": "retailer_margin_pct",
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    unsupported = json.loads(body)
+
+    assert status.startswith("200")
+    assert unsupported["status"] == "NOT_APPLICABLE"
+    assert unsupported["rows"] == []
+
+
 def _call(
     app: WSGIApplication,
     method: str,

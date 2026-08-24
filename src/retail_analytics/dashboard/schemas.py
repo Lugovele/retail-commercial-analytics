@@ -8,6 +8,8 @@ from typing import Any
 
 from retail_analytics.mart import (
     ComparisonMode,
+    ContributionQueryRequest,
+    ContributionQueryResponse,
     DashboardMetricQueryRequest,
     DashboardMetricQueryResponse,
     PeriodMode,
@@ -56,6 +58,28 @@ class DashboardUiRuntimeResponse:
     supported_private_label_scopes: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class DashboardUiContributionPayload:
+    """UI-facing additive contribution request."""
+
+    retailer_id: str
+    source_id: str
+    current_period: date | str
+    reference_period: date | str
+    period_grain: str
+    parent_grain_id: str
+    parent_entity_id: str | None
+    child_grain_id: str
+    metric_concept: str
+    comparison_mode: str
+    private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE
+    mart_build_id: str | None = None
+    quality_policy: QualityPolicy | str = QualityPolicy.INCLUDE_ALL
+    limit: int = 40
+    parent_metric_definition_id: str | None = None
+    child_metric_definition_id: str | None = None
+
+
 def build_backend_query_request(payload: DashboardUiQueryPayload | dict[str, Any]) -> DashboardMetricQueryRequest:
     """Build the exact backend query request from a UI payload."""
 
@@ -77,6 +101,30 @@ def build_backend_query_request(payload: DashboardUiQueryPayload | dict[str, Any
         include_lineage=data.include_lineage,
         mart_build_id=data.mart_build_id,
         private_label_scope=PrivateLabelScope(data.private_label_scope),
+    )
+
+
+def build_contribution_request(payload: DashboardUiContributionPayload | dict[str, Any]) -> ContributionQueryRequest:
+    """Build an additive contribution request from a UI payload."""
+
+    data = _coerce_contribution_payload(payload)
+    return ContributionQueryRequest(
+        retailer_id=data.retailer_id,
+        source_id=data.source_id,
+        current_period=_date_required(data.current_period),
+        reference_period=_date_required(data.reference_period),
+        period_grain=data.period_grain,
+        parent_grain_id=data.parent_grain_id,
+        parent_entity_id=data.parent_entity_id,
+        child_grain_id=data.child_grain_id,
+        metric_concept=data.metric_concept,
+        comparison_mode=data.comparison_mode,
+        private_label_scope=PrivateLabelScope(data.private_label_scope),
+        mart_build_id=data.mart_build_id,
+        quality_policy=QualityPolicy(data.quality_policy).value,
+        limit=data.limit,
+        parent_metric_definition_id=data.parent_metric_definition_id,
+        child_metric_definition_id=data.child_metric_definition_id,
     )
 
 
@@ -123,6 +171,42 @@ def serialize_runtime_response(response: DashboardUiRuntimeResponse) -> dict[str
         "supported_period_modes": list(response.supported_period_modes),
         "supported_comparison_modes": list(response.supported_comparison_modes),
         "supported_private_label_scopes": list(response.supported_private_label_scopes),
+    }
+
+
+def serialize_contribution_response(response: ContributionQueryResponse) -> dict[str, Any]:
+    """Serialize additive contribution response for the browser."""
+
+    return {
+        "status": response.status.value,
+        "request_scope": _json_ready(response.request_scope),
+        "metric_concept": response.metric_concept,
+        "parent_metric_definition": _definition_identity(response.parent_metric_definition),
+        "child_metric_definition": _definition_identity(response.child_metric_definition),
+        "parent_current_value": response.parent_current_value,
+        "parent_reference_value": response.parent_reference_value,
+        "parent_delta": response.parent_delta,
+        "rows": [
+            {
+                "child_entity_id": row.child_entity_id,
+                "current_value": row.current_value,
+                "reference_value": row.reference_value,
+                "delta": row.delta,
+                "absolute_delta": row.absolute_delta,
+                "parent_current_value": row.parent_current_value,
+                "parent_reference_value": row.parent_reference_value,
+                "parent_delta": row.parent_delta,
+                "contribution_share": row.contribution_share,
+                "status": row.status.value,
+                "provenance": _json_ready(row.provenance),
+            }
+            for row in response.rows
+        ],
+        "limitations": list(response.limitations),
+        "quality_flags": list(response.quality_flags),
+        "mart_build_id": response.mart_build_id,
+        "analysis_run_ids": list(response.analysis_run_ids),
+        "source_revision_ids": list(response.source_revision_ids),
     }
 
 
@@ -188,6 +272,21 @@ def _lineage(lineage: Any) -> dict[str, Any]:
     }
 
 
+def _definition_identity(identity: Any) -> dict[str, Any] | None:
+    if identity is None:
+        return None
+    return {
+        "metric_definition_id": identity.metric_definition_id,
+        "metric_definition_version": identity.metric_definition_version,
+        "metric_config_hash": identity.metric_config_hash,
+        "rule_version": identity.rule_version,
+        "semantic_family": identity.semantic_family,
+        "semantic_compatibility_version": identity.semantic_compatibility_version,
+        "aggregation": identity.aggregation,
+        "range_aggregation_strategy": identity.range_aggregation_strategy,
+    }
+
+
 def _coerce_payload(payload: DashboardUiQueryPayload | dict[str, Any]) -> DashboardUiQueryPayload:
     if isinstance(payload, DashboardUiQueryPayload):
         return payload
@@ -217,12 +316,49 @@ def _coerce_payload(payload: DashboardUiQueryPayload | dict[str, Any]) -> Dashbo
     )
 
 
+def _coerce_contribution_payload(
+    payload: DashboardUiContributionPayload | dict[str, Any],
+) -> DashboardUiContributionPayload:
+    if isinstance(payload, DashboardUiContributionPayload):
+        return payload
+    return DashboardUiContributionPayload(
+        retailer_id=str(payload["retailer_id"]),
+        source_id=str(payload["source_id"]),
+        current_period=payload["current_period"],
+        reference_period=payload["reference_period"],
+        period_grain=str(payload.get("period_grain", "month")),
+        parent_grain_id=str(payload["parent_grain_id"]),
+        parent_entity_id=_optional_text(payload.get("parent_entity_id")),
+        child_grain_id=str(payload["child_grain_id"]),
+        metric_concept=str(payload["metric_concept"]),
+        comparison_mode=str(payload.get("comparison_mode", "CUSTOM_PERIODS")),
+        private_label_scope=payload.get("private_label_scope", PrivateLabelScope.INCLUDE),
+        mart_build_id=payload.get("mart_build_id"),
+        quality_policy=payload.get("quality_policy", QualityPolicy.INCLUDE_ALL),
+        limit=int(payload.get("limit", 40)),
+        parent_metric_definition_id=_optional_text(payload.get("parent_metric_definition_id")),
+        child_metric_definition_id=_optional_text(payload.get("child_metric_definition_id")),
+    )
+
+
 def _date_or_none(value: date | str | None) -> date | None:
     if value is None or value == "":
         return None
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
+
+
+def _date_required(value: date | str) -> date:
+    if isinstance(value, date):
+        return value
+    return date.fromisoformat(str(value))
+
+
+def _optional_text(value: object) -> str | None:
+    if value in (None, ""):
+        return None
+    return str(value)
 
 
 def _date_text(value: date | None) -> str | None:

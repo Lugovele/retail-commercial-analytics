@@ -1208,6 +1208,41 @@ capabilities:
   provenance_supported: false
   signal_eligible: false
   recommendation_eligible_future: true
+- concept_id: contribution_to_delta
+  ui_label_ru: Вклад в изменение
+  ui_description_ru: Вклад дочернего объекта в изменение поддержанного аддитивного показателя между двумя периодами.
+  tab: Обзор
+  group: Продажи
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: NOT_APPLICABLE
+  comparison_support:
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: contribution_to_delta
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.contribution.AdditiveContributionService
+  availability_status: READY
+  limitations:
+  - additive_metrics_only
+  - supported_metrics_revenue_vat_revenue_units_margin_abs
+  - supported_scopes_network_category_and_category_children
+  - signed_share_may_exceed_100_or_be_negative
+  - no_causal_claim
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
 - concept_id: recommendations
   ui_label_ru: Рекомендации
   ui_description_ru: Placeholder until deterministic recommendation backend exists.

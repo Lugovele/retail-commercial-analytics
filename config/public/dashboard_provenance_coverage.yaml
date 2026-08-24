@@ -988,6 +988,31 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - store
+- concept_id: contribution_to_delta
+  fact_type: mart.contribution.AdditiveContributionService
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  - external_business_rule_id
+  UI_provenance_supported: true
+  applicability:
+    tab: Обзор
+    group: Продажи
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
 - concept_id: recommendations
   fact_type: none
   coverage_status: NOT_APPLICABLE

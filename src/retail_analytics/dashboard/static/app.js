@@ -4,6 +4,7 @@ const state = {
   options: { periods: [], entities: {} },
   summaryResponse: null,
   tableResponse: null,
+  contributionResponse: null,
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
@@ -16,6 +17,7 @@ const state = {
 };
 
 const primaryKpis = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"];
+const additiveContributionMetrics = ["revenue_vat", "revenue", "units", "retailer_margin_abs"];
 const chartMetrics = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "weighted_shelf_price_vat"];
 const diagnosticGroups = [
   { title: "Продажи", concepts: ["revenue", "units"] },
@@ -252,6 +254,7 @@ async function runOverviewQuery() {
     const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), overviewConcepts());
     const previewPayload = buildQueryPayload(state.previewGrain, entityIdsForPreview(), tableConcepts());
     state.summaryResponse = await postJson("/api/dashboard/query", summaryPayload);
+    state.contributionResponse = await loadContributionRows();
     state.tableResponse = await postJson("/api/dashboard/query", previewPayload);
     renderOverview();
     setLoading(false, "Данные обновлены");
@@ -259,6 +262,12 @@ async function runOverviewQuery() {
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
+}
+
+async function loadContributionRows() {
+  const payload = buildContributionPayload();
+  if (!payload) return null;
+  return postJson("/api/dashboard/contribution", payload);
 }
 
 function buildQueryPayload(grain, entityIds, metricConcepts) {
@@ -279,6 +288,31 @@ function buildQueryPayload(grain, entityIds, metricConcepts) {
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value
+  };
+}
+
+function buildContributionPayload() {
+  if (state.periodMode !== "COMPARE") return null;
+  if (!additiveContributionMetrics.includes(state.chartMetric)) return null;
+  const comparison = state.summaryResponse?.comparisons?.[0];
+  if (!comparison?.comparison_period_start) return null;
+  const parentEntityIds = entityIdsForSummary();
+  const parentEntityId = parentEntityIds[0] || null;
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    current_period: selectedDateFrom(),
+    reference_period: comparison.comparison_period_start,
+    period_grain: "month",
+    parent_grain_id: state.currentGrain,
+    parent_entity_id: parentEntityId,
+    child_grain_id: state.previewGrain,
+    metric_concept: state.chartMetric,
+    comparison_mode: selectedComparisonMode(),
+    private_label_scope: document.getElementById("private-label-scope").value,
+    mart_build_id: retailer.default_mart_build_id,
+    limit: state.tablePageSize
   };
 }
 
@@ -465,6 +499,10 @@ function renderAttention() {
 
 function renderOverviewTable() {
   const table = document.getElementById("overview-table");
+  if (hasContributionRows()) {
+    renderContributionTable(table);
+    return;
+  }
   const concepts = tableConcepts();
   const headers = [grainLabels[state.previewGrain], ...concepts.map(displayLabel)];
   if (!state.tableResponse?.metric_results?.length) {
@@ -486,7 +524,72 @@ function renderOverviewTable() {
   });
   const caption = table.createCaption();
   caption.textContent = `Показаны первые ${Math.min(rows.length, state.tablePageSize)} из ${entities.length}`;
-  document.getElementById("table-context").textContent = tableContextText(entities.length);
+  document.getElementById("table-context").textContent = tableContextText(entities.length, contributionFallbackReason());
+}
+
+function hasContributionRows() {
+  return ["READY", "TOTAL_DELTA_ZERO"].includes(state.contributionResponse?.status)
+    && Boolean(state.contributionResponse?.rows?.length);
+}
+
+function renderContributionTable(table) {
+  const metric = catalogEntry(state.contributionResponse.metric_concept);
+  const headers = [
+    grainLabels[state.previewGrain],
+    "Текущий период",
+    "Период сравнения",
+    "Изменение",
+    "Вклад в изменение",
+    "Доказательство"
+  ];
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headers.forEach((header) => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = header;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  const tbody = document.createElement("tbody");
+  state.contributionResponse.rows.slice(0, state.tablePageSize).forEach((row) => {
+    const tr = document.createElement("tr");
+    const entityCell = document.createElement("td");
+    const entityButton = document.createElement("button");
+    entityButton.type = "button";
+    entityButton.className = "table-link";
+    entityButton.textContent = entityDisplayLabel(state.previewGrain, row.child_entity_id);
+    entityButton.addEventListener("click", () => drillIntoEntity(String(row.child_entity_id)));
+    entityCell.appendChild(entityButton);
+    tr.appendChild(entityCell);
+    [
+      formatValue(row.current_value, metric?.format || "decimal"),
+      formatValue(row.reference_value, metric?.format || "decimal"),
+      formatDeltaValue(row.delta, metric?.format || "decimal"),
+      row.contribution_share === null ? "н/д" : formatValue(row.contribution_share, "percent")
+    ].forEach((value) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    const actionCell = document.createElement("td");
+    const provenanceButton = document.createElement("button");
+    provenanceButton.type = "button";
+    provenanceButton.className = "text-button";
+    provenanceButton.textContent = "Откуда?";
+    provenanceButton.addEventListener("click", () => openContributionProvenance(row));
+    actionCell.appendChild(provenanceButton);
+    tr.appendChild(actionCell);
+    tbody.appendChild(tr);
+  });
+  table.replaceChildren(thead, tbody);
+  const caption = table.createCaption();
+  caption.textContent = `Сортировка: наибольшее абсолютное изменение · ${displayLabel(state.contributionResponse.metric_concept)}`;
+  const zeroNote = state.contributionResponse.status === "TOTAL_DELTA_ZERO"
+    ? " Вклад в общее изменение не рассчитывается: итоговое изменение равно нулю."
+    : "";
+  document.getElementById("table-context").textContent =
+    `Объекты с наибольшим вкладом в изменение. ${contributionMixedSignNote()}${zeroNote}`.trim();
 }
 
 function renderContextStrip() {
@@ -839,11 +942,32 @@ function entityDisplayLabel(grain, entityId) {
   return optionItem?.label || entityId;
 }
 
-function tableContextText(count) {
+function tableContextText(count, reason = "") {
   const current = grainLabels[state.currentGrain];
   const next = grainLabels[state.previewGrain];
   if (!count) return `Нет объектов уровня «${next}» для текущего среза.`;
+  if (reason) return `${next}: объекты в выбранном срезе. ${reason}`;
   return `${next}: первые ${Math.min(count, state.tablePageSize)} объектов для среза «${current}».`;
+}
+
+function contributionFallbackReason() {
+  const status = state.contributionResponse?.status;
+  if (state.periodMode !== "COMPARE") return "Вклад в изменение доступен только в режиме сравнения.";
+  if (!additiveContributionMetrics.includes(state.chartMetric)) return "Для выбранного показателя вклад в изменение не рассчитывается.";
+  if (status === "NOT_APPLICABLE_PARENT_CHILD_SCOPE") return "Для этой пары уровней вклад пока недоступен.";
+  if (status === "NOT_APPLICABLE") return "Для выбранного показателя вклад не применим.";
+  if (status === "INSUFFICIENT_COMPARISON") return "Нет полного периода сравнения для расчёта вклада.";
+  if (status === "AMBIGUOUS_METRIC_DEFINITION") return "Требуется уточнить определение показателя.";
+  if (status === "NO_DATA") return "Нет данных для расчёта вклада.";
+  return "";
+}
+
+function contributionMixedSignNote() {
+  const rows = state.contributionResponse?.rows || [];
+  const hasPositive = rows.some((row) => row.delta > 0);
+  const hasNegative = rows.some((row) => row.delta < 0);
+  if (!hasPositive || !hasNegative) return "";
+  return "Вклад может быть выше 100% или отрицательным, если объекты компенсируют изменение.";
 }
 
 function updatePrivateLabelTerminology() {
@@ -876,6 +1000,76 @@ function openProvenance(concept) {
   document.getElementById("provenance-drawer").classList.add("is-open");
   document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
   document.getElementById("scrim").classList.add("is-open");
+}
+
+function openContributionProvenance(row) {
+  const content = document.getElementById("provenance-content");
+  content.replaceChildren();
+  contributionProvenanceSections(row.provenance || {}, row).forEach((section) => content.appendChild(section));
+  document.getElementById("provenance-drawer").classList.add("is-open");
+  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("is-open");
+}
+
+function contributionProvenanceSections(provenance, row) {
+  const scope = provenance.scope || {};
+  const parent = provenance.parent || {};
+  const child = provenance.child || {};
+  const metric = provenance.metric || {};
+  const calculation = provenance.calculation || {};
+  const run = provenance.run_lineage || {};
+  const source = provenance.source_evidence || {};
+  const parentDefinition = metric.parent_definition || {};
+  const childDefinition = metric.child_definition || {};
+  const sections = [
+    section("Что это за показатель", [
+      ["Показатель", "Вклад в изменение"],
+      ["Базовый показатель", displayLabel(metric.metric_concept || state.contributionResponse?.metric_concept)],
+      ["Вклад", row.contribution_share === null ? "н/д" : formatValue(row.contribution_share, "percent")]
+    ]),
+    section("Срез", [
+      ["Родительский уровень", [grainLabels[parent.grain_id] || parent.grain_id, entityDisplayLabel(parent.grain_id, parent.entity_id)].filter(Boolean).join(" / ") || "н/д"],
+      ["Дочерний объект", [grainLabels[child.grain_id] || child.grain_id, entityDisplayLabel(child.grain_id, child.entity_id)].filter(Boolean).join(" / ") || "н/д"],
+      ["Периоды", [formatPeriod(scope.current_period), formatPeriod(scope.reference_period)].filter(Boolean).join(" vs ") || "н/д"],
+      ["Учёт ассортимента", privateLabelScopeText(scope.private_label_scope)]
+    ]),
+    section("Расчёт", [
+      ["Текущий период", formatValue(calculation.current_value, catalogEntry(metric.metric_concept)?.format || "decimal")],
+      ["Период сравнения", formatValue(calculation.reference_value, catalogEntry(metric.metric_concept)?.format || "decimal")],
+      ["Изменение объекта", formatDeltaValue(calculation.child_delta, catalogEntry(metric.metric_concept)?.format || "decimal")],
+      ["Изменение родителя", formatDeltaValue(calculation.parent_delta, catalogEntry(metric.metric_concept)?.format || "decimal")],
+      ["Формула", calculation.formula || "н/д"]
+    ]),
+    section("Сравнение", [
+      ["Тип", comparisonLabels[scope.comparison_mode] || scope.comparison_mode || "н/д"],
+      ["Статус", calculation.status || "н/д"]
+    ]),
+    section("Покрытие данных", [
+      ["Доказательство по источнику", source.status || "н/д"]
+    ]),
+    section("Бизнес-правило", [
+      ["Правило", [childDefinition.rule_version, parentDefinition.rule_version].filter(Boolean).join(" / ") || "н/д"]
+    ]),
+    section("Качество", [
+      ["Ограничения", compactList(provenance.missing_fields)]
+    ])
+  ];
+  const technical = document.createElement("details");
+  technical.className = "provenance-technical";
+  const summary = document.createElement("summary");
+  summary.textContent = "Технические детали";
+  technical.appendChild(summary);
+  technical.appendChild(section(null, [
+    ["Определение родителя", [parentDefinition.metric_definition_id, parentDefinition.metric_definition_version, parentDefinition.metric_config_hash].filter(Boolean).join(" / ") || "н/д"],
+    ["Определение дочернего объекта", [childDefinition.metric_definition_id, childDefinition.metric_definition_version, childDefinition.metric_config_hash].filter(Boolean).join(" / ") || "н/д"],
+    ["Технический срез", [scope.retailer_id, scope.source_id, scope.parent_grain_id, scope.parent_entity_id, scope.child_grain_id, scope.private_label_scope].filter(Boolean).join(" / ") || "н/д"],
+    ["Запуск анализа", compactList(run.analysis_run_ids)],
+    ["Версия аналитической витрины", run.mart_build_id || "н/д"],
+    ["Ревизия источника", compactList(run.source_revision_ids)],
+    ["Недостающие поля", compactList(provenance.missing_fields)]
+  ]));
+  sections.push(technical);
+  return sections;
 }
 
 function provenanceSections(provenance, result) {

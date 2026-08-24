@@ -407,6 +407,12 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "retailer_margin_pct" in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
+    assert 'postJson("/api/dashboard/contribution", payload)' in script
+    assert "child_delta / parent_delta" not in script
+    assert "contribution_share = " not in script
+    assert "Вклад в изменение" in script
+    assert "Для выбранного показателя вклад в изменение не рассчитывается." in script
+    assert "Для этой пары уровней вклад пока недоступен." in script
 
 
 def test_overview_uses_exactly_four_primary_kpi_concepts() -> None:
@@ -464,6 +470,9 @@ def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:
     assert "source_evidence" in script
     assert "Provided by backend audit metadata" not in script
     assert "const lineage = result?.lineage" not in script
+    assert "openContributionProvenance(row)" in script
+    assert "contributionProvenanceSections(row.provenance || {}, row)" in script
+    assert "entityDisplayLabel(state.previewGrain, row.child_entity_id)" in script
 
 
 def test_provenance_drawer_uses_russian_presentation_labels() -> None:
