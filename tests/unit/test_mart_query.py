@@ -14,6 +14,8 @@ from retail_analytics.mart import (
     DashboardMetricQueryRequest,
     MartBuildMetadata,
     MartBuildStatus,
+    MetricProvenanceTrace,
+    MetricQueryResult,
     PeriodMode,
     PrivateLabelScope,
     RangeAggregationStrategy,
@@ -66,8 +68,8 @@ def test_lineage_can_be_omitted(tmp_path) -> None:
 
     assert response.metric_definition_lineage == ()
     assert all(result.lineage is None for result in response.metric_results)
-    assert all(result.provenance is not None for result in response.metric_results)
-    assert all("metric_definition_id" in result.provenance.payload["missing_fields"] for result in response.metric_results)
+    provenance_payloads = [_require_provenance(result).payload for result in response.metric_results]
+    assert all("metric_definition_id" in payload["missing_fields"] for payload in provenance_payloads)
 
 
 def test_date_range_sums_additive_metrics(tmp_path) -> None:
@@ -581,6 +583,12 @@ def test_unsupported_period_grain_gets_explicit_limitation(tmp_path) -> None:
 
     assert response.coverage_status == CoverageStatus.UNSUPPORTED
     assert "coverage_period_grain_unsupported" in {item.issue_code for item in response.limitations}
+
+
+def _require_provenance(result: MetricQueryResult) -> MetricProvenanceTrace:
+    provenance = result.provenance
+    assert provenance is not None
+    return provenance
 
 
 def _request(
