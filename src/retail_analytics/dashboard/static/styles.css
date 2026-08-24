@@ -153,13 +153,18 @@ h3 {
 }
 
 .header-link:hover,
-.header-icon:hover {
+.header-icon:hover:not(:disabled) {
   color: var(--brand-primary);
 }
 
-.header-icon:hover {
+.header-icon:hover:not(:disabled) {
   background: rgba(42, 125, 225, 0.08);
   border-radius: var(--radius-sm);
+}
+
+.header-icon:disabled {
+  color: rgba(31, 80, 140, 0.42);
+  cursor: not-allowed;
 }
 
 .workflow-nav {
@@ -385,6 +390,17 @@ input {
   transform: rotate(180deg);
 }
 
+.filter-reset {
+  min-height: 30px;
+  margin-top: var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--brand-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: 1.05fr 1.15fr 1.15fr 1.3fr 1fr auto minmax(160px, 0.8fr);
@@ -396,6 +412,100 @@ input {
 .entity-search {
   min-height: 30px;
   background: var(--bg-subtle);
+  font-size: 12px;
+}
+
+.combo-control {
+  position: relative;
+}
+
+.combo-box {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 26px;
+  align-items: center;
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.combo-box:focus-within {
+  border-color: rgba(42, 125, 225, 0.6);
+  box-shadow: 0 0 0 3px rgba(42, 125, 225, 0.1);
+}
+
+.combo-box .entity-search {
+  min-width: 0;
+  border: 0;
+  background: transparent;
+}
+
+.combo-clear {
+  min-width: 26px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.combo-clear:hover {
+  color: var(--brand-primary);
+}
+
+.native-filter-select {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.combo-options {
+  position: absolute;
+  z-index: 20;
+  right: 0;
+  left: 0;
+  display: none;
+  max-height: 240px;
+  overflow-y: auto;
+  margin-top: 4px;
+  padding: 4px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-soft);
+}
+
+.combo-options.is-open {
+  display: grid;
+  gap: 2px;
+}
+
+.combo-option {
+  min-height: 30px;
+  padding: 5px 8px;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.combo-option:hover,
+.combo-option:focus-visible {
+  background: rgba(42, 125, 225, 0.08);
+  outline: none;
+}
+
+.combo-empty {
+  padding: 8px;
+  color: var(--text-muted);
   font-size: 12px;
 }
 

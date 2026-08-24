@@ -409,10 +409,13 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
 
     assert "filter-count" in html
     assert "filter-chevron" in html
+    assert "reset-filters" in html
     assert "context-coverage-note" in html
     assert 'document.getElementById("context-coverage-note").textContent = coverageNoteText(response);' in script
     context_body = script.split("function renderContextStrip", 1)[1].split("function renderBreadcrumb", 1)[0]
     assert "runtime.display_label" not in context_body
+    assert "periodContextText()" not in context_body
+    assert "privateLabelScopeText(response.private_label_scope)" not in context_body
     assert "`${available} из ${requested} периодов доступны`" not in context_body
     assert 'INCLUDE: `${scopeName} включена`' in script
     assert 'EXCLUDE: `${scopeName} исключена`' in script
@@ -422,6 +425,53 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     active_mode_body = css.split(".mode-button.is-active {", 1)[1].split(".period-fields", 1)[0]
     assert "var(--brand-secondary)" not in active_mode_body
     assert "rgba(42, 125, 225, 0.1)" in active_mode_body
+
+
+def test_overview_production_controls_are_real_or_truthfully_disabled() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    assert 'data-header-action="reports" aria-controls="reports-panel"' in html
+    assert 'data-header-action="settings"' in html
+    assert 'title="Настройки будут подключены позже" disabled' in html
+    assert 'data-header-action="help"' in html
+    assert 'title="Помощь будет подключена позже" disabled' in html
+    assert 'id="reports-panel"' in html
+    assert "function openReportsPanel()" in script
+    assert "Раздел будет доступен позже" not in script
+    assert "showToast(\"Раздел будет доступен позже." not in script
+
+
+def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    for filter_id in ("manufacturer", "brand", "sku", "store"):
+        assert f'data-combobox="{filter_id}"' in html
+        assert f'id="{filter_id}-search"' in html
+        assert 'role="combobox"' in html
+        assert f'aria-controls="{filter_id}-options"' in html
+        assert f'id="{filter_id}-filter" class="native-filter-select"' in html
+        assert f'id="{filter_id}-options" role="listbox"' in html
+        assert f'data-clear-filter="{filter_id}"' in html
+
+    assert "renderComboboxOptions(id, values)" in script
+    assert "values.slice(0, 20)" in script
+    assert "select.replaceChildren(option(\"\", filterConfig[id].label), option(item.value, item.label));" in script
+    assert "handleComboboxKeydown(event, id)" in script
+    assert "handleComboboxOptionKeydown(event, id, index, item)" in script
+    assert "setActiveComboboxOption(id, button)" in script
+    assert "aria-activedescendant" in script
+    assert "event.key === \"ArrowUp\"" in script
+    assert "event.key === \"Home\"" in script
+    assert "event.key === \"End\"" in script
+    assert "event.key === \"Enter\" || event.key === \" \"" in script
+    assert "control?.contains(document.activeElement)" in script
+    assert "input.addEventListener(\"blur\"" not in script
+    assert "clearEntityFilter(button.dataset.clearFilter)" in script
+    assert "resetAllEntityFilters();" in script
+    assert "entityDisplayLabel(key, value)" in script
+    assert "values.slice(0, 250)" not in script
 
 
 def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> None:
@@ -440,6 +490,13 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "entity_filters: selectedParentFiltersForGrain(grain)" in script
     assert "/api/dashboard/options" in script
     assert "state.options.periods" in script
+    assert "chartResponse: null" in script
+    assert "buildChartQueryPayload()" in script
+    assert "state.chartResponse = await postJson(\"/api/dashboard/query\", chartPayload);" in script
+    assert "period_mode: \"DATE_RANGE\"" in script
+    assert "comparison_mode: \"NONE\"" in script
+    assert "const chartResult = chartResultFor(state.chartMetric);" in script
+    assert "const coverage = chartResult ? state.chartResponse : state.summaryResponse;" in script
     assert "state.tablePageSize: 50" not in script
     assert "tablePageSize: 40" in script
     assert "overviewPreviewRowLimit: 8" in script

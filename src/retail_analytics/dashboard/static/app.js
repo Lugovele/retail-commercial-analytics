@@ -3,6 +3,7 @@ const state = {
   catalog: [],
   options: { periods: [], entities: {} },
   summaryResponse: null,
+  chartResponse: null,
   tableResponse: null,
   contributionResponse: null,
   activeView: "overview",
@@ -139,7 +140,10 @@ function bindStaticControls() {
     });
   });
   document.querySelectorAll("[data-header-action]").forEach((button) => {
-    button.addEventListener("click", () => showToast("Раздел будет доступен позже."));
+    if (button.disabled) return;
+    button.addEventListener("click", () => {
+      if (button.dataset.headerAction === "reports") openReportsPanel();
+    });
   });
 
   document.querySelectorAll("[data-drill-grain]").forEach((button) => {
@@ -161,6 +165,19 @@ function bindStaticControls() {
   });
   document.getElementById("close-drawer").addEventListener("click", closeProvenance);
   document.getElementById("scrim").addEventListener("click", closeProvenance);
+  document.getElementById("close-reports-panel").addEventListener("click", closeReportsPanel);
+  document.getElementById("scrim").addEventListener("click", closeReportsPanel);
+  document.getElementById("reset-filters").addEventListener("click", async () => {
+    resetAllEntityFilters();
+    await refreshRuntimeOptions();
+    updatePreviewGrain();
+    await runOverviewQuery();
+  });
+  const filterDrawer = document.querySelector(".filter-drawer");
+  filterDrawer?.querySelector("summary")?.setAttribute("aria-expanded", filterDrawer.open ? "true" : "false");
+  filterDrawer?.addEventListener("toggle", () => {
+    filterDrawer.querySelector("summary")?.setAttribute("aria-expanded", filterDrawer.open ? "true" : "false");
+  });
 }
 
 async function initializeDashboard() {
@@ -256,6 +273,23 @@ function bindDynamicControls() {
   searchFilterIds.forEach((id) => {
     const input = document.getElementById(`${id}-search`);
     input.addEventListener("input", () => populateEntityFilter(id));
+    input.addEventListener("focus", () => populateEntityFilter(id));
+    input.addEventListener("keydown", (event) => handleComboboxKeydown(event, id));
+    document.querySelector(`[data-combobox="${id}"]`)?.addEventListener("focusout", () => {
+      setTimeout(() => {
+        const control = document.querySelector(`[data-combobox="${id}"]`);
+        if (!control?.contains(document.activeElement)) closeCombobox(id);
+      }, 0);
+    });
+  });
+
+  document.querySelectorAll("[data-clear-filter]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      clearEntityFilter(button.dataset.clearFilter);
+      await refreshRuntimeOptions();
+      updatePreviewGrain();
+      await runOverviewQuery();
+    });
   });
 
   ["period-single", "period-a", "date-from", "date-to"].forEach((id) => {
@@ -320,8 +354,10 @@ async function runOverviewQuery() {
   renderSkeletons();
   try {
     const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), overviewConcepts());
+    const chartPayload = buildChartQueryPayload();
     const previewPayload = buildQueryPayload(state.previewGrain, entityIdsForPreview(), tableConcepts());
     state.summaryResponse = await postJson("/api/dashboard/query", summaryPayload);
+    state.chartResponse = await postJson("/api/dashboard/query", chartPayload);
     state.contributionResponse = await loadContributionRows();
     state.tableResponse = await postJson("/api/dashboard/query", previewPayload);
     renderOverview();
@@ -356,6 +392,19 @@ function buildQueryPayload(grain, entityIds, metricConcepts) {
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value
+  };
+}
+
+function buildChartQueryPayload() {
+  const periods = state.options.periods.map((period) => period.value);
+  const dateFrom = state.periodMode === "DATE_RANGE" ? selectedDateFrom() : periods[0] || selectedDateFrom();
+  const dateTo = state.periodMode === "DATE_RANGE" ? selectedDateTo() : periods[periods.length - 1] || selectedDateTo();
+  return {
+    ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), [state.chartMetric]),
+    date_from: dateFrom,
+    date_to: dateTo,
+    period_mode: "DATE_RANGE",
+    comparison_mode: "NONE"
   };
 }
 
@@ -473,7 +522,9 @@ function renderKpiSecondaryContext() {
 }
 
 function renderChart() {
-  const result = summaryResultFor(state.chartMetric);
+  const chartResult = chartResultFor(state.chartMetric);
+  const result = chartResult || summaryResultFor(state.chartMetric);
+  const coverage = chartResult ? state.chartResponse : state.summaryResponse;
   const entry = catalogEntry(state.chartMetric);
   const box = document.getElementById("chart-box");
   const footnote = document.getElementById("chart-footnote");
@@ -491,7 +542,7 @@ function renderChart() {
     return;
   }
   box.replaceChildren(buildSvgChart(points, entry));
-  const missing = state.summaryResponse.missing_periods.map(formatPeriod).join(", ");
+  const missing = (coverage?.missing_periods || []).map(formatPeriod).join(", ");
   const limitation = limitationText(result);
   footnote.textContent = [
     missing ? `Пропущены периоды: ${missing}` : "Все запрошенные периоды с данными показаны.",
@@ -708,11 +759,7 @@ function renderContextStrip() {
   if (!response) return;
   updateComparisonPeriodDisplay(response);
   updateFilterCount();
-  document.getElementById("context-strip").textContent = [
-    periodContextText(),
-    contextFilterText(),
-    privateLabelScopeText(response.private_label_scope)
-  ].filter(Boolean).join(" · ");
+  document.getElementById("context-strip").textContent = contextFilterText();
   document.getElementById("context-coverage-note").textContent = coverageNoteText(response);
 }
 
@@ -813,14 +860,158 @@ function populateEntityFilter(id) {
   const config = filterConfig[id];
   const select = document.getElementById(`${id}-filter`);
   const previous = select.value;
-  const query = document.getElementById(`${id}-search`)?.value?.toLocaleLowerCase("ru-RU") || "";
-  const values = (state.options.entities?.[id] || []).filter((item) => {
+  const input = document.getElementById(`${id}-search`);
+  const query = input?.value?.toLocaleLowerCase("ru-RU") || "";
+  const allValues = state.options.entities?.[id] || [];
+  const values = allValues.filter((item) => {
     if (!query) return true;
     return `${item.label} ${item.value}`.toLocaleLowerCase("ru-RU").includes(query);
   });
-  select.replaceChildren(option("", config.label), ...values.slice(0, 250).map((item) => option(item.value, item.label)));
-  select.value = values.some((item) => item.value === previous) ? previous : "";
-  select.title = values.length > 250 ? "Показаны первые 250 совпадений. Уточните поиск." : "Выбор меняет аналитический срез.";
+  if (!input) {
+    select.replaceChildren(option("", config.label), ...values.map((item) => option(item.value, item.label)));
+    select.value = values.some((item) => item.value === previous) ? previous : "";
+    updateFilterCount();
+    return;
+  }
+  const selected = allValues.find((item) => item.value === previous);
+  select.replaceChildren(option("", config.label), ...(selected ? [option(selected.value, selected.label)] : []));
+  select.value = selected ? selected.value : "";
+  if (input && selected && document.activeElement !== input) input.value = selected.label;
+  renderComboboxOptions(id, values);
+  select.title = values.length > 20 ? "Уточните поиск, чтобы быстрее найти нужное значение." : "Выбор меняет аналитический срез.";
+  updateFilterCount();
+}
+
+function renderComboboxOptions(id, values) {
+  const input = document.getElementById(`${id}-search`);
+  const list = document.getElementById(`${id}-options`);
+  if (!input || !list) return;
+  const visibleValues = values.slice(0, 20);
+  list.replaceChildren();
+  if (!visibleValues.length) {
+    const empty = document.createElement("div");
+    empty.className = "combo-empty";
+    empty.textContent = "Ничего не найдено";
+    list.appendChild(empty);
+  } else {
+    visibleValues.forEach((item, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "combo-option";
+      button.setAttribute("role", "option");
+      button.dataset.value = item.value;
+      button.id = `${id}-option-${index}`;
+      button.textContent = item.label;
+      button.addEventListener("mousedown", (event) => event.preventDefault());
+      button.addEventListener("click", async () => {
+        await selectComboboxValue(id, item);
+      });
+      button.addEventListener("keydown", async (event) => {
+        await handleComboboxOptionKeydown(event, id, index, item);
+      });
+      button.addEventListener("focus", () => setActiveComboboxOption(id, button));
+      list.appendChild(button);
+    });
+  }
+  const shouldOpen = document.activeElement === input || list.contains(document.activeElement);
+  list.classList.toggle("is-open", shouldOpen);
+  input.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+}
+
+async function selectComboboxValue(id, item) {
+  const select = document.getElementById(`${id}-filter`);
+  select.replaceChildren(option("", filterConfig[id].label), option(item.value, item.label));
+  select.value = item.value;
+  document.getElementById(`${id}-search`).value = item.label;
+  closeCombobox(id);
+  resetChildFilters(id);
+  applyFilterDrilldown(id);
+  await refreshRuntimeOptions();
+  updatePreviewGrain();
+  await runOverviewQuery();
+}
+
+function handleComboboxKeydown(event, id) {
+  const list = document.getElementById(`${id}-options`);
+  const options = Array.from(list?.querySelectorAll(".combo-option") || []);
+  if (event.key === "Escape") {
+    closeCombobox(id);
+    return;
+  }
+  if (!options.length) return;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    openCombobox(id);
+    options[0].focus();
+  }
+  if (event.key === "Enter") {
+    event.preventDefault();
+    options[0].click();
+  }
+}
+
+async function handleComboboxOptionKeydown(event, id, index, item) {
+  const list = document.getElementById(`${id}-options`);
+  const options = Array.from(list?.querySelectorAll(".combo-option") || []);
+  if (!options.length) return;
+  if (event.key === "ArrowDown") {
+    event.preventDefault();
+    options[Math.min(index + 1, options.length - 1)].focus();
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    if (index === 0) {
+      document.getElementById(`${id}-search`).focus();
+    } else {
+      options[Math.max(index - 1, 0)].focus();
+    }
+  } else if (event.key === "Home") {
+    event.preventDefault();
+    options[0].focus();
+  } else if (event.key === "End") {
+    event.preventDefault();
+    options[options.length - 1].focus();
+  } else if (event.key === "Enter" || event.key === " ") {
+    event.preventDefault();
+    await selectComboboxValue(id, item);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    closeCombobox(id);
+    document.getElementById(`${id}-search`).focus();
+  }
+}
+
+function setActiveComboboxOption(id, activeOption) {
+  const list = document.getElementById(`${id}-options`);
+  const input = document.getElementById(`${id}-search`);
+  Array.from(list?.querySelectorAll(".combo-option") || []).forEach((optionNode) => {
+    optionNode.setAttribute("aria-selected", optionNode === activeOption ? "true" : "false");
+  });
+  input?.setAttribute("aria-activedescendant", activeOption.id);
+}
+
+function openCombobox(id) {
+  const input = document.getElementById(`${id}-search`);
+  const list = document.getElementById(`${id}-options`);
+  if (!input || !list) return;
+  list.classList.add("is-open");
+  input.setAttribute("aria-expanded", "true");
+}
+
+function closeCombobox(id) {
+  const input = document.getElementById(`${id}-search`);
+  const list = document.getElementById(`${id}-options`);
+  if (!input || !list) return;
+  list.classList.remove("is-open");
+  input.setAttribute("aria-expanded", "false");
+  input.removeAttribute("aria-activedescendant");
+}
+
+function clearEntityFilter(id) {
+  document.getElementById(`${id}-filter`).value = "";
+  document.getElementById(`${id}-search`).value = "";
+  resetChildFilters(id);
+  if (state.currentGrain === id) state.currentGrain = "network";
+  updateBreadcrumb();
 }
 
 function resetChildFilters(filterId) {
@@ -828,6 +1019,7 @@ function resetChildFilters(filterId) {
     document.getElementById(`${id}-filter`).value = "";
     const search = document.getElementById(`${id}-search`);
     if (search) search.value = "";
+    closeCombobox(id);
   });
 }
 
@@ -837,16 +1029,19 @@ function resetAllEntityFilters() {
     if (select) select.value = "";
     const search = document.getElementById(`${id}-search`);
     if (search) search.value = "";
+    closeCombobox(id);
   });
   state.currentGrain = "network";
   updateBreadcrumb();
   updatePreviewGrain();
+  updateFilterCount();
 }
 
 function applyFilterDrilldown(filterId) {
   const select = document.getElementById(`${filterId}-filter`);
   if (select.value) state.currentGrain = filterId;
   updateBreadcrumb();
+  updateFilterCount();
 }
 
 function drillIntoEntity(entityId) {
@@ -942,6 +1137,10 @@ function summaryResultFor(concept) {
   return state.summaryResponse?.metric_results.find((result) => result.metric_concept === concept);
 }
 
+function chartResultFor(concept) {
+  return state.chartResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
 function visibleSummaryResult(concept) {
   const result = summaryResultFor(concept);
   if (!result || !catalogEntry(concept)) return null;
@@ -1032,8 +1231,8 @@ function periodContextText() {
 
 function contextFilterText() {
   const selected = selectedFilterValues();
-  const parts = Object.entries(selected).map(([key, value]) => `${grainLabels[key]}: ${value}`);
-  return parts.length ? parts.join(" · ") : "Все категории";
+  const parts = Object.entries(selected).map(([key, value]) => `${grainLabels[key]}: ${entityDisplayLabel(key, value)}`);
+  return parts.length ? parts.join(" · ") : "";
 }
 
 function privateLabelScopeText(scope) {
@@ -1057,6 +1256,7 @@ function updateFilterCount() {
   const target = document.getElementById("filter-count");
   if (!target) return;
   target.textContent = count ? `${count} выбрано` : "0 выбрано";
+  document.getElementById("reset-filters")?.classList.toggle("is-hidden", count === 0);
 }
 
 function entityDisplayLabel(grain, entityId) {
@@ -1272,6 +1472,36 @@ function section(title, rows) {
 function closeProvenance() {
   document.getElementById("provenance-drawer").classList.remove("is-open");
   document.getElementById("provenance-drawer").setAttribute("aria-hidden", "true");
+  document.getElementById("scrim").classList.remove("is-open");
+}
+
+function openReportsPanel() {
+  const retailer = selectedRetailer();
+  const content = document.getElementById("reports-content");
+  content.replaceChildren(
+    section("Текущий отчёт", [
+      ["Сеть", retailer.display_label],
+      ["Источник", retailer.source_label],
+      ["Доступные периоды", state.options.periods.length ? `${state.options.periods.length} · ${formatPeriod(state.options.periods[0].value)} — ${formatPeriod(state.options.periods[state.options.periods.length - 1].value)}` : "н/д"],
+      ["Категории", String((state.options.entities?.category || []).length)],
+      ["Производители", String((state.options.entities?.manufacturer || []).length)],
+      ["Бренды", String((state.options.entities?.brand || []).length)],
+      ["SKU", String((state.options.entities?.sku || []).length)],
+      ["ТТ", String((state.options.entities?.store || []).length)]
+    ]),
+    section("Текущий режим", [
+      ["Период", periodContextText()],
+      ["Учёт ассортимента", privateLabelScopeText(document.getElementById("private-label-scope").value)]
+    ])
+  );
+  document.getElementById("reports-panel").classList.add("is-open");
+  document.getElementById("reports-panel").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("is-open");
+}
+
+function closeReportsPanel() {
+  document.getElementById("reports-panel").classList.remove("is-open");
+  document.getElementById("reports-panel").setAttribute("aria-hidden", "true");
   document.getElementById("scrim").classList.remove("is-open");
 }
 
