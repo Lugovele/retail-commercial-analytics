@@ -205,19 +205,19 @@ def _synthetic_overrides() -> tuple[PrivateMetricCatalogOverride, ...]:
     overrides: list[PrivateMetricCatalogOverride] = []
     partial = {"distribution", "velocity", "selling_store_count", "active_store_count", "sku_count"}
     metric_specs = {
-        "revenue_vat": "Gross revenue",
-        "revenue": "Net revenue",
-        "units": "Units",
-        "retailer_margin_abs": "Retailer margin",
-        "retailer_margin_pct": "Margin percent",
-        "weighted_shelf_price_vat": "Weighted shelf price",
-        "weighted_input_price_vat": "Weighted input price",
-        "selling_store_count": "Selling stores",
-        "active_store_count": "Active stores",
-        "distribution": "Numeric distribution",
-        "velocity": "Velocity",
-        "sku_count": "SKU count",
-        "category_revenue_share": "Category revenue share",
+        "revenue_vat": "Оборот с НДС",
+        "revenue": "Оборот без НДС",
+        "units": "Продажи, шт.",
+        "retailer_margin_abs": "Абсолютная маржа",
+        "retailer_margin_pct": "Маржинальность",
+        "weighted_shelf_price_vat": "Средняя полочная цена с НДС",
+        "weighted_input_price_vat": "Средняя входная цена с НДС",
+        "selling_store_count": "ТТ с продажами",
+        "active_store_count": "Активные ТТ",
+        "distribution": "Дистрибуция",
+        "velocity": "Продажи на ТТ",
+        "sku_count": "SKU в периоде",
+        "category_revenue_share": "Доля в обороте категории",
     }
     for concept, label in metric_specs.items():
         overrides.append(

@@ -30,6 +30,13 @@ const columnGroups = {
   competitors: []
 };
 
+const comparisonLabels = {
+  YOY: "Год к году",
+  MOM: "Месяц к месяцу",
+  PREVIOUS_AVAILABLE: "Предыдущий доступный период",
+  NONE: "Без сравнения"
+};
+
 const syntheticPeriods = [
   "2025-03-01",
   "2025-04-01",
@@ -217,7 +224,7 @@ function renderContextStrip() {
   const derivedPeriod = derivedComparisonPeriod();
   document.getElementById("period-b-derived").textContent = derivedPeriod ? formatPeriod(derivedPeriod) : "Недоступен";
   const periodText = state.periodMode === "SINGLE_PERIOD"
-    ? `${formatPeriod(document.getElementById("period-a").value)} vs ${derivedPeriod ? formatPeriod(derivedPeriod) : "нет периода"} · ${state.comparisonMode}`
+    ? `${formatPeriod(document.getElementById("period-a").value)} vs ${derivedPeriod ? formatPeriod(derivedPeriod) : "нет периода"} · ${comparisonLabel(state.comparisonMode)}`
     : `${formatPeriod(document.getElementById("date-from").value)} — ${formatPeriod(document.getElementById("date-to").value)}`;
   const scopeName = runtime.private_label_display_name;
   const scopeText = {
@@ -229,6 +236,10 @@ function renderContextStrip() {
   const requested = available + response.missing_periods.length;
   document.getElementById("context-strip").textContent =
     `${runtime.display_label} · ${periodText} · Все категории · ${state.grain} · ${scopeText} · ${available} из ${requested} периодов доступны`;
+}
+
+function comparisonLabel(mode) {
+  return comparisonLabels[mode] || mode;
 }
 
 function renderChartMetricOptions() {

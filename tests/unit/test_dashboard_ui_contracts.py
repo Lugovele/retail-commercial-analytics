@@ -124,7 +124,10 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "Сигналы" in html
     assert "Рекомендации" in html
     assert "В разработке" in html
-    assert "Откуда?" in html
+    assert "Откуда эта цифра?" in html
+    assert "Год к году" in html
+    assert "Месяц к месяцу" in html
+    assert "Предыдущий доступный период" in html
     assert "period-b-derived" in html
     assert "private-label-scope" in html
     assert 'id="period-b"' not in html
@@ -157,6 +160,10 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "entity_filters: { entity_id" in script
     assert "selectedEntityForGrain" in script
     assert "private-label-scope" in script
+    assert 'YOY: "Год к году"' in script
+    assert 'MOM: "Месяц к месяцу"' in script
+    assert 'PREVIOUS_AVAILABLE: "Предыдущий доступный период"' in script
+    assert "comparisonLabel(state.comparisonMode)" in script
     assert "innerHTML" not in script
     assert "ONLY: `${scopeName}: только`" in script
     assert "ONLY: `только ${scopeName}`" in script

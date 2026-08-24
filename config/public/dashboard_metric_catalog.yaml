@@ -1,144 +1,144 @@
 metrics:
   - metric_concept: revenue_vat
-    default_display_label: Gross revenue
-    description: VAT-inclusive revenue from deterministic metric outputs.
+    default_display_label: Оборот с НДС
+    description: Оборот с НДС из deterministic metric outputs.
     format: currency
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: revenue
-    default_display_label: Net revenue
-    description: Net revenue from deterministic metric outputs.
+    default_display_label: Оборот без НДС
+    description: Оборот без НДС из deterministic metric outputs.
     format: currency
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: units
-    default_display_label: Units
-    description: Sold units from deterministic metric outputs.
+    default_display_label: Продажи, шт.
+    description: Продажи в штуках из deterministic metric outputs.
     format: decimal
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: retailer_margin_abs
-    default_display_label: Retailer margin
-    description: Absolute retailer margin from deterministic metric outputs.
+    default_display_label: Абсолютная маржа
+    description: Абсолютная маржа из deterministic metric outputs.
     format: currency
     dashboard_group: economics
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: retailer_margin_pct
-    default_display_label: Retailer margin percent
-    description: Retailer margin ratio, range-safe only from stored numerator and denominator.
+    default_display_label: Маржинальность
+    description: Маржинальность; range-safe только через сохранённые numerator и denominator.
     format: percent
     dashboard_group: economics
     default_range_aggregation_strategy: ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: weighted_shelf_price_vat
-    default_display_label: Weighted shelf price
-    description: Weighted shelf price from deterministic metric outputs.
+    default_display_label: Средняя полочная цена с НДС
+    description: Средневзвешенная полочная цена с НДС из deterministic metric outputs.
     format: currency
     dashboard_group: price
     default_range_aggregation_strategy: weighted_ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: weighted_input_price_vat
-    default_display_label: Weighted input price
-    description: Weighted input price from deterministic metric outputs.
+    default_display_label: Средняя входная цена с НДС
+    description: Средневзвешенная входная цена с НДС из deterministic metric outputs.
     format: currency
     dashboard_group: price
     default_range_aggregation_strategy: weighted_ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
   - metric_concept: selling_store_count
-    default_display_label: Selling stores
-    description: Period-level selling store count.
+    default_display_label: ТТ с продажами
+    description: Количество ТТ с продажами на уровне периода.
     format: integer
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: active_store_count
-    default_display_label: Active stores
-    description: Period-level active store count.
+    default_display_label: Активные ТТ
+    description: Количество активных ТТ на уровне периода.
     format: integer
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: distribution
-    default_display_label: Numeric distribution
-    description: Period-level distribution; arbitrary selected-range recomputation is not declared.
+    default_display_label: Дистрибуция
+    description: Дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
     format: percent
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: velocity
-    default_display_label: Velocity
-    description: Period-level velocity; arbitrary selected-range recomputation is not declared.
+    default_display_label: Продажи на ТТ
+    description: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
     format: ratio
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: revenue_velocity
-    default_display_label: Revenue velocity
-    description: Period-level revenue velocity.
+    default_display_label: Оборот на ТТ
+    description: Оборот на ТТ на уровне периода.
     format: currency
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: margin_velocity
-    default_display_label: Margin velocity
-    description: Period-level margin velocity.
+    default_display_label: Маржа на ТТ
+    description: Маржа на ТТ на уровне периода.
     format: currency
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: sku_count
-    default_display_label: SKU count
-    description: Period-level distinct SKU count.
+    default_display_label: SKU в периоде
+    description: Количество distinct SKU на уровне периода.
     format: integer
     dashboard_group: assortment
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: brand_count
-    default_display_label: Brand count
-    description: Period-level distinct brand count.
+    default_display_label: Активные бренды
+    description: Количество distinct брендов на уровне периода.
     format: integer
     dashboard_group: assortment
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: category_count
-    default_display_label: Category count
-    description: Period-level distinct category count.
+    default_display_label: Категории
+    description: Количество distinct категорий на уровне периода.
     format: integer
     dashboard_group: assortment
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
   - metric_concept: category_revenue_share
-    default_display_label: Category revenue share
-    description: Share metric; selected-range support requires declared numerator and denominator scope.
+    default_display_label: Доля в обороте категории
+    description: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
     format: percent
     dashboard_group: share
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_requires_declared_scope]
   - metric_concept: category_units_share
-    default_display_label: Category units share
-    description: Share metric; selected-range support requires declared numerator and denominator scope.
+    default_display_label: Доля в штуках категории
+    description: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
     format: percent
     dashboard_group: share
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_requires_declared_scope]
   - metric_concept: category_margin_share
-    default_display_label: Category margin share
-    description: Share metric; selected-range support requires declared numerator and denominator scope.
+    default_display_label: Доля в марже категории
+    description: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
     format: percent
     dashboard_group: share
     default_range_aggregation_strategy: period_only

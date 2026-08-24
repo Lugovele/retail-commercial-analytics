@@ -40,9 +40,9 @@
               <label>
                 <span>Тип сравнения</span>
                 <select id="comparison-mode">
-                  <option value="YOY">YoY</option>
-                  <option value="PREVIOUS_AVAILABLE">Предыдущий доступный</option>
-                  <option value="MOM">MoM</option>
+                  <option value="YOY">Год к году</option>
+                  <option value="PREVIOUS_AVAILABLE">Предыдущий доступный период</option>
+                  <option value="MOM">Месяц к месяцу</option>
                   <option value="NONE">Без сравнения</option>
                 </select>
               </label>
@@ -112,7 +112,7 @@
                 <h2>Исходные данные</h2>
                 <p>Строки source-like view для выбранного scope; технический audit доступен через lineage.</p>
               </div>
-              <button type="button" class="icon-text" data-open-provenance>Откуда?</button>
+              <button type="button" class="icon-text" data-open-provenance>Откуда эта цифра?</button>
             </div>
             <div class="table-wrap">
               <table id="source-table"></table>
@@ -136,7 +136,7 @@
                     <span>Метрика</span>
                     <select id="chart-metric"></select>
                   </label>
-                  <button type="button" class="icon-text" data-open-provenance>Откуда?</button>
+                  <button type="button" class="icon-text" data-open-provenance>Откуда эта цифра?</button>
                 </div>
                 <div class="chart-box" id="chart-box"></div>
               </section>
@@ -210,7 +210,7 @@
 
     <aside class="drawer" id="provenance-drawer" aria-hidden="true" aria-label="Происхождение показателя">
       <div class="drawer-header">
-        <h2>Откуда?</h2>
+        <h2>Откуда эта цифра?</h2>
         <button type="button" class="icon-button" id="close-drawer" aria-label="Закрыть">×</button>
       </div>
       <dl id="provenance-content"></dl>
