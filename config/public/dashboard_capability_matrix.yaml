@@ -1,0 +1,829 @@
+version: dashboard_capability_matrix.v1
+status_values: [READY, PARTIAL, NOT_AVAILABLE, NOT_APPLICABLE]
+presentation_levels: [TOP_KPI, DEFAULT_TABLE, OPTIONAL_COLUMN, AUDIT_ONLY]
+comparison_labels:
+  YOY: Год к году
+  MOM: Месяц к месяцу
+  PREVIOUS_AVAILABLE: Предыдущий доступный период
+  NONE: Без сравнения
+capabilities:
+  - concept_id: revenue_vat
+    ui_label_ru: Оборот с НДС
+    ui_description_ru: Оборот с НДС из deterministic metric outputs.
+    tab: Показатели
+    group: Продажи
+    presentation_level: TOP_KPI
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: sum_available_periods
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: []
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: revenue
+    ui_label_ru: Оборот без НДС
+    ui_description_ru: Оборот без НДС из deterministic metric outputs.
+    tab: Показатели
+    group: Продажи
+    presentation_level: TOP_KPI
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: sum_available_periods
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: []
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: units
+    ui_label_ru: Продажи, шт.
+    ui_description_ru: Продажи в штуках из deterministic metric outputs.
+    tab: Показатели
+    group: Продажи
+    presentation_level: TOP_KPI
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: sum_available_periods
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: decimal
+    unit: units
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: []
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: retailer_margin_abs
+    ui_label_ru: Абсолютная маржа
+    ui_description_ru: Абсолютная маржа из deterministic metric outputs.
+    tab: Показатели
+    group: Экономика
+    presentation_level: TOP_KPI
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: sum_available_periods
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: []
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: retailer_margin_pct
+    ui_label_ru: Маржинальность
+    ui_description_ru: Маржинальность; range-safe только через сохранённые numerator и denominator.
+    tab: Показатели
+    group: Экономика
+    presentation_level: TOP_KPI
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: ratio_of_sums
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [range_value_is_ratio_of_sums_not_average]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: weighted_shelf_price_vat
+    ui_label_ru: Средняя полочная цена с НДС
+    ui_description_ru: Средневзвешенная полочная цена с НДС из deterministic metric outputs.
+    tab: Показатели
+    group: Цена
+    presentation_level: DEFAULT_TABLE
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: weighted_ratio_of_sums
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency_per_unit
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [range_value_is_weighted_not_average]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: weighted_input_price_vat
+    ui_label_ru: Средняя входная цена с НДС
+    ui_description_ru: Средневзвешенная входная цена с НДС из deterministic metric outputs.
+    tab: Показатели
+    group: Цена
+    presentation_level: DEFAULT_TABLE
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: weighted_ratio_of_sums
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency_per_unit
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [range_value_is_weighted_not_average]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: selling_store_count
+    ui_label_ru: ТТ с продажами
+    ui_description_ru: Количество ТТ с продажами на уровне периода.
+    tab: Показатели
+    group: Присутствие
+    presentation_level: DEFAULT_TABLE
+    grain_support: [network, category, manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: stores
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, store_grain_not_exposed]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: active_store_count
+    ui_label_ru: Активные ТТ
+    ui_description_ru: Количество активных ТТ на уровне периода.
+    tab: Показатели
+    group: Присутствие
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: stores
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, entity_store_universe_metric]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: distribution
+    ui_label_ru: Дистрибуция
+    ui_description_ru: Дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
+    tab: Показатели
+    group: Присутствие
+    presentation_level: DEFAULT_TABLE
+    grain_support: [category, manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, store_grain_not_supported, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: velocity
+    ui_label_ru: Продажи на ТТ
+    ui_description_ru: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
+    tab: Показатели
+    group: Присутствие
+    presentation_level: DEFAULT_TABLE
+    grain_support: [category, manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: ratio
+    unit: units_per_selling_store
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, store_grain_not_supported, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: revenue_velocity
+    ui_label_ru: Оборот на ТТ
+    ui_description_ru: Оборот на ТТ на уровне периода.
+    tab: Показатели
+    group: Присутствие
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [category, manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency_per_selling_store
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, store_grain_not_supported, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: margin_velocity
+    ui_label_ru: Маржа на ТТ
+    ui_description_ru: Маржа на ТТ на уровне периода.
+    tab: Показатели
+    group: Присутствие
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [category, manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency_per_selling_store
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, store_grain_not_supported, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: sku_count
+    ui_label_ru: SKU в периоде
+    ui_description_ru: Количество distinct SKU на уровне периода.
+    tab: Показатели
+    group: Структура
+    presentation_level: TOP_KPI
+    grain_support: [network, category, manufacturer, brand, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: sku_count
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, not_listing_count]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: brand_count
+    ui_label_ru: Активные бренды
+    ui_description_ru: Количество distinct брендов на уровне периода.
+    tab: Показатели
+    group: Структура
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [network, category, manufacturer, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: brand_count
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable, no_delisting_inference]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: category_count
+    ui_label_ru: Категории
+    ui_description_ru: Количество distinct категорий на уровне периода.
+    tab: Показатели
+    group: Структура
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [network, manufacturer, store]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: category_count
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_unavailable]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: category_revenue_share
+    ui_label_ru: Доля в обороте категории
+    ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
+    tab: Показатели
+    group: Доли
+    presentation_level: DEFAULT_TABLE
+    grain_support: [manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_requires_declared_scope, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: category_units_share
+    ui_label_ru: Доля в штуках категории
+    ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
+    tab: Показатели
+    group: Доли
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_requires_declared_scope, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: category_margin_share
+    ui_label_ru: Доля в марже категории
+    ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
+    tab: Показатели
+    group: Доли
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [manufacturer, brand, sku]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart_metric_facts
+    availability_status: READY
+    limitations: [selected_range_value_requires_declared_scope, do_not_average_periods]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: manufacturer_rank_revenue
+    ui_label_ru: Место производителя по обороту
+    ui_description_ru: Место производителя по суммарному обороту внутри категории.
+    tab: Бизнес-оценки
+    group: Рейтинги
+    presentation_level: DEFAULT_TABLE
+    grain_support: [manufacturer]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: rank
+    backend_fact_source: mart.rankings.rank_manufacturers
+    availability_status: READY
+    limitations: [category_scope_only, competition_rank_ties]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: manufacturer_rank_units
+    ui_label_ru: Место производителя по штукам
+    ui_description_ru: Место производителя по суммарным продажам в штуках внутри категории.
+    tab: Бизнес-оценки
+    group: Рейтинги
+    presentation_level: DEFAULT_TABLE
+    grain_support: [manufacturer]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: rank
+    backend_fact_source: mart.rankings.rank_manufacturers
+    availability_status: READY
+    limitations: [category_scope_only, competition_rank_ties]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: manufacturer_population_count
+    ui_label_ru: Производителей в рейтинге
+    ui_description_ru: Количество производителей в population рейтинга.
+    tab: Бизнес-оценки
+    group: Рейтинги
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [manufacturer]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: count
+    backend_fact_source: mart.rankings.rank_manufacturers
+    availability_status: READY
+    limitations: [category_scope_only]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: active_sku_count
+    ui_label_ru: Активные SKU
+    ui_description_ru: SKU with positive unit sales in the selected current period.
+    tab: Бизнес-оценки
+    group: Структура
+    presentation_level: TOP_KPI
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: PARTIAL
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: sku_count
+    backend_fact_source: mart.portfolio.calculate_active_sku_summary
+    availability_status: READY
+    limitations: [sales_based_activity_not_listing]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: historical_peak_active_sku_count
+    ui_label_ru: Пиковое число активных SKU
+    ui_description_ru: Highest active SKU count across available evaluated periods.
+    tab: Бизнес-оценки
+    group: Структура
+    presentation_level: DEFAULT_TABLE
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: PARTIAL
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: integer
+    unit: sku_count
+    backend_fact_source: mart.portfolio.calculate_active_sku_summary
+    availability_status: READY
+    limitations: [uses_available_periods_only]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: active_sku_change_pct
+    ui_label_ru: Изменение активных SKU от пика
+    ui_description_ru: Current active SKU count compared with historical peak.
+    tab: Бизнес-оценки
+    group: Структура
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: PARTIAL
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart.portfolio.calculate_active_sku_summary
+    availability_status: READY
+    limitations: [undefined_when_peak_count_zero]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: brand_category_delta_gap_pp
+    ui_label_ru: Отклонение бренда от категории
+    ui_description_ru: Brand growth-rate delta minus category growth-rate delta.
+    tab: Бизнес-оценки
+    group: Структура
+    presentation_level: DEFAULT_TABLE
+    grain_support: [brand]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percentage_points
+    unit: percentage_points
+    backend_fact_source: mart.portfolio.compare_brand_to_category
+    availability_status: READY
+    limitations: [requires_valid_reference_period, percent_delta_gap_not_status]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: brand_delta_pct
+    ui_label_ru: Изменение бренда
+    ui_description_ru: Brand metric change versus reference period.
+    tab: Бизнес-оценки
+    group: Структура
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [brand]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart.portfolio.compare_brand_to_category
+    availability_status: READY
+    limitations: [not_growth_decline_status]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: category_delta_pct
+    ui_label_ru: Изменение категории
+    ui_description_ru: Category metric change versus reference period.
+    tab: Бизнес-оценки
+    group: Структура
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [category]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart.portfolio.compare_brand_to_category
+    availability_status: READY
+    limitations: [not_status]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: market_segment_delta_pct
+    ui_label_ru: Изменение сегмента рынка
+    ui_description_ru: Current/reference change for an explicit comparison universe.
+    tab: Бизнес-оценки
+    group: Конкуренты
+    presentation_level: DEFAULT_TABLE
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: []
+    format: percent
+    unit: percent
+    backend_fact_source: mart.comparison_universe.calculate_market_segment_delta
+    availability_status: READY
+    limitations: [uses_explicit_market_segment_universe, supports_revenue_and_units_only]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: decline_speed_ratio
+    ui_label_ru: Отношение темпов снижения
+    ui_description_ru: Ratio of portfolio decline to market decline.
+    tab: Бизнес-оценки
+    group: Конкуренты
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: []
+    format: ratio
+    unit: ratio
+    backend_fact_source: mart.comparison_universe.calculate_decline_speed_ratio
+    availability_status: READY
+    limitations: [only_when_both_deltas_are_declines, no_causal_claim]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: private_label_growth_while_portfolio_declines
+    ui_label_ru: Собственная марка растёт, портфель снижается
+    ui_description_ru: Neutral deterministic pattern signal.
+    tab: Сигналы
+    group: Конкуренты
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [network, category]
+    single_period_support: READY
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: []
+    format: text
+    unit: signal
+    backend_fact_source: mart.comparison_universe.private_label_growth_while_portfolio_declines
+    availability_status: READY
+    limitations: [pattern_only_no_causal_claim]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: regional_revenue
+    ui_label_ru: Оборот региона
+    ui_description_ru: Regional net revenue over selected period/range.
+    tab: Бизнес-оценки
+    group: География
+    presentation_level: DEFAULT_TABLE
+    grain_support: [store]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency
+    backend_fact_source: mart.geography.calculate_regional_summary
+    availability_status: READY
+    limitations: [requires_mapped_region_field]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: regional_units
+    ui_label_ru: Продажи региона, шт.
+    ui_description_ru: Regional unit sales over selected period/range.
+    tab: Бизнес-оценки
+    group: География
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [store]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: decimal
+    unit: units
+    backend_fact_source: mart.geography.calculate_regional_summary
+    availability_status: READY
+    limitations: [requires_mapped_region_field]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: regional_margin_abs
+    ui_label_ru: Маржа региона
+    ui_description_ru: Regional absolute margin over selected period/range.
+    tab: Бизнес-оценки
+    group: География
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [store]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: currency
+    unit: currency
+    backend_fact_source: mart.geography.calculate_regional_summary
+    availability_status: READY
+    limitations: [requires_mapped_region_field]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: regional_share_revenue
+    ui_label_ru: Доля региона в обороте
+    ui_description_ru: Region revenue divided by scoped total revenue.
+    tab: Бизнес-оценки
+    group: География
+    presentation_level: DEFAULT_TABLE
+    grain_support: [store]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: percent
+    unit: percent
+    backend_fact_source: mart.geography.calculate_regional_summary
+    availability_status: READY
+    limitations: [requires_mapped_region_field, share_recomputed_not_averaged]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: abc
+    ui_label_ru: ABC
+    ui_description_ru: ABC-классификация SKU внутри категории по подтверждённым базисам.
+    tab: Бизнес-оценки
+    group: ABC
+    presentation_level: AUDIT_ONLY
+    grain_support: [sku]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: PARTIAL
+    range_aggregation_strategy: period_only
+    private_label_scope_support: []
+    format: text
+    unit: class
+    backend_fact_source: core.scoring.abc
+    availability_status: PARTIAL
+    limitations: [scope_aware_abc_projection_not_ready, custom_range_abc_not_defined]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: broad_competitors
+    ui_label_ru: Конкуренты категории
+    ui_description_ru: Broad competitor peer pool for category overview.
+    tab: Бизнес-оценки
+    group: Конкуренты
+    presentation_level: OPTIONAL_COLUMN
+    grain_support: [sku]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: unsupported
+    private_label_scope_support: []
+    format: text
+    unit: peer_set
+    backend_fact_source: core.benchmarking.peer_groups
+    availability_status: PARTIAL
+    limitations: [keep_broad_and_direct_scopes_separate, dashboard_projection_partial]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: direct_peers
+    ui_label_ru: Прямые аналоги
+    ui_description_ru: Direct comparable peer pool with configured dimensions.
+    tab: Бизнес-оценки
+    group: Конкуренты
+    presentation_level: AUDIT_ONLY
+    grain_support: [sku]
+    single_period_support: PARTIAL
+    comparison_support: []
+    date_range_support: NOT_APPLICABLE
+    range_aggregation_strategy: unsupported
+    private_label_scope_support: []
+    format: text
+    unit: peer_set
+    backend_fact_source: core.benchmarking.peer_groups
+    availability_status: PARTIAL
+    limitations: [flavor_semantic_gap, dashboard_projection_partial]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: events_signals
+    ui_label_ru: События и сигналы
+    ui_description_ru: Deterministic event/signal facts from approved rules and limitations.
+    tab: Сигналы
+    group: Сигналы
+    presentation_level: AUDIT_ONLY
+    grain_support: [category, manufacturer, brand, sku, store]
+    single_period_support: PARTIAL
+    comparison_support: []
+    date_range_support: PARTIAL
+    range_aggregation_strategy: unsupported
+    private_label_scope_support: []
+    format: text
+    unit: signal
+    backend_fact_source: core.events
+    availability_status: PARTIAL
+    limitations: [scope_aware_event_views_limited, edlp_stability_windows_unresolved]
+    provenance_supported: true
+    signal_eligible: true
+    recommendation_eligible_future: true
+  - concept_id: geography
+    ui_label_ru: География
+    ui_description_ru: Regional projections where source geography is mapped.
+    tab: Бизнес-оценки
+    group: География
+    presentation_level: DEFAULT_TABLE
+    grain_support: [store]
+    single_period_support: READY
+    comparison_support: []
+    date_range_support: READY
+    range_aggregation_strategy: projection_defined
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+    format: text
+    unit: region
+    backend_fact_source: mart.geography.calculate_regional_summary
+    availability_status: PARTIAL
+    limitations: [requires_mapped_region_field, region_not_primary_grain_selector]
+    provenance_supported: true
+    signal_eligible: false
+    recommendation_eligible_future: true
+  - concept_id: recommendations
+    ui_label_ru: Рекомендации
+    ui_description_ru: Placeholder until deterministic recommendation backend exists.
+    tab: Рекомендации
+    group: Рекомендации
+    presentation_level: AUDIT_ONLY
+    grain_support: []
+    single_period_support: NOT_AVAILABLE
+    comparison_support: []
+    date_range_support: NOT_AVAILABLE
+    range_aggregation_strategy: unsupported
+    private_label_scope_support: []
+    format: text
+    unit: recommendation
+    backend_fact_source: none
+    availability_status: NOT_AVAILABLE
+    limitations: [recommendation_backend_not_implemented, no_fake_ai_content]
+    provenance_supported: false
+    signal_eligible: false
+    recommendation_eligible_future: true
