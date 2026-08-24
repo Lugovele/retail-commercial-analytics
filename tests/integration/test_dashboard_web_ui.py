@@ -37,6 +37,31 @@ def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> No
 
     status, _, body = _call(
         app,
+        "GET",
+        "/api/dashboard/options",
+        query="retailer_id=retailer_a&source_id=source_a&private_label_scope=EXCLUDE",
+    )
+    options = json.loads(body)
+    assert status.startswith("200")
+    assert options["periods"][0]["value"] == "2025-03-01"
+    assert options["periods"][-1]["value"] == "2026-06-01"
+    assert options["entities"]["category"][0]["value"] == "CATEGORY_STANDARD"
+    assert options["entities"]["sku"][0]["value"] == "SKU_A_001"
+
+    status, _, body = _call(
+        app,
+        "GET",
+        "/api/dashboard/options",
+        query="retailer_id=retailer_a&source_id=source_a&private_label_scope=INCLUDE&category=CATEGORY_OTHER",
+    )
+    scoped_options = json.loads(body)
+    assert status.startswith("200")
+    assert scoped_options["entities"]["manufacturer"] == []
+    assert scoped_options["entities"]["brand"] == []
+    assert scoped_options["entities"]["sku"] == []
+
+    status, _, body = _call(
+        app,
         "POST",
         "/api/dashboard/query",
         payload={

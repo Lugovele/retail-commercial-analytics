@@ -1,6 +1,7 @@
 const state = {
   runtime: null,
   catalog: [],
+  options: { periods: [], entities: {} },
   response: null,
   periodMode: "SINGLE_PERIOD",
   comparisonMode: "YOY",
@@ -9,6 +10,7 @@ const state = {
   chartMetric: "revenue",
   columnGroup: "sales",
   grain: "network",
+  tablePageSize: 50,
   sortColumn: "value",
   sortDirection: "desc"
 };
@@ -37,30 +39,19 @@ const comparisonLabels = {
   NONE: "Без сравнения"
 };
 
-const syntheticPeriods = [
-  "2025-03-01",
-  "2025-04-01",
-  "2025-06-01",
-  "2025-09-01",
-  "2025-12-01",
-  "2026-03-01",
-  "2026-04-01",
-  "2026-06-01"
-];
-
-const filters = {
-  category: ["Все категории", "CATEGORY_STANDARD"],
-  manufacturer: ["Все производители", "MANUFACTURER_A"],
-  brand: ["Все бренды", "BRAND_A"],
-  sku: ["Все SKU", "SKU_A_001"],
-  store: ["Все ТТ", "STORE_A_001"]
+const filterConfig = {
+  category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] },
+  manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] },
+  brand: { label: "Все бренды", childFilters: ["sku"] },
+  sku: { label: "Все SKU", childFilters: [] },
+  store: { label: "Все ТТ", childFilters: [] }
 };
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindStaticControls();
   await loadRuntime();
   await loadCatalog();
-  setupControls();
+  await setupControls();
   await runQuery();
   switchTab("metrics");
 });
@@ -108,18 +99,34 @@ async function loadCatalog() {
   state.catalog = payload.metrics;
 }
 
-function setupControls() {
+async function loadOptions() {
+  const retailer = selectedRetailer();
+  const params = new URLSearchParams({
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    private_label_scope: document.getElementById("private-label-scope").value
+  });
+  const dateFrom = selectedDateFrom();
+  const dateTo = selectedDateTo();
+  if (dateFrom) params.set("date_from", dateFrom);
+  if (dateTo) params.set("date_to", dateTo);
+  Object.entries(selectedFilterValues()).forEach(([key, value]) => {
+    params.set(key, value);
+  });
+  state.options = await getJson(`/api/dashboard/options?${params.toString()}`);
+}
+
+async function setupControls() {
   const retailerSelect = document.getElementById("retailer-select");
   retailerSelect.replaceChildren(...state.runtime.retailers.map((retailer) => option(retailer.retailer_id, retailer.display_label)));
   retailerSelect.addEventListener("change", async () => {
     await loadCatalog();
     updatePrivateLabelTerminology();
+    await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
     await runQuery();
   });
 
-  setupPeriodSelect("period-a", syntheticPeriods[syntheticPeriods.length - 1]);
-  setupPeriodSelect("date-from", syntheticPeriods[0]);
-  setupPeriodSelect("date-to", syntheticPeriods[syntheticPeriods.length - 1]);
+  await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
 
   document.getElementById("comparison-mode").addEventListener("change", async (event) => {
     state.comparisonMode = event.target.value;
@@ -127,10 +134,12 @@ function setupControls() {
   });
   document.getElementById("private-label-toggle").addEventListener("change", async (event) => {
     document.getElementById("private-label-scope").value = event.target.checked ? "INCLUDE" : "EXCLUDE";
+    await refreshRuntimeOptions({ resetEntities: true });
     await runQuery();
   });
   document.getElementById("private-label-scope").addEventListener("change", async (event) => {
     document.getElementById("private-label-toggle").checked = event.target.value === "INCLUDE";
+    await refreshRuntimeOptions({ resetEntities: true });
     await runQuery();
   });
   document.getElementById("grain-select").addEventListener("change", async (event) => {
@@ -147,10 +156,11 @@ function setupControls() {
     await runQuery();
   });
 
-  for (const [id, values] of Object.entries(filters)) {
+  for (const id of Object.keys(filterConfig)) {
     const select = document.getElementById(`${id}-filter`);
-    select.replaceChildren(...values.map((value) => option(value, value)));
     select.addEventListener("change", async () => {
+      resetChildFilters(id);
+      await refreshRuntimeOptions();
       applyFilterGrain(id);
       await runQuery();
     });
@@ -161,11 +171,36 @@ function setupControls() {
   syncFilterAvailability();
 }
 
-function setupPeriodSelect(id, selected) {
+async function refreshRuntimeOptions({ resetPeriods = false, resetEntities = false } = {}) {
+  await loadOptions();
+  populatePeriodSelects(resetPeriods);
+  if (resetEntities) resetAllEntityFilters();
+  populateEntityFilters();
+}
+
+function populatePeriodSelects(resetPeriods) {
+  const periods = state.options.periods.map((period) => period.value);
+  const latest = periods[periods.length - 1];
+  const earliest = periods[0];
+  setupPeriodSelect("period-a", latest, resetPeriods);
+  setupPeriodSelect("date-from", earliest, resetPeriods);
+  setupPeriodSelect("date-to", latest, resetPeriods);
+}
+
+function setupPeriodSelect(id, selected, resetSelection) {
   const select = document.getElementById(id);
-  select.replaceChildren(...syntheticPeriods.map((period) => option(period, formatPeriod(period))));
-  select.value = selected;
-  select.addEventListener("change", runQuery);
+  const previous = select.value;
+  select.replaceChildren(...state.options.periods.map((period) => option(period.value, formatPeriod(period.value))));
+  select.value = !resetSelection && previous && state.options.periods.some((period) => period.value === previous)
+    ? previous
+    : selected;
+  if (!select.dataset.bound) {
+    select.addEventListener("change", async () => {
+      await refreshRuntimeOptions({ resetEntities: true });
+      await runQuery();
+    });
+    select.dataset.bound = "true";
+  }
 }
 
 async function runQuery() {
@@ -183,6 +218,8 @@ async function runQuery() {
 function buildQueryPayload() {
   const periodMode = state.periodMode;
   const privateLabelScope = document.getElementById("private-label-scope").value;
+  const entityIds = entityIdsForQuery(state.grain);
+  const parentFilters = selectedParentFiltersForGrain(state.grain);
   const metricConcepts = [...new Set([
     ...metricGroups[state.metricGroup],
     ...columnGroups[state.columnGroup],
@@ -196,8 +233,8 @@ function buildQueryPayload() {
     period_mode: periodMode,
     period_grain: "month",
     grain_id: state.grain,
-    entity_ids: [selectedEntityForGrain(state.grain)],
-    entity_filters: { entity_id: [selectedEntityForGrain(state.grain)] },
+    entity_ids: entityIds,
+    entity_filters: parentFilters,
     metric_concepts: metricConcepts,
     comparison_mode: periodMode === "SINGLE_PERIOD" ? state.comparisonMode : "NONE",
     include_lineage: true,
@@ -235,7 +272,7 @@ function renderContextStrip() {
   const available = response.available_periods.length;
   const requested = available + response.missing_periods.length;
   document.getElementById("context-strip").textContent =
-    `${runtime.display_label} · ${periodText} · Все категории · ${state.grain} · ${scopeText} · ${available} из ${requested} периодов доступны`;
+    `${runtime.display_label} · ${periodText} · ${contextFilterText()} · ${grainLabel(state.grain)} · ${scopeText} · ${available} из ${requested} периодов доступны`;
 }
 
 function comparisonLabel(mode) {
@@ -363,12 +400,21 @@ function renderDetailTable() {
     renderMessageRow(table, "Группа колонок пока не поддержана каталогом витрины.", "limitation");
     return;
   }
-  const rows = [[entityForGrain(state.grain), ...concepts.map((concept) => {
-    const result = resultFor(concept);
+  const entities = [...new Set(state.response.metric_results.map((result) => result.entity_id))];
+  const sortConcept = concepts[0];
+  const rows = entities.map((entityId) => [entityId, ...concepts.map((concept) => {
+    const result = resultForEntity(concept, entityId);
     const entry = catalogEntry(concept);
-    return result ? formatValue(result.value, entry.format) : "Недоступно";
-  })]];
+    return result && entry ? formatValue(result.value, entry.format) : "Недоступно";
+  })]).sort((left, right) => {
+    const leftResult = resultForEntity(sortConcept, left[0]);
+    const rightResult = resultForEntity(sortConcept, right[0]);
+    return (rightResult?.value ?? Number.NEGATIVE_INFINITY) - (leftResult?.value ?? Number.NEGATIVE_INFINITY);
+  });
   renderRows(table, [state.grain, ...concepts.map((concept) => catalogEntry(concept)?.display_label || concept)], rows);
+  const totalEntities = state.options.entities?.[state.grain]?.length || rows.length;
+  const caption = table.createCaption();
+  caption.textContent = `Показаны первые ${Math.min(rows.length, state.tablePageSize)} из ${totalEntities}`;
 }
 
 function renderSourceTable() {
@@ -542,6 +588,10 @@ function resultFor(concept) {
   return state.response?.metric_results.find((result) => result.metric_concept === concept);
 }
 
+function resultForEntity(concept, entityId) {
+  return state.response?.metric_results.find((result) => result.metric_concept === concept && result.entity_id === entityId);
+}
+
 function resultByDefinition(metricDefinitionId) {
   return state.response?.metric_results.find((result) => result.lineage?.metric_definition_id === metricDefinitionId);
 }
@@ -551,14 +601,8 @@ function firstAvailableMetric(concepts) {
 }
 
 function entityForGrain(grain) {
-  return {
-    network: "network",
-    category: "CATEGORY_STANDARD",
-    manufacturer: "MANUFACTURER_A",
-    brand: "BRAND_A",
-    sku: "SKU_A_001",
-    store: "STORE_A_001"
-  }[grain];
+  const values = state.options.entities?.[grain] || [];
+  return values[0]?.value || "";
 }
 
 function selectedEntityForGrain(grain) {
@@ -572,7 +616,62 @@ function selectedEntityForGrain(grain) {
   const selectId = selectMap[grain];
   if (!selectId) return entityForGrain(grain);
   const value = document.getElementById(selectId).value;
-  return value.startsWith("Все ") ? entityForGrain(grain) : value;
+  return value;
+}
+
+function entityIdsForQuery(grain) {
+  const selected = selectedEntityForGrain(grain);
+  if (selected) return [selected];
+  return (state.options.entities?.[grain] || []).slice(0, state.tablePageSize).map((item) => item.value);
+}
+
+function selectedParentFiltersForGrain(grain) {
+  const selected = selectedFilterValues();
+  const parentMap = {
+    network: [],
+    category: [],
+    manufacturer: ["category"],
+    brand: ["category", "manufacturer"],
+    sku: ["category", "manufacturer", "brand"],
+    store: ["category", "manufacturer", "brand", "sku"]
+  };
+  return Object.fromEntries(
+    (parentMap[grain] || [])
+      .filter((key) => selected[key])
+      .map((key) => [key, [selected[key]]])
+  );
+}
+
+function selectedFilterValues() {
+  return Object.fromEntries(
+    Object.keys(filterConfig)
+      .map((id) => [id, document.getElementById(`${id}-filter`)?.value || ""])
+      .filter(([, value]) => value)
+  );
+}
+
+function contextFilterText() {
+  const selected = selectedFilterValues();
+  const labels = {
+    category: "Категория",
+    manufacturer: "Производитель",
+    brand: "Бренд",
+    sku: "SKU",
+    store: "ТТ"
+  };
+  const parts = Object.entries(selected).map(([key, value]) => `${labels[key]}: ${value}`);
+  return parts.length ? parts.join(" · ") : "Все категории";
+}
+
+function grainLabel(grain) {
+  return {
+    network: "Сеть",
+    category: "Категория",
+    manufacturer: "Производитель",
+    brand: "Бренд",
+    sku: "SKU",
+    store: "ТТ"
+  }[grain] || grain;
 }
 
 function applyFilterGrain(filterId) {
@@ -584,10 +683,32 @@ function applyFilterGrain(filterId) {
     store: "store"
   };
   const select = document.getElementById(`${filterId}-filter`);
-  if (select.value.startsWith("Все ")) return;
+  if (!select.value) return;
   state.grain = grainMap[filterId] || state.grain;
   document.getElementById("grain-select").value = state.grain;
   syncFilterAvailability();
+}
+
+function populateEntityFilters() {
+  for (const [id, config] of Object.entries(filterConfig)) {
+    const select = document.getElementById(`${id}-filter`);
+    const previous = select.value;
+    const values = state.options.entities?.[id] || [];
+    select.replaceChildren(option("", config.label), ...values.map((item) => option(item.value, item.label)));
+    select.value = values.some((item) => item.value === previous) ? previous : "";
+  }
+}
+
+function resetChildFilters(filterId) {
+  (filterConfig[filterId]?.childFilters || []).forEach((id) => {
+    document.getElementById(`${id}-filter`).value = "";
+  });
+}
+
+function resetAllEntityFilters() {
+  Object.keys(filterConfig).forEach((id) => {
+    document.getElementById(`${id}-filter`).value = "";
+  });
 }
 
 function syncFilterAvailability() {
@@ -612,6 +733,20 @@ function updatePrivateLabelTerminology() {
   Array.from(document.getElementById("private-label-scope").options).forEach((item) => {
     item.textContent = options[item.value] || item.value;
   });
+}
+
+function selectedDateFrom() {
+  if (state.periodMode === "SINGLE_PERIOD") {
+    return document.getElementById("period-a")?.value || "";
+  }
+  return document.getElementById("date-from")?.value || "";
+}
+
+function selectedDateTo() {
+  if (state.periodMode === "SINGLE_PERIOD") {
+    return document.getElementById("period-a")?.value || "";
+  }
+  return document.getElementById("date-to")?.value || "";
 }
 
 function derivedComparisonPeriod() {

@@ -417,6 +417,9 @@ class DashboardMartQueryService:
         _add_in_filter(clauses, params, "metric_concept", request.metric_concepts)
         _add_in_filter(clauses, params, "metric_definition_id", request.metric_definition_ids)
         for column, values in (request.entity_filters or {}).items():
+            if column in {"category", "manufacturer", "brand", "sku", "store"}:
+                _add_json_parent_filter(clauses, params, column, values)
+                continue
             if column not in {"entity_id", "metric_concept", "metric_definition_id", "quality_status"}:
                 raise ValueError(f"Unsupported query filter column: {column}")
             _add_in_filter(clauses, params, column, values)
@@ -1138,6 +1141,14 @@ def _add_in_filter(clauses: list[str], params: list[Any], column: str, values: t
         return
     placeholders = ", ".join("?" for _ in values)
     clauses.append(f"{column} IN ({placeholders})")
+    params.extend(values)
+
+
+def _add_json_parent_filter(clauses: list[str], params: list[Any], key: str, values: tuple[str, ...]) -> None:
+    if not values:
+        return
+    placeholders = ", ".join("?" for _ in values)
+    clauses.append(f"json_extract_string(parent_entity_ids, '$.{key}') IN ({placeholders})")
     params.extend(values)
 
 

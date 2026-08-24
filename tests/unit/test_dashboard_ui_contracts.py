@@ -106,6 +106,30 @@ def test_synthetic_runtime_queries_backend_with_scope_and_lineage(tmp_path) -> N
     assert "range_aggregation_period_only" in {item.issue_code for item in response.limitations}
 
 
+def test_runtime_parent_filters_constrain_backend_query_scope(tmp_path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    request = build_backend_query_request(
+        {
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "brand",
+            "entity_filters": {"category": ["CATEGORY_OTHER"]},
+            "metric_concepts": ["revenue"],
+            "comparison_mode": "NONE",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        }
+    )
+
+    response = runtime.query_service.query(request)
+
+    assert response.metric_results == ()
+
+
 def test_private_runtime_mode_requires_explicit_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("RETAIL_ANALYTICS_DASHBOARD_CONFIG", raising=False)
     monkeypatch.setenv("RETAIL_ANALYTICS_DASHBOARD_MODE", "PRODUCTION")
@@ -302,7 +326,19 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "period_mode" in script
     assert "grain_id" in script
     assert "metric_concepts" in script
-    assert "entity_filters: { entity_id" in script
+    assert "entity_ids: entityIds" in script
+    assert "entity_filters: parentFilters" in script
+    assert "/api/dashboard/options" in script
+    assert "state.options.periods" in script
+    assert "state.tablePageSize: 50" not in script
+    assert "tablePageSize: 50" in script
+    assert "entityIdsForQuery" in script
+    assert "selectedParentFiltersForGrain" in script
+    assert "Показаны первые" in script
+    assert "CATEGORY_STANDARD" not in script
+    assert "MANUFACTURER_A" not in script
+    assert "SKU_A_001" not in script
+    assert "STORE_A_001" not in script
     assert "selectedEntityForGrain" in script
     assert "private-label-scope" in script
     assert 'YOY: "Год к году"' in script
@@ -318,6 +354,27 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "retailer_margin_pct" in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
+
+
+def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "async function loadOptions()" in script
+    assert "populatePeriodSelects" in script
+    assert "populateEntityFilters" in script
+    assert "resetChildFilters(id)" in script
+    assert "await refreshRuntimeOptions();" in script
+    assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
+    assert 'manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] }' in script
+    assert "contextFilterText()" in script
+    assert "grainLabel(state.grain)" in script
+    assert "Все категории · ${state.grain}" not in script
+    assert "const syntheticPeriods" not in script
+    assert "const filters = {" not in script
 
 
 def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+from datetime import date
 from importlib import resources
 from typing import Any
 from urllib.parse import parse_qs
@@ -49,6 +50,21 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                             resolved_runtime.effective_catalog(retailer_id=retailer_id, source_id=source_id)
                         )
                     },
+                )
+            if method == "GET" and path == "/api/dashboard/options":
+                params = parse_qs(str(environ.get("QUERY_STRING", "")))
+                retailer_id = _first(params, "retailer_id") or resolved_runtime.retailers[0].retailer_id
+                source_id = _first(params, "source_id") or resolved_runtime.retailers[0].source_id
+                return _json_response(
+                    start_response,
+                    resolved_runtime.options_metadata(
+                        retailer_id=retailer_id,
+                        source_id=source_id,
+                        private_label_scope=_first(params, "private_label_scope") or "INCLUDE",
+                        date_from=_optional_date(_first(params, "date_from")),
+                        date_to=_optional_date(_first(params, "date_to")),
+                        parent_filters=_parent_filters(params),
+                    ),
                 )
             if method == "POST" and path == "/api/dashboard/query":
                 payload = _read_json(environ)
@@ -118,3 +134,15 @@ def _content_type(name: str) -> str:
 def _first(params: dict[str, list[str]], key: str) -> str | None:
     values = params.get(key)
     return values[0] if values else None
+
+
+def _optional_date(value: str | None) -> date | None:
+    return date.fromisoformat(value) if value else None
+
+
+def _parent_filters(params: dict[str, list[str]]) -> dict[str, str]:
+    return {
+        key: value
+        for key in ("category", "manufacturer", "brand", "sku", "store")
+        if (value := _first(params, key))
+    }

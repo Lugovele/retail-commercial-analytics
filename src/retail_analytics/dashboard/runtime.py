@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from dataclasses import dataclass
@@ -10,6 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
+import duckdb
 import polars as pl
 import yaml  # type: ignore[import-untyped]
 
@@ -43,6 +45,14 @@ SUPPORTED_COMPARISON_MODES = ("NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE")
 SUPPORTED_PRIVATE_LABEL_SCOPES = ("INCLUDE", "EXCLUDE", "ONLY")
 DEFAULT_DASHBOARD_CONFIG_ENV = "RETAIL_ANALYTICS_DASHBOARD_CONFIG"
 DEFAULT_DASHBOARD_MODE_ENV = "RETAIL_ANALYTICS_DASHBOARD_MODE"
+ENTITY_PARENT_FILTERS = {
+    "network": (),
+    "category": (),
+    "manufacturer": ("category",),
+    "brand": ("category", "manufacturer"),
+    "sku": ("category", "manufacturer", "brand"),
+    "store": ("category", "manufacturer", "brand", "sku"),
+}
 
 
 class DashboardRuntimeMode(StrEnum):
@@ -149,6 +159,32 @@ class DashboardRuntime:
             for entry in self.catalog
             if entry.retailer_id == retailer_id and entry.source_id in (None, source_id)
         )
+
+    def options_metadata(
+        self,
+        *,
+        retailer_id: str,
+        source_id: str,
+        private_label_scope: str | PrivateLabelScope = PrivateLabelScope.INCLUDE,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        parent_filters: dict[str, str] | None = None,
+    ) -> dict[str, Any]:
+        """Return period and entity filter options from persisted mart facts."""
+
+        scope = PrivateLabelScope(private_label_scope)
+        return {
+            "periods": _period_options(self.query_service.metric_facts_path, retailer_id, source_id, scope),
+            "entities": _entity_options(
+                self.query_service.metric_facts_path,
+                retailer_id,
+                source_id,
+                scope,
+                date_from=date_from,
+                date_to=date_to,
+                parent_filters=parent_filters or {},
+            ),
+        }
 
 
 def build_dashboard_runtime(
@@ -346,6 +382,101 @@ def _optional_str(value: object) -> str | None:
         return None
     text = str(value)
     return text if text else None
+
+
+def _period_options(
+    metric_facts_path: Path,
+    retailer_id: str,
+    source_id: str,
+    scope: PrivateLabelScope,
+) -> list[dict[str, str]]:
+    clauses = ["retailer_id = ?", "source_id = ?"]
+    params: list[Any] = [retailer_id, source_id]
+    if _facts_have_column(metric_facts_path, "private_label_scope"):
+        clauses.append("private_label_scope = ?")
+        params.append(scope.value)
+    rows = duckdb.sql(
+        f"""
+            SELECT DISTINCT period_start, business_period_id
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            ORDER BY period_start
+        """,
+        params=[_duckdb_path(metric_facts_path), *params],
+    ).fetchall()
+    return [
+        {
+            "value": row[0].isoformat(),
+            "label": str(row[1]),
+        }
+        for row in rows
+    ]
+
+
+def _entity_options(
+    metric_facts_path: Path,
+    retailer_id: str,
+    source_id: str,
+    scope: PrivateLabelScope,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    parent_filters: dict[str, str],
+) -> dict[str, list[dict[str, Any]]]:
+    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in SUPPORTED_GRAINS}
+    for grain in SUPPORTED_GRAINS:
+        clauses = ["retailer_id = ?", "source_id = ?", "grain_id = ?"]
+        params: list[Any] = [retailer_id, source_id, grain]
+        if _facts_have_column(metric_facts_path, "private_label_scope"):
+            clauses.append("private_label_scope = ?")
+            params.append(scope.value)
+        if date_from is not None:
+            clauses.append("period_start >= CAST(? AS DATE)")
+            params.append(date_from.isoformat())
+        if date_to is not None:
+            clauses.append("period_start <= CAST(? AS DATE)")
+            params.append(date_to.isoformat())
+        for parent_key in ENTITY_PARENT_FILTERS[grain]:
+            parent_value = parent_filters.get(parent_key)
+            if parent_value:
+                clauses.append(f"json_extract_string(parent_entity_ids, '$.{parent_key}') = ?")
+                params.append(parent_value)
+        rows = duckdb.sql(
+            f"""
+                SELECT entity_id, COUNT(DISTINCT business_period_id) AS period_count
+                FROM read_parquet(?)
+                WHERE {" AND ".join(clauses)}
+                GROUP BY entity_id
+                ORDER BY entity_id
+            """,
+            params=[_duckdb_path(metric_facts_path), *params],
+        ).fetchall()
+        entities[grain] = [
+            {
+                "value": str(entity_id),
+                "label": str(entity_id),
+                "period_count": int(period_count),
+            }
+            for entity_id, period_count in rows
+        ]
+    return entities
+
+
+def _facts_have_column(metric_facts_path: Path, column: str) -> bool:
+    return column in {
+        str(row[0])
+        for row in duckdb.sql(
+            "DESCRIBE SELECT * FROM read_parquet(?) LIMIT 0",
+            params=[_duckdb_path(metric_facts_path)],
+        ).fetchall()
+    }
+
+
+def _duckdb_path(path: Path) -> str:
+    raw = path.as_posix()
+    if path.is_dir():
+        raw = f"{raw}/**/*.parquet"
+    return raw
 
 
 def serialize_catalog(entries: tuple[EffectiveMetricCatalogEntry, ...]) -> list[dict[str, Any]]:
@@ -627,7 +758,7 @@ def _fact(
         "business_period_id": period.strftime("%Y-%m"),
         "grain_id": grain,
         "entity_id": entity_id,
-        "parent_entity_ids": "{}",
+        "parent_entity_ids": _parent_entity_ids(grain, entity_id),
         "metric_concept": concept,
         "metric_name": concept,
         "metric_definition_id": f"retailer_a.network.{concept}.v1",
@@ -657,6 +788,22 @@ def _strategy_for(aggregation: str) -> RangeAggregationStrategy:
         "distinct_count": RangeAggregationStrategy.PERIOD_ONLY,
         "share": RangeAggregationStrategy.RECOMPUTE_SHARE_SCOPE,
     }[aggregation]
+
+
+def _parent_entity_ids(grain: str, entity_id: str) -> str:
+    hierarchy = ("category", "manufacturer", "brand", "sku", "store")
+    values = {
+        "category": "CATEGORY_STANDARD",
+        "manufacturer": "MANUFACTURER_A",
+        "brand": "BRAND_A",
+        "sku": "SKU_A_001",
+        "store": "STORE_A_001",
+    }
+    if grain not in hierarchy:
+        return "{}"
+    values[grain] = entity_id
+    parents = {key: values[key] for key in hierarchy[: hierarchy.index(grain) + 1]}
+    return json.dumps(parents, sort_keys=True)
 
 
 def _synthetic_periods() -> tuple[date, ...]:
