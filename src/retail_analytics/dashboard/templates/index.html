@@ -1,0 +1,222 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Аналитика продаж</title>
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">dashboard</p>
+          <h1>Аналитика продаж</h1>
+        </div>
+        <div class="system-state" id="system-state" role="status">Загрузка backend context</div>
+      </header>
+
+      <main>
+        <section class="filters" aria-label="Глобальные фильтры">
+          <label class="filter-control level-retailer">
+            <span>Сеть</span>
+            <select id="retailer-select"></select>
+          </label>
+
+          <div class="period-box" aria-label="Период">
+            <div class="period-mode" role="group" aria-label="Режим периода">
+              <button type="button" class="mode-button is-active" data-period-mode="SINGLE_PERIOD">Сравнить</button>
+              <button type="button" class="mode-button" data-period-mode="DATE_RANGE">Весь диапазон</button>
+            </div>
+            <div class="period-fields" id="compare-fields">
+              <label>
+                <span>Период A</span>
+                <select id="period-a"></select>
+              </label>
+              <div class="derived-field">
+                <span>Период B</span>
+                <strong id="period-b-derived">Определяется backend</strong>
+              </div>
+              <label>
+                <span>Тип сравнения</span>
+                <select id="comparison-mode">
+                  <option value="YOY">YoY</option>
+                  <option value="PREVIOUS_AVAILABLE">Предыдущий доступный</option>
+                  <option value="MOM">MoM</option>
+                  <option value="NONE">Без сравнения</option>
+                </select>
+              </label>
+            </div>
+            <div class="period-fields is-hidden" id="range-fields">
+              <label>
+                <span>С</span>
+                <select id="date-from"></select>
+              </label>
+              <label>
+                <span>По</span>
+                <select id="date-to"></select>
+              </label>
+            </div>
+          </div>
+
+          <div class="secondary-filters" aria-label="Secondary filters">
+            <label>
+              <span>Категория</span>
+              <select id="category-filter"></select>
+            </label>
+            <label>
+              <span>Производитель</span>
+              <select id="manufacturer-filter"></select>
+            </label>
+            <label>
+              <span>Бренд</span>
+              <select id="brand-filter"></select>
+            </label>
+            <label>
+              <span>SKU</span>
+              <select id="sku-filter"></select>
+            </label>
+            <label>
+              <span>ТТ</span>
+              <select id="store-filter"></select>
+            </label>
+            <label class="checkbox-control">
+              <input type="checkbox" id="private-label-toggle" checked />
+              <span id="private-label-label">Учитывать выбранный ассортимент</span>
+            </label>
+            <label>
+              <span>Аналитический scope</span>
+              <select id="private-label-scope">
+                <option value="INCLUDE">INCLUDE</option>
+                <option value="EXCLUDE">EXCLUDE</option>
+                <option value="ONLY">ONLY</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
+        <p class="context-strip" id="context-strip"></p>
+
+        <nav class="folder-tabs" aria-label="Основные разделы">
+          <button type="button" class="folder-tab is-active" data-tab="data">Данные</button>
+          <button type="button" class="folder-tab" data-tab="metrics">Показатели</button>
+          <button type="button" class="folder-tab" data-tab="business">Бизнес-оценки</button>
+          <button type="button" class="folder-tab" data-tab="signals">Сигналы</button>
+          <button type="button" class="folder-tab" data-tab="recommendations">Рекомендации</button>
+        </nav>
+
+        <section class="content-surface">
+          <section class="tab-panel is-active" id="tab-data">
+            <div class="section-heading">
+              <div>
+                <h2>Исходные данные</h2>
+                <p>Строки source-like view для выбранного scope; технический audit доступен через lineage.</p>
+              </div>
+              <button type="button" class="icon-text" data-open-provenance>Откуда?</button>
+            </div>
+            <div class="table-wrap">
+              <table id="source-table"></table>
+            </div>
+          </section>
+
+          <section class="tab-panel" id="tab-metrics">
+            <div class="metric-groups" role="group" aria-label="Группы показателей">
+              <button type="button" class="group-button is-active" data-metric-group="sales">Продажи</button>
+              <button type="button" class="group-button" data-metric-group="economics">Экономика</button>
+              <button type="button" class="group-button" data-metric-group="presence">Присутствие</button>
+              <button type="button" class="group-button" data-metric-group="structure">Структура</button>
+            </div>
+
+            <div class="kpi-grid" id="kpi-grid"></div>
+
+            <div class="analytics-grid">
+              <section class="chart-panel">
+                <div class="panel-toolbar">
+                  <label>
+                    <span>Метрика</span>
+                    <select id="chart-metric"></select>
+                  </label>
+                  <button type="button" class="icon-text" data-open-provenance>Откуда?</button>
+                </div>
+                <div class="chart-box" id="chart-box"></div>
+              </section>
+
+              <section class="comparison-panel">
+                <h3>A/B сравнение</h3>
+                <table id="comparison-table"></table>
+              </section>
+            </div>
+
+            <div class="table-toolbar">
+              <label>
+                <span>Гранулярность</span>
+                <select id="grain-select">
+                  <option value="network">Сеть</option>
+                  <option value="category">Категория</option>
+                  <option value="manufacturer">Производитель</option>
+                  <option value="brand">Бренд</option>
+                  <option value="sku">SKU</option>
+                  <option value="store">ТТ</option>
+                </select>
+              </label>
+              <label>
+                <span>Колонки</span>
+                <select id="column-group">
+                  <option value="sales">Продажи</option>
+                  <option value="economics">Экономика</option>
+                  <option value="presence">Присутствие</option>
+                  <option value="price">Цена</option>
+                  <option value="share">Доли</option>
+                  <option value="ratings">Рейтинги</option>
+                  <option value="competitors">Конкуренты</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-wrap">
+              <table id="detail-table"></table>
+            </div>
+          </section>
+
+          <section class="tab-panel" id="tab-business">
+            <div class="section-heading">
+              <div>
+                <h2>Бизнес-оценки</h2>
+                <p>Только deterministic projections; неподтверждённые статусы не показываются как факты.</p>
+              </div>
+            </div>
+            <div class="business-list" id="business-list"></div>
+          </section>
+
+          <section class="tab-panel" id="tab-signals">
+            <div class="section-heading">
+              <div>
+                <h2>Сигналы</h2>
+                <p>Attention list строится из подтверждённых deterministic сигналов и ограничений backend.</p>
+              </div>
+            </div>
+            <div class="signal-list" id="signal-list"></div>
+          </section>
+
+          <section class="tab-panel" id="tab-recommendations">
+            <div class="disabled-panel">
+              <h2>Рекомендации</h2>
+              <p>В разработке. Раздел будет подключён после появления deterministic recommendation backend.</p>
+              <span>Сейчас интерфейс не генерирует рекомендации и не добавляет AI-логику.</span>
+            </div>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <aside class="drawer" id="provenance-drawer" aria-hidden="true" aria-label="Происхождение показателя">
+      <div class="drawer-header">
+        <h2>Откуда?</h2>
+        <button type="button" class="icon-button" id="close-drawer" aria-label="Закрыть">×</button>
+      </div>
+      <dl id="provenance-content"></dl>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
