@@ -2,43 +2,56 @@ const state = {
   runtime: null,
   catalog: [],
   options: { periods: [], entities: {} },
-  response: null,
-  periodMode: "SINGLE_PERIOD",
+  summaryResponse: null,
+  tableResponse: null,
+  periodMode: "COMPARE",
   comparisonMode: "YOY",
-  activeTab: "metrics",
-  metricGroup: "sales",
+  currentGrain: "network",
   chartMetric: "revenue",
-  columnGroup: "sales",
-  grain: "network",
-  tablePageSize: 50,
-  sortColumn: "value",
-  sortDirection: "desc"
+  previewGrain: "category",
+  tablePageSize: 40,
+  sortColumn: "Оборот",
+  sortDirection: "desc",
+  activeProvenanceConcept: "revenue"
 };
 
-const metricGroups = {
-  sales: ["revenue_vat", "revenue", "units", "selling_store_count", "sku_count"],
-  economics: ["retailer_margin_abs", "retailer_margin_pct", "weighted_shelf_price_vat", "weighted_input_price_vat"],
-  presence: ["selling_store_count", "active_store_count", "distribution", "velocity"],
-  structure: ["category_revenue_share", "sku_count"]
+const primaryKpis = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"];
+const chartMetrics = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "weighted_shelf_price_vat"];
+const diagnosticGroups = [
+  { title: "Продажи", concepts: ["revenue", "units"] },
+  { title: "Цена", concepts: ["weighted_shelf_price_vat", "weighted_input_price_vat"] },
+  { title: "Присутствие", concepts: ["selling_store_count", "distribution", "velocity"] },
+  { title: "Экономика", concepts: ["retailer_margin_abs", "retailer_margin_pct"] },
+  { title: "Структура", concepts: ["category_revenue_share", "sku_count"] }
+];
+const previewColumns = {
+  category: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count", "selling_store_count"],
+  manufacturer: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
+  brand: ["revenue", "units", "retailer_margin_abs", "category_revenue_share"],
+  sku: ["revenue", "units", "retailer_margin_abs", "weighted_shelf_price_vat", "selling_store_count"],
+  store: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count"]
 };
-
-const columnGroups = {
-  sales: ["revenue_vat", "revenue", "units"],
-  economics: ["retailer_margin_abs", "retailer_margin_pct"],
-  presence: ["selling_store_count", "active_store_count", "distribution", "velocity"],
-  price: ["weighted_shelf_price_vat", "weighted_input_price_vat"],
-  share: ["category_revenue_share"],
-  ratings: [],
-  competitors: []
+const grainLabels = {
+  network: "Все данные",
+  category: "Категория",
+  manufacturer: "Производитель",
+  brand: "Бренд",
+  sku: "SKU",
+  store: "ТТ"
 };
-
+const previewByGrain = {
+  network: "category",
+  category: "manufacturer",
+  manufacturer: "brand",
+  brand: "sku",
+  sku: "store"
+};
 const comparisonLabels = {
   YOY: "Год к году",
   MOM: "Месяц к месяцу",
   PREVIOUS_AVAILABLE: "Предыдущий доступный период",
   NONE: "Без сравнения"
 };
-
 const filterConfig = {
   category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] },
   manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] },
@@ -46,56 +59,145 @@ const filterConfig = {
   sku: { label: "Все SKU", childFilters: [] },
   store: { label: "Все ТТ", childFilters: [] }
 };
+const searchFilterIds = ["manufacturer", "brand", "sku", "store"];
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindStaticControls();
-  await loadRuntime();
-  await loadCatalog();
-  await setupControls();
-  await runQuery();
-  switchTab("metrics");
+  await initializeDashboard();
 });
 
 function bindStaticControls() {
   document.querySelectorAll("[data-period-mode]").forEach((button) => {
     button.addEventListener("click", async () => {
       state.periodMode = button.dataset.periodMode;
-      document.querySelectorAll("[data-period-mode]").forEach((item) => item.classList.toggle("is-active", item === button));
-      document.getElementById("compare-fields").classList.toggle("is-hidden", state.periodMode !== "SINGLE_PERIOD");
-      document.getElementById("range-fields").classList.toggle("is-hidden", state.periodMode === "SINGLE_PERIOD");
-      await runQuery();
+      document.querySelectorAll("[data-period-mode]").forEach((item) => {
+        item.classList.toggle("is-active", item === button);
+      });
+      updatePeriodPanels();
+      await runOverviewQuery();
     });
   });
 
-  document.querySelectorAll("[data-tab]").forEach((button) => {
-    button.addEventListener("click", () => switchTab(button.dataset.tab));
+  document.querySelectorAll("[data-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (button.getAttribute("aria-disabled") === "true") {
+        showToast("Раздел будет раскрыт в следующей фазе интерфейса.");
+        return;
+      }
+      document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("is-active", item === button));
+    });
   });
 
-  document.querySelectorAll("[data-metric-group]").forEach((button) => {
+  document.querySelectorAll("[data-drill-grain]").forEach((button) => {
     button.addEventListener("click", async () => {
-      state.metricGroup = button.dataset.metricGroup;
-      state.chartMetric = firstAvailableMetric(metricGroups[state.metricGroup]) || state.chartMetric;
-      document.querySelectorAll("[data-metric-group]").forEach((item) => item.classList.toggle("is-active", item === button));
-      await runQuery();
+      const targetGrain = button.dataset.drillGrain;
+      if (!canActivateSummaryGrain(targetGrain)) {
+        showToast(`Сначала выберите объект уровня «${grainLabels[targetGrain]}».`);
+        return;
+      }
+      state.currentGrain = targetGrain;
+      updateBreadcrumb();
+      updatePreviewGrain();
+      await runOverviewQuery();
     });
   });
 
   document.querySelectorAll("[data-open-provenance]").forEach((button) => {
-    button.addEventListener("click", openProvenance);
+    button.addEventListener("click", () => openProvenance(state.activeProvenanceConcept));
   });
   document.getElementById("close-drawer").addEventListener("click", closeProvenance);
   document.getElementById("scrim").addEventListener("click", closeProvenance);
 }
 
-async function loadRuntime() {
-  state.runtime = await getJson("/api/dashboard/runtime");
-  document.getElementById("system-state").textContent = "Контекст витрины готов";
+async function initializeDashboard() {
+  try {
+    setLoading(true, "Загрузка данных");
+    state.runtime = await getJson("/api/dashboard/runtime");
+    setupRetailerControl();
+    await loadCatalog();
+    await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
+    bindDynamicControls();
+    updatePeriodPanels();
+    updatePrivateLabelTerminology();
+    updatePreviewGrain();
+    renderChartMetricOptions();
+    await runOverviewQuery();
+  } catch (error) {
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
+  }
+}
+
+function setupRetailerControl() {
+  const retailerSelect = document.getElementById("retailer-select");
+  retailerSelect.replaceChildren(
+    ...state.runtime.retailers.map((retailer) => option(retailer.retailer_id, retailer.display_label))
+  );
+  retailerSelect.value = state.runtime.default_retailer_id;
+  retailerSelect.addEventListener("change", async () => {
+    resetAllEntityFilters();
+    await loadCatalog();
+    await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
+    updatePrivateLabelTerminology();
+    updatePreviewGrain();
+    await runOverviewQuery();
+  });
+}
+
+function bindDynamicControls() {
+  document.getElementById("comparison-mode").addEventListener("change", async (event) => {
+    state.comparisonMode = event.target.value;
+    await runOverviewQuery();
+  });
+  document.getElementById("private-label-toggle").addEventListener("change", async (event) => {
+    document.getElementById("private-label-scope").value = event.target.checked ? "INCLUDE" : "EXCLUDE";
+    await refreshRuntimeOptions({ resetEntities: true });
+    await runOverviewQuery();
+  });
+  document.getElementById("private-label-scope").addEventListener("change", async (event) => {
+    document.getElementById("private-label-toggle").checked = event.target.value === "INCLUDE";
+    await refreshRuntimeOptions({ resetEntities: true });
+    await runOverviewQuery();
+  });
+  document.getElementById("chart-metric").addEventListener("change", async (event) => {
+    state.chartMetric = event.target.value;
+    state.activeProvenanceConcept = event.target.value;
+    await runOverviewQuery();
+  });
+  document.getElementById("preview-grain").addEventListener("change", async (event) => {
+    state.previewGrain = event.target.value;
+    await runOverviewQuery();
+  });
+
+  for (const id of Object.keys(filterConfig)) {
+    const select = document.getElementById(`${id}-filter`);
+    select.addEventListener("change", async () => {
+      resetChildFilters(id);
+      applyFilterDrilldown(id);
+      await refreshRuntimeOptions();
+      updatePreviewGrain();
+      await runOverviewQuery();
+    });
+  }
+
+  searchFilterIds.forEach((id) => {
+    const input = document.getElementById(`${id}-search`);
+    input.addEventListener("input", () => populateEntityFilter(id));
+  });
+
+  ["period-single", "period-a", "date-from", "date-to"].forEach((id) => {
+    document.getElementById(id).addEventListener("change", async () => {
+      await refreshRuntimeOptions({ resetEntities: true });
+      await runOverviewQuery();
+    });
+  });
 }
 
 async function loadCatalog() {
   const retailer = selectedRetailer();
-  const source = retailer.source_id;
-  const payload = await getJson(`/api/dashboard/catalog?retailer_id=${encodeURIComponent(retailer.retailer_id)}&source_id=${encodeURIComponent(source)}`);
+  const payload = await getJson(
+    `/api/dashboard/catalog?retailer_id=${encodeURIComponent(retailer.retailer_id)}&source_id=${encodeURIComponent(retailer.source_id)}`
+  );
   state.catalog = payload.metrics;
 }
 
@@ -110,65 +212,8 @@ async function loadOptions() {
   const dateTo = selectedDateTo();
   if (dateFrom) params.set("date_from", dateFrom);
   if (dateTo) params.set("date_to", dateTo);
-  Object.entries(selectedFilterValues()).forEach(([key, value]) => {
-    params.set(key, value);
-  });
+  Object.entries(selectedFilterValues()).forEach(([key, value]) => params.set(key, value));
   state.options = await getJson(`/api/dashboard/options?${params.toString()}`);
-}
-
-async function setupControls() {
-  const retailerSelect = document.getElementById("retailer-select");
-  retailerSelect.replaceChildren(...state.runtime.retailers.map((retailer) => option(retailer.retailer_id, retailer.display_label)));
-  retailerSelect.addEventListener("change", async () => {
-    await loadCatalog();
-    updatePrivateLabelTerminology();
-    await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
-    await runQuery();
-  });
-
-  await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
-
-  document.getElementById("comparison-mode").addEventListener("change", async (event) => {
-    state.comparisonMode = event.target.value;
-    await runQuery();
-  });
-  document.getElementById("private-label-toggle").addEventListener("change", async (event) => {
-    document.getElementById("private-label-scope").value = event.target.checked ? "INCLUDE" : "EXCLUDE";
-    await refreshRuntimeOptions({ resetEntities: true });
-    await runQuery();
-  });
-  document.getElementById("private-label-scope").addEventListener("change", async (event) => {
-    document.getElementById("private-label-toggle").checked = event.target.value === "INCLUDE";
-    await refreshRuntimeOptions({ resetEntities: true });
-    await runQuery();
-  });
-  document.getElementById("grain-select").addEventListener("change", async (event) => {
-    state.grain = event.target.value;
-    syncFilterAvailability();
-    await runQuery();
-  });
-  document.getElementById("column-group").addEventListener("change", async (event) => {
-    state.columnGroup = event.target.value;
-    await runQuery();
-  });
-  document.getElementById("chart-metric").addEventListener("change", async (event) => {
-    state.chartMetric = event.target.value;
-    await runQuery();
-  });
-
-  for (const id of Object.keys(filterConfig)) {
-    const select = document.getElementById(`${id}-filter`);
-    select.addEventListener("change", async () => {
-      resetChildFilters(id);
-      await refreshRuntimeOptions();
-      applyFilterGrain(id);
-      await runQuery();
-    });
-  }
-
-  updatePrivateLabelTerminology();
-  renderChartMetricOptions();
-  syncFilterAvailability();
 }
 
 async function refreshRuntimeOptions({ resetPeriods = false, resetEntities = false } = {}) {
@@ -182,6 +227,7 @@ function populatePeriodSelects(resetPeriods) {
   const periods = state.options.periods.map((period) => period.value);
   const latest = periods[periods.length - 1];
   const earliest = periods[0];
+  setupPeriodSelect("period-single", latest, resetPeriods);
   setupPeriodSelect("period-a", latest, resetPeriods);
   setupPeriodSelect("date-from", earliest, resetPeriods);
   setupPeriodSelect("date-to", latest, resetPeriods);
@@ -194,148 +240,131 @@ function setupPeriodSelect(id, selected, resetSelection) {
   select.value = !resetSelection && previous && state.options.periods.some((period) => period.value === previous)
     ? previous
     : selected;
-  if (!select.dataset.bound) {
-    select.addEventListener("change", async () => {
-      await refreshRuntimeOptions({ resetEntities: true });
-      await runQuery();
-    });
-    select.dataset.bound = "true";
-  }
 }
 
-async function runQuery() {
-  const payload = buildQueryPayload();
-  setLoading(true);
+async function runOverviewQuery() {
+  setLoading(true, "Запрос к витрине");
+  renderSkeletons();
   try {
-    state.response = await postJson("/api/dashboard/query", payload);
-    renderAll();
-    setLoading(false);
+    const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), overviewConcepts());
+    const previewPayload = buildQueryPayload(state.previewGrain, entityIdsForPreview(), tableConcepts());
+    state.summaryResponse = await postJson("/api/dashboard/query", summaryPayload);
+    state.tableResponse = await postJson("/api/dashboard/query", previewPayload);
+    renderOverview();
+    setLoading(false, "Данные обновлены");
   } catch (error) {
-    setLoading(false, `Ошибка витрины: ${error.message}`);
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
   }
 }
 
-function buildQueryPayload() {
-  const periodMode = state.periodMode;
-  const privateLabelScope = document.getElementById("private-label-scope").value;
-  const entityIds = entityIdsForQuery(state.grain);
-  const parentFilters = selectedParentFiltersForGrain(state.grain);
-  const metricConcepts = [...new Set([
-    ...metricGroups[state.metricGroup],
-    ...columnGroups[state.columnGroup],
-    state.chartMetric
-  ].filter(Boolean))];
+function buildQueryPayload(grain, entityIds, metricConcepts) {
+  const retailer = selectedRetailer();
+  const periodMode = backendPeriodMode();
   return {
-    retailer_id: document.getElementById("retailer-select").value,
-    source_id: selectedRetailer().source_id,
-    date_from: periodMode === "SINGLE_PERIOD" ? document.getElementById("period-a").value : document.getElementById("date-from").value,
-    date_to: periodMode === "SINGLE_PERIOD" ? document.getElementById("period-a").value : document.getElementById("date-to").value,
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: selectedDateFrom(),
+    date_to: selectedDateTo(),
     period_mode: periodMode,
     period_grain: "month",
-    grain_id: state.grain,
+    grain_id: grain,
     entity_ids: entityIds,
-    entity_filters: parentFilters,
+    entity_filters: selectedParentFiltersForGrain(grain),
     metric_concepts: metricConcepts,
-    comparison_mode: periodMode === "SINGLE_PERIOD" ? state.comparisonMode : "NONE",
+    comparison_mode: periodMode === "SINGLE_PERIOD" ? selectedComparisonMode() : "NONE",
     include_lineage: true,
-    mart_build_id: selectedRetailer().default_mart_build_id,
-    private_label_scope: privateLabelScope
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value
   };
 }
 
-function renderAll() {
+function backendPeriodMode() {
+  return state.periodMode === "DATE_RANGE" ? "DATE_RANGE" : "SINGLE_PERIOD";
+}
+
+function overviewConcepts() {
+  return [...new Set([...primaryKpis, ...chartMetrics, ...diagnosticGroups.flatMap((group) => group.concepts)])]
+    .filter((concept) => catalogEntry(concept));
+}
+
+function tableConcepts() {
+  return previewColumns[state.previewGrain].filter((concept) => catalogEntry(concept));
+}
+
+function renderOverview() {
   renderContextStrip();
+  renderBreadcrumb();
   renderChartMetricOptions();
   renderKpis();
   renderChart();
-  renderComparisonTable();
-  renderDetailTable();
-  renderSourceTable();
-  renderBusiness();
-  renderSignals();
-}
-
-function renderContextStrip() {
-  const runtime = selectedRetailer();
-  const response = state.response;
-  const derivedPeriod = derivedComparisonPeriod();
-  document.getElementById("period-b-derived").textContent = derivedPeriod ? formatPeriod(derivedPeriod) : "Недоступен";
-  const periodText = state.periodMode === "SINGLE_PERIOD"
-    ? `${formatPeriod(document.getElementById("period-a").value)} vs ${derivedPeriod ? formatPeriod(derivedPeriod) : "нет периода"} · ${comparisonLabel(state.comparisonMode)}`
-    : `${formatPeriod(document.getElementById("date-from").value)} — ${formatPeriod(document.getElementById("date-to").value)}`;
-  const scopeName = runtime.private_label_display_name;
-  const scopeText = {
-    INCLUDE: `${scopeName} включены`,
-    EXCLUDE: `${scopeName} исключены`,
-    ONLY: `только ${scopeName}`
-  }[response.private_label_scope] || response.private_label_scope;
-  const available = response.available_periods.length;
-  const requested = available + response.missing_periods.length;
-  document.getElementById("context-strip").textContent =
-    `${runtime.display_label} · ${periodText} · ${contextFilterText()} · ${grainLabel(state.grain)} · ${scopeText} · ${available} из ${requested} периодов доступны`;
-}
-
-function comparisonLabel(mode) {
-  return comparisonLabels[mode] || mode;
-}
-
-function statusLabel(status) {
-  return {
-    READY: "Готово",
-    PARTIAL: "Частично",
-    NOT_AVAILABLE: "Недоступно",
-    NOT_APPLICABLE: "Не применимо",
-    COMPLETE: "Полное",
-    UNSUPPORTED: "Не поддерживается"
-  }[status] || status;
-}
-
-function renderChartMetricOptions() {
-  const select = document.getElementById("chart-metric");
-  const metrics = metricGroups[state.metricGroup].filter((concept) => catalogEntry(concept));
-  select.replaceChildren(...metrics.map((concept) => option(concept, catalogEntry(concept).display_label)));
-  if (!metrics.includes(state.chartMetric)) {
-    state.chartMetric = metrics[0] || "revenue";
-  }
-  select.value = state.chartMetric;
+  renderDiagnosis();
+  renderAttention();
+  renderOverviewTable();
 }
 
 function renderKpis() {
   const grid = document.getElementById("kpi-grid");
-  const concepts = metricGroups[state.metricGroup].filter((concept) => resultFor(concept));
-  grid.replaceChildren(...concepts.slice(0, 4).map((concept) => {
-    const result = resultFor(concept);
+  grid.replaceChildren(...primaryKpis.map((concept) => {
+    const result = summaryResultFor(concept);
     const entry = catalogEntry(concept);
     const card = document.createElement("article");
     card.className = "kpi-card";
-    appendText(card, "small", entry.display_label);
+    if (!result || !entry) {
+      card.classList.add("is-unavailable");
+      appendText(card, "small", entry?.display_label || concept);
+      appendText(card, "strong", "Недоступно");
+      appendText(card, "span", "Показатель недоступен для выбранного среза.");
+      return card;
+    }
+    const comparison = comparisonFor(state.summaryResponse, result);
+    appendText(card, "small", displayLabel(concept));
     appendText(card, "strong", formatValue(result.value, entry.format));
-    appendText(card, "span", result.range_aggregation_strategy);
+    const meta = document.createElement("span");
+    meta.className = "kpi-meta";
+    meta.textContent = kpiContextText(comparison, entry);
+    card.appendChild(meta);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "inline-link";
+    button.textContent = "Откуда?";
+    button.addEventListener("click", () => openProvenance(concept));
+    card.appendChild(button);
     return card;
   }));
 }
 
 function renderChart() {
-  const result = resultFor(state.chartMetric);
+  const result = summaryResultFor(state.chartMetric);
   const entry = catalogEntry(state.chartMetric);
   const box = document.getElementById("chart-box");
-  if (!result) {
-    replaceWithMessage(box, "empty-state", "Показатель недоступен в текущем срезе каталога.");
+  const footnote = document.getElementById("chart-footnote");
+  if (!result || !entry) {
+    replaceWithMessage(box, "empty-state", "Показатель недоступен для выбранного среза.");
+    footnote.textContent = "";
     return;
   }
-  const points = result.period_values.map((item) => ({ period: item.period_start, value: item.value })).filter((item) => item.value !== null);
+  const points = result.period_values
+    .map((item) => ({ period: item.period_start, value: item.value }))
+    .filter((item) => item.value !== null && item.value !== undefined);
   if (!points.length) {
-    replaceWithMessage(box, "limitation", `Значение диапазона недоступно: ${result.limitations.join(", ") || "нет периодов"}`);
+    replaceWithMessage(box, "empty-state", "За выбранный период данных нет.");
+    footnote.textContent = limitationText(result);
     return;
   }
-  box.replaceChildren();
-  box.appendChild(buildSvgChart(points, entry));
+  box.replaceChildren(buildSvgChart(points, entry));
+  const missing = state.summaryResponse.missing_periods.map(formatPeriod).join(", ");
+  const limitation = limitationText(result);
+  footnote.textContent = [
+    missing ? `Пропущены периоды: ${missing}` : "Все запрошенные периоды с данными показаны.",
+    limitation
+  ].filter(Boolean).join(" ");
 }
 
 function buildSvgChart(points, entry) {
-  const width = 760;
-  const height = 320;
-  const pad = { left: 60, right: 24, top: 20, bottom: 48 };
+  const width = 860;
+  const height = 336;
+  const pad = { left: 72, right: 28, top: 22, bottom: 58 };
   const svg = svgEl("svg", { class: "chart-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${entry.display_label}: динамика` });
   const values = points.map((point) => point.value);
   const max = Math.max(...values, 1);
@@ -343,286 +372,321 @@ function buildSvgChart(points, entry) {
   const range = max - min || 1;
   const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(points.length - 1, 1);
   const y = (value) => pad.top + (max - value) * (height - pad.top - pad.bottom) / range;
+
   for (let tick = 0; tick <= 4; tick += 1) {
     const value = min + (range * tick) / 4;
     const yy = y(value);
     svg.appendChild(svgEl("line", { class: "grid-line", x1: pad.left, y1: yy, x2: width - pad.right, y2: yy }));
-    svg.appendChild(svgText(pad.left - 8, yy + 4, formatValue(value, entry.format), "end"));
+    svg.appendChild(svgText(pad.left - 10, yy + 4, formatValue(value, entry.format), "end", "axis-label"));
   }
-  svg.appendChild(svgEl("line", { class: "axis", x1: pad.left, y1: height - pad.bottom, x2: width - pad.right, y2: height - pad.bottom }));
-  svg.appendChild(svgEl("line", { class: "axis", x1: pad.left, y1: pad.top, x2: pad.left, y2: height - pad.bottom }));
+  svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: height - pad.bottom, x2: width - pad.right, y2: height - pad.bottom }));
+  svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: pad.top, x2: pad.left, y2: height - pad.bottom }));
+  svg.appendChild(svgText(pad.left, 14, unitLabel(entry.format), "start", "axis-unit"));
+
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(index)} ${y(point.value)}`).join(" ");
   svg.appendChild(svgEl("path", { class: "chart-line", d: path }));
   points.forEach((point, index) => {
-    if (index % 2 === 0 || index === points.length - 1) {
-      svg.appendChild(svgText(x(index), height - 24, formatPeriod(point.period), "middle"));
-    }
+    svg.appendChild(svgText(x(index), height - 30, formatPeriod(point.period), "middle", "axis-label"));
     const circle = svgEl("circle", { class: "chart-point", cx: x(index), cy: y(point.value), r: 5, tabindex: 0 });
-    circle.addEventListener("mousemove", (event) => showTooltip(event, `${formatPeriod(point.period)} · ${formatValue(point.value, entry.format)}`));
+    const tooltip = `${formatPeriod(point.period)} · ${entry.display_label}: ${formatValue(point.value, entry.format)}`;
+    circle.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
+    circle.addEventListener("focus", (event) => showTooltip(event, tooltip));
     circle.addEventListener("mouseleave", hideTooltip);
+    circle.addEventListener("blur", hideTooltip);
+    circle.addEventListener("click", () => openProvenance(entry.metric_concept));
     svg.appendChild(circle);
   });
-  if (state.periodMode === "SINGLE_PERIOD") {
-    [document.getElementById("period-a").value, derivedComparisonPeriod()].filter(Boolean).forEach((period) => {
-      const index = points.findIndex((point) => point.period === period);
-      if (index >= 0) {
-        svg.appendChild(svgEl("line", { class: "comparison-marker", x1: x(index), y1: pad.top, x2: x(index), y2: height - pad.bottom }));
-      }
-    });
-  }
+  comparisonMarkerPeriods().forEach((period) => {
+    const index = points.findIndex((point) => point.period === period);
+    if (index >= 0) {
+      svg.appendChild(svgEl("line", { class: "comparison-marker", x1: x(index), y1: pad.top, x2: x(index), y2: height - pad.bottom }));
+      svg.appendChild(svgText(x(index), pad.top + 14, period === selectedDateFrom() ? "A" : "B", "middle", "marker-label"));
+    }
+  });
   return svg;
 }
 
-function renderComparisonTable() {
-  const table = document.getElementById("comparison-table");
-  if (state.periodMode !== "SINGLE_PERIOD" || !state.response.comparisons.length) {
-    renderMessageRow(table, "Нет валидного A/B сравнения для текущего среза.");
-    return;
-  }
-  const rows = state.response.comparisons.slice(0, 6).map((item) => {
-    const concept = resultByDefinition(item.metric_definition_id)?.metric_concept;
-    const entry = catalogEntry(concept);
-    return [entry?.display_label || item.metric_definition_id, item.current_value, item.comparison_value, item.delta, item.pct_delta, entry?.format || "decimal"];
-  });
-  renderRows(table, ["Показатель", "A", "B", "Отклонение", "%"], rows.map((row) => [
-    row[0],
-    formatValue(row[1], row[5]),
-    formatValue(row[2], row[5]),
-    formatDeltaValue(row[3], row[5]),
-    formatValue(row[4], "percent")
-  ]));
+function renderDiagnosis() {
+  const grid = document.getElementById("diagnosis-grid");
+  grid.replaceChildren(...diagnosticGroups.map((group) => {
+    const card = document.createElement("article");
+    card.className = "diagnosis-card";
+    appendText(card, "h3", group.title);
+    const list = document.createElement("ul");
+    group.concepts.forEach((concept) => {
+      const result = summaryResultFor(concept);
+      const entry = catalogEntry(concept);
+      if (!entry) return;
+      const item = document.createElement("li");
+      const label = document.createElement("span");
+      label.textContent = entry.display_label;
+      item.appendChild(label);
+      const value = document.createElement("strong");
+      value.textContent = result ? compactMetricText(result, entry) : "Недоступно";
+      item.appendChild(value);
+      if (result?.limitations?.length) item.title = "Показатель доступен только по отдельным периодам.";
+      list.appendChild(item);
+    });
+    if (!list.children.length) appendText(card, "p", "Для выбранного среза нет поддержанных показателей.");
+    card.appendChild(list);
+    return card;
+  }));
 }
 
-function renderDetailTable() {
-  const table = document.getElementById("detail-table");
-  const concepts = columnGroups[state.columnGroup];
-  if (!concepts.length) {
-    renderMessageRow(table, "Группа колонок пока не поддержана каталогом витрины.", "limitation");
+function renderAttention() {
+  const list = document.getElementById("attention-list");
+  const items = attentionItems();
+  if (!items.length) {
+    const empty = document.createElement("div");
+    empty.className = "empty-state compact";
+    empty.textContent = "Для выбранного среза нет подтверждённых сигналов.";
+    list.replaceChildren(empty);
     return;
   }
-  const entities = [...new Set(state.response.metric_results.map((result) => result.entity_id))];
-  const sortConcept = concepts[0];
-  const rows = entities.map((entityId) => [entityId, ...concepts.map((concept) => {
-    const result = resultForEntity(concept, entityId);
-    const entry = catalogEntry(concept);
-    return result && entry ? formatValue(result.value, entry.format) : "Недоступно";
-  })]).sort((left, right) => {
-    const leftResult = resultForEntity(sortConcept, left[0]);
-    const rightResult = resultForEntity(sortConcept, right[0]);
-    return (rightResult?.value ?? Number.NEGATIVE_INFINITY) - (leftResult?.value ?? Number.NEGATIVE_INFINITY);
+  list.replaceChildren(...items.slice(0, 4).map((item) => {
+    const node = document.createElement("article");
+    node.className = `attention-item ${item.kind || ""}`;
+    appendText(node, "strong", item.title);
+    appendText(node, "span", item.text);
+    if (item.concept) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "inline-link";
+      button.textContent = "Проверить";
+      button.addEventListener("click", () => openProvenance(item.concept));
+      node.appendChild(button);
+    }
+    return node;
+  }));
+}
+
+function renderOverviewTable() {
+  const table = document.getElementById("overview-table");
+  const concepts = tableConcepts();
+  const headers = [grainLabels[state.previewGrain], ...concepts.map(displayLabel)];
+  if (!state.tableResponse?.metric_results?.length) {
+    renderMessageRow(table, "За выбранный период данных нет.");
+    return;
+  }
+  const entities = [...new Set(state.tableResponse.metric_results.map((result) => result.entity_id))];
+  const rows = entities.map((entityId) => {
+    const cells = concepts.map((concept) => {
+      const result = tableResultFor(concept, entityId);
+      const entry = catalogEntry(concept);
+      return result && entry ? metricCellText(result, entry, state.tableResponse) : "Недоступно";
+    });
+    return [entityId, ...cells];
   });
-  renderRows(table, [state.grain, ...concepts.map((concept) => catalogEntry(concept)?.display_label || concept)], rows);
-  const totalEntities = state.options.entities?.[state.grain]?.length || rows.length;
+  renderRows(table, headers, rows, {
+    onFirstCellClick: (entityId) => drillIntoEntity(String(entityId)),
+    rowLimit: state.tablePageSize
+  });
   const caption = table.createCaption();
-  caption.textContent = `Показаны первые ${Math.min(rows.length, state.tablePageSize)} из ${totalEntities}`;
+  caption.textContent = `Показаны первые ${Math.min(rows.length, state.tablePageSize)} из ${entities.length}`;
+  document.getElementById("table-context").textContent = tableContextText(entities.length);
 }
 
-function renderSourceTable() {
-  const table = document.getElementById("source-table");
-  const result = resultFor("revenue") || state.response.metric_results[0];
-  const rows = (result?.period_values || []).map((period) => [
-    formatPeriod(period.period_start),
-    entityForGrain(state.grain),
-    period.business_period_id,
-    formatValue(period.value, "currency"),
-    period.quality_status
-  ]);
-  renderRows(table, ["Период", "Объект", "Период источника", "Оборот", "Качество данных"], rows);
+function renderContextStrip() {
+  const runtime = selectedRetailer();
+  const response = state.summaryResponse;
+  if (!response) return;
+  updateComparisonPeriodDisplay(response);
+  const available = response.available_periods.length;
+  const requested = available + response.missing_periods.length;
+  document.getElementById("context-strip").textContent = [
+    runtime.display_label,
+    periodContextText(),
+    contextFilterText(),
+    privateLabelScopeText(response.private_label_scope),
+    `${available} из ${requested} периодов доступны`
+  ].filter(Boolean).join(" · ");
 }
 
-function renderBusiness() {
-  const list = document.getElementById("business-list");
-  const items = [
-    ["Доля в категории", "READY", "Показывается только при наличии объявленного среза знаменателя и компонентов витрины."],
-    ["Место производителя", "PARTIAL", "Расширенная панель бизнес-оценок будет подключена отдельным этапом интерфейса."],
-    ["ABC / группировка SKU", "PARTIAL", "Бизнес-ревью не подтвердило пользовательский термин группировки как готовый статус."],
-    ["Статус бренда", "PARTIAL", "Оценочные статусы нельзя показывать без утверждённой политики."],
-    ["Широкий пул конкурентов", "PARTIAL", "Доступен только через подтверждённые проекции витрины; отдельная панель будет подключена позже."]
-  ];
-  list.replaceChildren(...items.map(([title, status, text]) => {
-    const node = document.createElement("article");
-    node.className = "business-item";
-    appendText(node, "strong", `${title} · ${statusLabel(status)}`);
-    appendText(node, "span", text);
-    return node;
+function renderBreadcrumb() {
+  document.querySelectorAll("[data-drill-grain]").forEach((button) => {
+    updateBreadcrumbButton(button);
+  });
+}
+
+function renderChartMetricOptions() {
+  const select = document.getElementById("chart-metric");
+  const metrics = chartMetrics.filter((concept) => catalogEntry(concept));
+  select.replaceChildren(...metrics.map((concept) => option(concept, displayLabel(concept))));
+  if (!metrics.includes(state.chartMetric)) state.chartMetric = metrics[0] || "revenue";
+  select.value = state.chartMetric;
+}
+
+function renderSkeletons() {
+  document.getElementById("kpi-grid").replaceChildren(...primaryKpis.map(() => {
+    const card = document.createElement("article");
+    card.className = "kpi-card is-loading";
+    return card;
   }));
+  replaceWithMessage(document.getElementById("chart-box"), "loading-state", "Загрузка динамики...");
 }
 
-function renderSignals() {
-  const list = document.getElementById("signal-list");
-  const limitationCodes = state.response.limitations.map((item) => item.issue_code);
-  const items = [
-    ["Покрытие периода", state.response.coverage_status, `${state.response.available_periods.length} доступно · ${state.response.missing_periods.length} пропущено`],
-    ["Ограничения диапазона", limitationCodes.length ? limitationCodes.join(", ") : "Ограничения не возвращены"],
-    ["Окна событий", "Недоступно", "Окна EDLP/стабильности требуют дополнительной семантики."]
-  ];
-  list.replaceChildren(...items.map(([title, status, text]) => {
-    const node = document.createElement("article");
-    node.className = "signal-item";
-    const strong = appendText(node, "strong", `${title} · `);
-    const statusNode = appendText(strong, "span", statusLabel(status));
-    statusNode.className = "severity-warning";
-    appendText(node, "span", text);
-    return node;
-  }));
-}
-
-function openProvenance() {
-  const result = resultFor(state.chartMetric) || state.response.metric_results[0];
-  const content = document.getElementById("provenance-content");
-  const provenance = result?.provenance;
-  content.replaceChildren();
-  if (!provenance) {
-    appendText(content, "dt", "Происхождение");
-    appendText(content, "dd", "Происхождение из витрины недоступно для этого значения.");
+function attentionItems() {
+  const items = [];
+  if (state.summaryResponse.coverage_status === "PARTIAL") {
+    items.push({
+      title: "Покрытие периода неполное",
+      text: `${state.summaryResponse.available_periods.length} доступно · ${state.summaryResponse.missing_periods.length} пропущено`,
+      kind: "warning"
+    });
   }
-  Object.entries(provenanceFields(provenance || {})).forEach(([key, value]) => {
-    appendText(content, "dt", key);
-    appendText(content, "dd", String(value));
-  });
-  document.getElementById("provenance-drawer").classList.add("is-open");
-  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
-  document.getElementById("scrim").classList.add("is-open");
-}
-
-function provenanceFields(provenance) {
-  const scope = provenance.current_analytical_scope || {};
-  const metric = provenance.metric || {};
-  const value = provenance.value || {};
-  const comparison = provenance.comparison || {};
-  const rule = provenance.business_rule || {};
-  const run = provenance.run_lineage || {};
-  const source = provenance.source_evidence || {};
-  const quality = provenance.quality || {};
-  return {
-    "Текущий срез": compactJson(scope),
-    "Сеть / источник": [scope.retailer_id, scope.source_id].filter(Boolean).join(" / ") || "н/д",
-    "Период или периоды сравнения": compactJson({
-      requested: scope.requested_periods,
-      available: scope.available_periods,
-      missing: scope.missing_periods,
-      comparison: comparison.periods
-    }),
-    "Гранулярность / объект": [scope.grain_id, scope.entity_id].filter(Boolean).join(" / ") || "н/д",
-    "Показатель": metric.metric_concept || "н/д",
-    "Определение показателя": [metric.metric_definition_id, metric.metric_definition_version, metric.metric_config_hash].filter(Boolean).join(" / ") || "н/д",
-    "Значение": value.value ?? "н/д",
-    "Числитель": value.numerator_value ?? "н/д",
-    "Знаменатель": value.denominator_value ?? "н/д",
-    "Агрегация / стратегия диапазона": value.range_aggregation_strategy || "н/д",
-    "Тип сравнения / качество": [comparison.comparison_mode, (comparison.quality_statuses || []).join(", ") || comparison.status].filter(Boolean).join(" / "),
-    "Бизнес-правило": [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "н/д",
-    "Запуск анализа": (run.analysis_run_ids || []).join(", ") || "н/д",
-    "Версия аналитической витрины": run.mart_build_id || "н/д",
-    "Ревизия источника": (run.source_revision_ids || []).join(", ") || "н/д",
-    "Доказательство по источнику": source.status || "н/д",
-    "Качество данных": compactJson(quality),
-    "Срез с учётом выбранного ассортимента": scope.private_label_scope || "н/д",
-    "Недостающие поля происхождения": (provenance.missing_fields || []).join(", ") || "нет"
-  };
-}
-
-function compactJson(value) {
-  if (value === null || value === undefined) return "н/д";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "нет";
-  if (typeof value === "object") return JSON.stringify(value);
-  return String(value);
-}
-
-function closeProvenance() {
-  document.getElementById("provenance-drawer").classList.remove("is-open");
-  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "true");
-  document.getElementById("scrim").classList.remove("is-open");
-}
-
-function switchTab(tab) {
-  state.activeTab = tab;
-  document.querySelectorAll(".folder-tab").forEach((button) => button.classList.toggle("is-active", button.dataset.tab === tab));
-  document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.toggle("is-active", panel.id === `tab-${tab}`));
-}
-
-function renderRows(table, headers, rows) {
-  const renderedRows = sortedRows(headers, rows);
-  const thead = document.createElement("thead");
-  const headRow = document.createElement("tr");
-  headers.forEach((header) => {
-    const th = document.createElement("th");
-    th.textContent = header;
-    th.addEventListener("click", () => {
-      state.sortColumn = header;
-      state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
-      renderAll();
+  const periodOnly = state.summaryResponse.limitations.find((item) => item.issue_code === "range_aggregation_period_only");
+  if (periodOnly) {
+    items.push({
+      title: "Есть показатели только по периодам",
+      text: "Часть показателей доступна только по отдельным периодам.",
+      kind: "warning"
     });
-    headRow.appendChild(th);
-  });
-  thead.appendChild(headRow);
-  const tbody = document.createElement("tbody");
-  renderedRows.forEach((row) => {
-    const tr = document.createElement("tr");
-    row.forEach((cell) => {
-      const td = document.createElement("td");
-      td.textContent = cell;
-      tr.appendChild(td);
+  }
+  const comparisonMissing = state.summaryResponse.limitations.find((item) => item.issue_code === "comparison_period_missing");
+  if (comparisonMissing) {
+    items.push({
+      title: "Нет периода сравнения",
+      text: "Для выбранного периода нет подходящего референса.",
+      kind: "warning"
     });
-    tbody.appendChild(tr);
+  }
+  const revenue = summaryResultFor("revenue");
+  const revenueComparison = revenue && comparisonFor(state.summaryResponse, revenue);
+  if (revenueComparison) {
+    items.push({
+      title: "Наблюдение по обороту",
+      text: `${formatDeltaValue(revenueComparison.delta, "currency")} · ${formatValue(revenueComparison.pct_delta, "percent")}`,
+      concept: "revenue"
+    });
+  }
+  return items;
+}
+
+function updatePeriodPanels() {
+  document.getElementById("single-fields").classList.toggle("is-hidden", state.periodMode !== "SINGLE_PERIOD");
+  document.getElementById("compare-fields").classList.toggle("is-hidden", state.periodMode !== "COMPARE");
+  document.getElementById("range-fields").classList.toggle("is-hidden", state.periodMode !== "DATE_RANGE");
+}
+
+function updateBreadcrumb() {
+  document.querySelectorAll("[data-drill-grain]").forEach((button) => {
+    updateBreadcrumbButton(button);
   });
-  table.replaceChildren(thead, tbody);
 }
 
-function renderMessageRow(table, message, className) {
-  const tbody = document.createElement("tbody");
-  const tr = document.createElement("tr");
-  const td = document.createElement("td");
-  if (className) td.className = className;
-  td.textContent = message;
-  tr.appendChild(td);
-  tbody.appendChild(tr);
-  table.replaceChildren(tbody);
+function updateBreadcrumbButton(button) {
+  const grain = button.dataset.drillGrain;
+  const canActivate = canActivateSummaryGrain(grain);
+  button.classList.toggle("is-active", grain === state.currentGrain);
+  button.disabled = !canActivate;
+  button.title = canActivate ? "Перейти к выбранному уровню" : `Сначала выберите объект уровня «${grainLabels[grain]}».`;
 }
 
-function catalogEntry(concept) {
-  return state.catalog.find((entry) => entry.metric_concept === concept);
+function canActivateSummaryGrain(grain) {
+  if (grain === "network") return true;
+  return Boolean(document.getElementById(`${grain}-filter`)?.value);
 }
 
-function resultFor(concept) {
-  return state.response?.metric_results.find((result) => result.metric_concept === concept);
+function updateComparisonPeriodDisplay(response) {
+  const target = document.getElementById("period-b-derived");
+  if (!target) return;
+  if (state.periodMode !== "COMPARE") {
+    target.textContent = "Не используется";
+    return;
+  }
+  const comparison = response?.comparisons?.[0];
+  target.textContent = comparison?.comparison_period_start
+    ? formatPeriod(comparison.comparison_period_start)
+    : "Нет подходящего периода";
 }
 
-function resultForEntity(concept, entityId) {
-  return state.response?.metric_results.find((result) => result.metric_concept === concept && result.entity_id === entityId);
+function updatePreviewGrain() {
+  const defaultPreview = previewByGrain[state.currentGrain] || "store";
+  state.previewGrain = defaultPreview;
+  const select = document.getElementById("preview-grain");
+  select.value = defaultPreview;
 }
 
-function resultByDefinition(metricDefinitionId) {
-  return state.response?.metric_results.find((result) => result.lineage?.metric_definition_id === metricDefinitionId);
+function populateEntityFilters() {
+  Object.keys(filterConfig).forEach(populateEntityFilter);
 }
 
-function firstAvailableMetric(concepts) {
-  return concepts.find((concept) => catalogEntry(concept));
+function populateEntityFilter(id) {
+  const config = filterConfig[id];
+  const select = document.getElementById(`${id}-filter`);
+  const previous = select.value;
+  const query = document.getElementById(`${id}-search`)?.value?.toLocaleLowerCase("ru-RU") || "";
+  const values = (state.options.entities?.[id] || []).filter((item) => {
+    if (!query) return true;
+    return `${item.label} ${item.value}`.toLocaleLowerCase("ru-RU").includes(query);
+  });
+  select.replaceChildren(option("", config.label), ...values.slice(0, 250).map((item) => option(item.value, item.label)));
+  select.value = values.some((item) => item.value === previous) ? previous : "";
+  select.title = values.length > 250 ? "Показаны первые 250 совпадений. Уточните поиск." : "Выбор меняет аналитический срез.";
 }
 
-function entityForGrain(grain) {
-  const values = state.options.entities?.[grain] || [];
-  return values[0]?.value || "";
+function resetChildFilters(filterId) {
+  (filterConfig[filterId]?.childFilters || []).forEach((id) => {
+    document.getElementById(`${id}-filter`).value = "";
+    const search = document.getElementById(`${id}-search`);
+    if (search) search.value = "";
+  });
 }
 
-function selectedEntityForGrain(grain) {
-  const selectMap = {
-    category: "category-filter",
-    manufacturer: "manufacturer-filter",
-    brand: "brand-filter",
-    sku: "sku-filter",
-    store: "store-filter"
-  };
-  const selectId = selectMap[grain];
-  if (!selectId) return entityForGrain(grain);
-  const value = document.getElementById(selectId).value;
-  return value;
+function resetAllEntityFilters() {
+  Object.keys(filterConfig).forEach((id) => {
+    const select = document.getElementById(`${id}-filter`);
+    if (select) select.value = "";
+    const search = document.getElementById(`${id}-search`);
+    if (search) search.value = "";
+  });
 }
 
-function entityIdsForQuery(grain) {
-  const selected = selectedEntityForGrain(grain);
-  if (selected) return [selected];
-  return (state.options.entities?.[grain] || []).slice(0, state.tablePageSize).map((item) => item.value);
+function applyFilterDrilldown(filterId) {
+  const select = document.getElementById(`${filterId}-filter`);
+  if (select.value) state.currentGrain = filterId;
+  updateBreadcrumb();
+}
+
+function drillIntoEntity(entityId) {
+  const targetGrain = state.previewGrain;
+  const select = document.getElementById(`${targetGrain}-filter`);
+  if (!select) return;
+  select.value = entityId;
+  state.currentGrain = targetGrain;
+  resetChildFilters(targetGrain);
+  updateBreadcrumb();
+  updatePreviewGrain();
+  runOverviewQuery();
+}
+
+function selectedRetailer() {
+  const selectedId = document.getElementById("retailer-select")?.value || state.runtime.default_retailer_id;
+  return state.runtime.retailers.find((retailer) => retailer.retailer_id === selectedId) || state.runtime.retailers[0];
+}
+
+function selectedDateFrom() {
+  if (state.periodMode === "DATE_RANGE") return document.getElementById("date-from")?.value || "";
+  if (state.periodMode === "SINGLE_PERIOD") return document.getElementById("period-single")?.value || "";
+  return document.getElementById("period-a")?.value || "";
+}
+
+function selectedDateTo() {
+  if (state.periodMode === "DATE_RANGE") return document.getElementById("date-to")?.value || "";
+  if (state.periodMode === "SINGLE_PERIOD") return document.getElementById("period-single")?.value || "";
+  return document.getElementById("period-a")?.value || "";
+}
+
+function selectedComparisonMode() {
+  return state.periodMode === "COMPARE" ? state.comparisonMode : "NONE";
+}
+
+function selectedFilterValues() {
+  return Object.fromEntries(
+    Object.keys(filterConfig)
+      .map((id) => [id, document.getElementById(`${id}-filter`)?.value || ""])
+      .filter(([, value]) => value)
+  );
 }
 
 function selectedParentFiltersForGrain(grain) {
@@ -642,89 +706,132 @@ function selectedParentFiltersForGrain(grain) {
   );
 }
 
-function selectedFilterValues() {
-  return Object.fromEntries(
-    Object.keys(filterConfig)
-      .map((id) => [id, document.getElementById(`${id}-filter`)?.value || ""])
-      .filter(([, value]) => value)
-  );
+function entityIdsForSummary() {
+  if (state.currentGrain === "network") return ["network"];
+  const selected = document.getElementById(`${state.currentGrain}-filter`)?.value;
+  if (selected) return [selected];
+  state.currentGrain = "network";
+  updateBreadcrumb();
+  updatePreviewGrain();
+  return ["network"];
+}
+
+function entityIdsForPreview() {
+  return firstEntityIds(state.previewGrain, state.tablePageSize);
+}
+
+function firstEntityIds(grain, limit) {
+  return (state.options.entities?.[grain] || []).slice(0, limit).map((item) => item.value);
+}
+
+function catalogEntry(concept) {
+  return state.catalog.find((entry) => entry.metric_concept === concept);
+}
+
+function displayLabel(concept) {
+  return catalogEntry(concept)?.display_label || concept;
+}
+
+function summaryResultFor(concept) {
+  return state.summaryResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
+function tableResultFor(concept, entityId) {
+  return state.tableResponse?.metric_results.find((result) => result.metric_concept === concept && result.entity_id === entityId);
+}
+
+function comparisonFor(response, result) {
+  if (!response || !result) return null;
+  return response.comparisons.find((item) => item.entity_id === result.entity_id && item.metric_definition_id === result.lineage?.metric_definition_id);
+}
+
+function resultForProvenance(concept) {
+  return summaryResultFor(concept) || state.summaryResponse?.metric_results[0] || state.tableResponse?.metric_results[0];
+}
+
+function comparisonMarkerPeriods() {
+  if (state.periodMode !== "COMPARE") return [];
+  const comparison = state.summaryResponse?.comparisons?.[0];
+  return [selectedDateFrom(), comparison?.comparison_period_start].filter(Boolean);
+}
+
+function kpiContextText(comparison, entry) {
+  if (state.periodMode === "COMPARE" && comparison) {
+    const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
+    return `${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`;
+  }
+  if (state.periodMode === "DATE_RANGE") return "За доступные периоды диапазона";
+  return "За выбранный период";
+}
+
+function compactMetricText(result, entry) {
+  const comparison = comparisonFor(state.summaryResponse, result);
+  if (state.periodMode === "COMPARE" && comparison) {
+    const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
+    return `${formatValue(result.value, entry.format)} · ${formatDeltaValue(comparison.delta, deltaFormat)}`;
+  }
+  if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
+  return formatValue(result.value, entry.format);
+}
+
+function metricCellText(result, entry, response) {
+  const comparison = comparisonFor(response, result);
+  if (state.periodMode === "COMPARE" && comparison) {
+    const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
+    return `${formatValue(result.value, entry.format)} (${formatDeltaValue(comparison.delta, deltaFormat)})`;
+  }
+  if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
+  return formatValue(result.value, entry.format);
+}
+
+function limitationText(result) {
+  if (!result?.limitations?.length) return "";
+  if (result.limitations.includes("range_aggregation_period_only")) return "Показатель доступен только по отдельным периодам.";
+  return "Есть ограничения для выбранного среза.";
+}
+
+function periodContextText() {
+  if (state.periodMode === "DATE_RANGE") {
+    return `${formatPeriod(selectedDateFrom())} — ${formatPeriod(selectedDateTo())}`;
+  }
+  if (state.periodMode === "SINGLE_PERIOD") return formatPeriod(selectedDateFrom());
+  const comparison = state.summaryResponse?.comparisons?.[0];
+  const ref = comparison?.comparison_period_start ? formatPeriod(comparison.comparison_period_start) : "нет периода";
+  return `${formatPeriod(selectedDateFrom())} vs ${ref} · ${comparisonLabels[state.comparisonMode]}`;
 }
 
 function contextFilterText() {
   const selected = selectedFilterValues();
-  const labels = {
-    category: "Категория",
-    manufacturer: "Производитель",
-    brand: "Бренд",
-    sku: "SKU",
-    store: "ТТ"
-  };
-  const parts = Object.entries(selected).map(([key, value]) => `${labels[key]}: ${value}`);
+  const parts = Object.entries(selected).map(([key, value]) => `${grainLabels[key]}: ${value}`);
   return parts.length ? parts.join(" · ") : "Все категории";
 }
 
-function grainLabel(grain) {
+function privateLabelScopeText(scope) {
+  const scopeName = selectedRetailer().private_label_display_name;
   return {
-    network: "Сеть",
-    category: "Категория",
-    manufacturer: "Производитель",
-    brand: "Бренд",
-    sku: "SKU",
-    store: "ТТ"
-  }[grain] || grain;
+    INCLUDE: `${scopeName} включены`,
+    EXCLUDE: `${scopeName} исключены`,
+    ONLY: `только ${scopeName}`
+  }[scope] || scope;
 }
 
-function applyFilterGrain(filterId) {
-  const grainMap = {
-    category: "category",
-    manufacturer: "manufacturer",
-    brand: "brand",
-    sku: "sku",
-    store: "store"
-  };
-  const select = document.getElementById(`${filterId}-filter`);
-  if (!select.value) return;
-  state.grain = grainMap[filterId] || state.grain;
-  document.getElementById("grain-select").value = state.grain;
-  syncFilterAvailability();
+function entityDisplayLabel(grain, entityId) {
+  if (!entityId) return "";
+  if (grain === "network") return "Все данные";
+  const optionItem = (state.options.entities?.[grain] || []).find((item) => item.value === entityId);
+  return optionItem?.label || entityId;
 }
 
-function populateEntityFilters() {
-  for (const [id, config] of Object.entries(filterConfig)) {
-    const select = document.getElementById(`${id}-filter`);
-    const previous = select.value;
-    const values = state.options.entities?.[id] || [];
-    select.replaceChildren(option("", config.label), ...values.map((item) => option(item.value, item.label)));
-    select.value = values.some((item) => item.value === previous) ? previous : "";
-  }
-}
-
-function resetChildFilters(filterId) {
-  (filterConfig[filterId]?.childFilters || []).forEach((id) => {
-    document.getElementById(`${id}-filter`).value = "";
-  });
-}
-
-function resetAllEntityFilters() {
-  Object.keys(filterConfig).forEach((id) => {
-    document.getElementById(`${id}-filter`).value = "";
-  });
-}
-
-function syncFilterAvailability() {
-  ["category-filter", "manufacturer-filter", "brand-filter", "sku-filter", "store-filter"].forEach((id) => {
-    document.getElementById(id).title = "Выбор меняет гранулярность и объект запроса";
-  });
-}
-
-function selectedRetailer() {
-  const selectedId = document.getElementById("retailer-select")?.value || state.runtime.default_retailer_id;
-  return state.runtime.retailers.find((retailer) => retailer.retailer_id === selectedId) || state.runtime.retailers[0];
+function tableContextText(count) {
+  const current = grainLabels[state.currentGrain];
+  const next = grainLabels[state.previewGrain];
+  if (!count) return `Нет объектов уровня «${next}» для текущего среза.`;
+  return `${next}: первые ${Math.min(count, state.tablePageSize)} объектов для среза «${current}».`;
 }
 
 function updatePrivateLabelTerminology() {
   const scopeName = selectedRetailer().private_label_display_name;
-  document.getElementById("private-label-label").textContent = `Учитывать ${scopeName}`;
+  document.getElementById("private-label-label").textContent = `Учёт ${scopeName}`;
   const options = {
     INCLUDE: `${scopeName}: включить`,
     EXCLUDE: `${scopeName}: исключить`,
@@ -735,23 +842,151 @@ function updatePrivateLabelTerminology() {
   });
 }
 
-function selectedDateFrom() {
-  if (state.periodMode === "SINGLE_PERIOD") {
-    return document.getElementById("period-a")?.value || "";
+function openProvenance(concept) {
+  const result = resultForProvenance(concept);
+  state.activeProvenanceConcept = concept;
+  const content = document.getElementById("provenance-content");
+  content.replaceChildren();
+  if (!result?.provenance) {
+    const empty = document.createElement("section");
+    empty.className = "provenance-section";
+    appendText(empty, "h3", "Что это за показатель");
+    appendText(empty, "p", "Происхождение из витрины недоступно для этого значения.");
+    content.appendChild(empty);
+  } else {
+    provenanceSections(result.provenance, result).forEach((section) => content.appendChild(section));
   }
-  return document.getElementById("date-from")?.value || "";
+  document.getElementById("provenance-drawer").classList.add("is-open");
+  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("is-open");
 }
 
-function selectedDateTo() {
-  if (state.periodMode === "SINGLE_PERIOD") {
-    return document.getElementById("period-a")?.value || "";
-  }
-  return document.getElementById("date-to")?.value || "";
+function provenanceSections(provenance, result) {
+  const scope = provenance.current_analytical_scope || {};
+  const metric = provenance.metric || {};
+  const value = provenance.value || {};
+  const comparison = provenance.comparison || {};
+  const rule = provenance.business_rule || {};
+  const run = provenance.run_lineage || {};
+  const source = provenance.source_evidence || {};
+  const quality = provenance.quality || {};
+  const sections = [
+    section("Что это за показатель", [
+      ["Показатель", displayLabel(metric.metric_concept || result.metric_concept)],
+      ["Значение", formatValue(value.value, catalogEntry(result.metric_concept)?.format || "decimal")]
+    ]),
+    section("Срез", [
+      ["Сеть / источник", [selectedRetailer().display_label, selectedRetailer().source_label].filter(Boolean).join(" / ") || "н/д"],
+      ["Периоды", compactList((scope.requested_periods || []).map(formatPeriod))],
+      ["Объект", [grainLabels[scope.grain_id] || scope.grain_id, entityDisplayLabel(scope.grain_id, scope.entity_id)].filter(Boolean).join(" / ") || "н/д"],
+      ["Учёт ассортимента", privateLabelScopeText(scope.private_label_scope)]
+    ]),
+    section("Расчёт", [
+      ["Числитель", value.numerator_value ?? "н/д"],
+      ["Знаменатель", value.denominator_value ?? "н/д"],
+      ["Стратегия диапазона", rangeStrategyLabel(value.range_aggregation_strategy)]
+    ]),
+    section("Сравнение", [
+      ["Тип", comparisonLabels[comparison.comparison_mode] || comparison.comparison_mode || "н/д"],
+      ["Периоды", compactList((comparison.periods || []).map((item) => `${item.current_period_start} vs ${item.comparison_period_start}`))],
+      ["Качество", compactList(comparison.quality_statuses)]
+    ]),
+    section("Покрытие данных", [
+      ["Доступные периоды", compactList(scope.available_periods)],
+      ["Пропущенные периоды", compactList(scope.missing_periods)]
+    ]),
+    section("Бизнес-правило", [
+      ["Правило", [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "н/д"]
+    ]),
+    section("Качество", [
+      ["Статусы", compactList(quality.quality_statuses)],
+      ["Ограничения", compactList(quality.result_limitations)]
+    ])
+  ];
+  const technical = document.createElement("details");
+  technical.className = "provenance-technical";
+  const summary = document.createElement("summary");
+  summary.textContent = "Технические детали";
+  technical.appendChild(summary);
+  technical.appendChild(section(null, [
+    ["Определение показателя", [metric.metric_definition_id, metric.metric_definition_version, metric.metric_config_hash].filter(Boolean).join(" / ") || "н/д"],
+    ["Технический срез", [scope.retailer_id, scope.source_id, scope.grain_id, scope.entity_id, scope.private_label_scope].filter(Boolean).join(" / ") || "н/д"],
+    ["Запуск анализа", compactList(run.analysis_run_ids)],
+    ["Версия аналитической витрины", run.mart_build_id || "н/д"],
+    ["Ревизия источника", compactList(run.source_revision_ids)],
+    ["Доказательство по источнику", source.status || "н/д"],
+    ["Недостающие поля", compactList(provenance.missing_fields)]
+  ]));
+  sections.push(technical);
+  return sections;
 }
 
-function derivedComparisonPeriod() {
-  if (!state.response || !state.response.comparisons.length) return null;
-  return state.response.comparisons[0].comparison_period_start;
+function section(title, rows) {
+  const node = document.createElement("section");
+  node.className = "provenance-section";
+  if (title) appendText(node, "h3", title);
+  const dl = document.createElement("dl");
+  rows.forEach(([key, value]) => {
+    appendText(dl, "dt", key);
+    appendText(dl, "dd", String(value));
+  });
+  node.appendChild(dl);
+  return node;
+}
+
+function closeProvenance() {
+  document.getElementById("provenance-drawer").classList.remove("is-open");
+  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "true");
+  document.getElementById("scrim").classList.remove("is-open");
+}
+
+function renderRows(table, headers, rows, options = {}) {
+  const renderedRows = sortedRows(headers, rows).slice(0, options.rowLimit || rows.length);
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headers.forEach((header) => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = header;
+    th.addEventListener("click", () => {
+      state.sortColumn = header;
+      state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
+      renderOverviewTable();
+    });
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  const tbody = document.createElement("tbody");
+  renderedRows.forEach((row) => {
+    const tr = document.createElement("tr");
+    row.forEach((cell, index) => {
+      const td = document.createElement("td");
+      if (index === 0 && options.onFirstCellClick) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "table-link";
+        button.textContent = cell;
+        button.addEventListener("click", () => options.onFirstCellClick(cell));
+        td.appendChild(button);
+      } else {
+        td.textContent = cell;
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.replaceChildren(thead, tbody);
+}
+
+function renderMessageRow(table, message) {
+  const tbody = document.createElement("tbody");
+  const tr = document.createElement("tr");
+  const td = document.createElement("td");
+  td.className = "empty-state";
+  td.textContent = message;
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+  table.replaceChildren(tbody);
 }
 
 function sortedRows(headers, rows) {
@@ -761,6 +996,59 @@ function sortedRows(headers, rows) {
     const direction = state.sortDirection === "asc" ? 1 : -1;
     return String(left[index]).localeCompare(String(right[index]), "ru-RU", { numeric: true }) * direction;
   });
+}
+
+function formatValue(value, format) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "н/д";
+  if (format === "currency") return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+  if (format === "percent") return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100)}%`;
+  if (format === "percentage_points") return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100)} п.п.`;
+  if (format === "integer") return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value);
+}
+
+function formatDeltaValue(value, format) {
+  if (value === null || value === undefined || Number.isNaN(value)) return "н/д";
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${formatValue(value, format)}`;
+}
+
+function formatPeriod(value) {
+  if (!value) return "н/д";
+  const date = new Date(`${value}T00:00:00`);
+  return new Intl.DateTimeFormat("ru-RU", { month: "short", year: "numeric" }).format(date);
+}
+
+function compactList(value) {
+  if (!value || !value.length) return "нет";
+  return value.join(", ");
+}
+
+function rangeStrategyLabel(strategy) {
+  return {
+    sum_available_periods: "сумма доступных периодов",
+    ratio_of_sums: "отношение сумм",
+    weighted_ratio_of_sums: "взвешенное отношение",
+    recompute_share_scope: "пересчёт доли в срезе",
+    period_only: "только по периодам",
+    projection_defined: "определено проекцией"
+  }[strategy] || strategy || "н/д";
+}
+
+function unitLabel(format) {
+  return {
+    currency: "руб.",
+    percent: "%",
+    decimal: "значение",
+    integer: "кол-во"
+  }[format] || "";
+}
+
+function option(value, label) {
+  const node = document.createElement("option");
+  node.value = value;
+  node.textContent = label;
+  return node;
 }
 
 function appendText(parent, tagName, value) {
@@ -777,46 +1065,21 @@ function replaceWithMessage(parent, className, message) {
   parent.replaceChildren(node);
 }
 
-function formatValue(value, format) {
-  if (value === null || value === undefined || Number.isNaN(value)) {
-    return "н/д";
-  }
-  if (format === "currency") {
-    return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
-  }
-  if (format === "percent") {
-    return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100)}%`;
-  }
-  if (format === "percentage_points") {
-    return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100)} п.п.`;
-  }
-  if (format === "integer") {
-    return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
-  }
-  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value);
-}
-
-function formatDeltaValue(value, format) {
-  if (format === "percent") {
-    return formatValue(value, "percentage_points");
-  }
-  return formatValue(value, format);
-}
-
-function formatPeriod(value) {
-  const date = new Date(`${value}T00:00:00`);
-  return new Intl.DateTimeFormat("ru-RU", { month: "short", year: "numeric" }).format(date);
-}
-
-function option(value, label) {
-  const node = document.createElement("option");
-  node.value = value;
-  node.textContent = label;
-  return node;
-}
-
 function setLoading(isLoading, message) {
-  document.getElementById("system-state").textContent = message || (isLoading ? "Запрос к витрине" : "Контекст витрины готов");
+  document.body.classList.toggle("is-loading", isLoading);
+  document.getElementById("system-state").textContent = message || (isLoading ? "Загрузка данных" : "Данные обновлены");
+}
+
+function showPageError(error) {
+  replaceWithMessage(document.getElementById("chart-box"), "error-state", "Не удалось загрузить данные. Повторите попытку.");
+  showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
+}
+
+function showToast(message) {
+  const toast = document.getElementById("toast");
+  toast.textContent = message;
+  toast.classList.add("is-visible");
+  window.setTimeout(() => toast.classList.remove("is-visible"), 3200);
 }
 
 async function getJson(url) {
@@ -841,8 +1104,8 @@ function svgEl(name, attrs) {
   return node;
 }
 
-function svgText(x, y, value, anchor) {
-  const text = svgEl("text", { x, y, "text-anchor": anchor, class: "axis" });
+function svgText(x, y, value, anchor, className) {
+  const text = svgEl("text", { x, y, "text-anchor": anchor, class: className || "axis-label" });
   text.textContent = value;
   return text;
 }

@@ -233,18 +233,25 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     )
 
     assert "Аналитика продаж" in html
-    assert "Данные" in html
-    assert "Показатели" in html
-    assert "Бизнес-оценки" in html
+    assert "Обзор" in html
+    assert "Рынок и ассортимент" in html
     assert "Сигналы" in html
-    assert "Рекомендации" in html
-    assert "В разработке" in html
+    assert "Данные и качество" in html
+    assert "Рекомендации" not in html
+    assert "Показатели" not in html
+    assert "Бизнес-оценки" not in html
     assert "Откуда эта цифра?" in html
+    assert "Один период" in html
+    assert "Сравнение" in html
+    assert "Весь диапазон" in html
     assert "Год к году" in html
     assert "Месяц к месяцу" in html
     assert "Предыдущий доступный период" in html
     assert "period-b-derived" in html
     assert "private-label-scope" in html
+    assert "Картина изменений" in html
+    assert "Где смотреть" in html
+    assert "Что проверить" in html
     assert 'id="period-b"' not in html
 
 
@@ -263,19 +270,12 @@ def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> Non
 
     expected = (
         "Период",
-        "Объект",
-        "Период источника",
         "Оборот",
-        "Качество данных",
-        "Доля в категории",
-        "Место производителя",
-        "Покрытие периода",
-        "Ограничения диапазона",
-        "Окна событий",
-        "Контекст витрины готов",
+        "Покрытие данных",
+        "Показатель доступен только по отдельным периодам",
+        "Данные обновлены",
         "Определяется витриной",
-        "Группа колонок пока не поддержана каталогом витрины",
-        "Ошибка витрины",
+        "Не удалось загрузить данные",
         "н/д",
     )
     forbidden = (
@@ -295,6 +295,7 @@ def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> Non
         "UI unit",
         "grain/entity scope",
         "Ошибка backend",
+        "Recommendation",
         "n/a",
     )
 
@@ -302,16 +303,16 @@ def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> Non
     assert not any(label in surface for label in forbidden)
 
 
-def test_folder_tabs_use_wrapping_without_visible_horizontal_scrollbar() -> None:
+def test_workflow_navigation_uses_wrapping_without_visible_horizontal_scrollbar() -> None:
     css = (
         resources.files("retail_analytics.dashboard.static")
         .joinpath("styles.css")
         .read_text(encoding="utf-8")
     )
 
-    assert ".folder-tabs" in css
+    assert ".workflow-nav" in css
     assert "flex-wrap: wrap" in css
-    assert "overflow-x: hidden" in css
+    assert ".folder-tabs" not in css
 
 
 def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> None:
@@ -327,33 +328,51 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "grain_id" in script
     assert "metric_concepts" in script
     assert "entity_ids: entityIds" in script
-    assert "entity_filters: parentFilters" in script
+    assert "entity_filters: selectedParentFiltersForGrain(grain)" in script
     assert "/api/dashboard/options" in script
     assert "state.options.periods" in script
     assert "state.tablePageSize: 50" not in script
-    assert "tablePageSize: 50" in script
-    assert "entityIdsForQuery" in script
+    assert "tablePageSize: 40" in script
+    assert "entityIdsForSummary" in script
+    assert "entityIdsForPreview" in script
+    assert "canActivateSummaryGrain(targetGrain)" in script
+    assert 'state.currentGrain = "network";' in script
+    assert "return firstEntityIds(state.currentGrain, 1)" not in script
     assert "selectedParentFiltersForGrain" in script
     assert "Показаны первые" in script
     assert "CATEGORY_STANDARD" not in script
     assert "MANUFACTURER_A" not in script
     assert "SKU_A_001" not in script
     assert "STORE_A_001" not in script
-    assert "selectedEntityForGrain" in script
     assert "private-label-scope" in script
     assert 'YOY: "Год к году"' in script
     assert 'MOM: "Месяц к месяцу"' in script
     assert 'PREVIOUS_AVAILABLE: "Предыдущий доступный период"' in script
-    assert "comparisonLabel(state.comparisonMode)" in script
+    assert "comparisonLabels[state.comparisonMode]" in script
+    assert "updateComparisonPeriodDisplay(response)" in script
+    assert "comparison?.comparison_period_start" in script
+    assert 'document.getElementById("period-b-derived")' in script
     assert "innerHTML" not in script
     assert "ONLY: `${scopeName}: только`" in script
     assert "ONLY: `только ${scopeName}`" in script
-    assert "formatDeltaValue(row[3], row[5])" in script
-    assert 'formatValue(value, "percentage_points")' in script
+    assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "п.п." in script
     assert "retailer_margin_pct" in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
+
+
+def test_overview_uses_exactly_four_primary_kpi_concepts() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    assert 'const primaryKpis = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"]' in script
+    assert "primaryKpis.map" in script
+    assert "revenue_velocity" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
+    assert "distribution" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
 
 
 def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
@@ -371,7 +390,9 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
     assert 'manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] }' in script
     assert "contextFilterText()" in script
-    assert "grainLabel(state.grain)" in script
+    assert "grainLabels[state.currentGrain]" in script
+    assert "manufacturer-search" in html_or_script("index.html")
+    assert "populateEntityFilter(id)" in script
     assert "Все категории · ${state.grain}" not in script
     assert "const syntheticPeriods" not in script
     assert "const filters = {" not in script
@@ -384,8 +405,8 @@ def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:
         .read_text(encoding="utf-8")
     )
 
-    assert "const provenance = result?.provenance" in script
-    assert "provenanceFields(provenance" in script
+    assert "result?.provenance" in script
+    assert "provenanceSections(result.provenance" in script
     assert "current_analytical_scope" in script
     assert "source_evidence" in script
     assert "Provided by backend audit metadata" not in script
@@ -400,23 +421,26 @@ def test_provenance_drawer_uses_russian_presentation_labels() -> None:
     )
 
     expected = (
-        "Текущий срез",
+        "Что это за показатель",
+        "Срез",
         "Сеть / источник",
-        "Период или периоды сравнения",
-        "Гранулярность / объект",
+        "Периоды",
+        "Объект",
         "Определение показателя",
         "Числитель",
         "Знаменатель",
-        "Агрегация / стратегия диапазона",
-        "Тип сравнения / качество",
+        "Стратегия диапазона",
+        "Сравнение",
         "Бизнес-правило",
         "Запуск анализа",
         "Версия аналитической витрины",
         "Ревизия источника",
         "Доказательство по источнику",
-        "Качество данных",
-        "Срез с учётом выбранного ассортимента",
-        "Недостающие поля происхождения",
+        "Качество",
+        "Учёт ассортимента",
+        "Недостающие поля",
+        "Технические детали",
+        "Технический срез",
     )
     forbidden = (
         "Current analytical scope",
@@ -440,3 +464,19 @@ def test_provenance_drawer_uses_russian_presentation_labels() -> None:
 
     assert all(label in script for label in expected)
     assert not any(label in script for label in forbidden)
+    assert "entityDisplayLabel(scope.grain_id, scope.entity_id)" in script
+    assert "privateLabelScopeText(scope.private_label_scope)" in script
+
+
+def html_or_script(name: str) -> str:
+    if name.endswith(".js"):
+        return (
+            resources.files("retail_analytics.dashboard.static")
+            .joinpath(name)
+            .read_text(encoding="utf-8")
+        )
+    return (
+        resources.files("retail_analytics.dashboard.templates")
+        .joinpath(name)
+        .read_text(encoding="utf-8")
+    )

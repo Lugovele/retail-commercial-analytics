@@ -334,9 +334,9 @@ def build_synthetic_dashboard_runtime(storage_root: str | Path | None = None) ->
         retailers=(
             DashboardRuntimeRetailer(
                 retailer_id="retailer_a",
-                display_label="retailer_a",
+                display_label="Сеть A",
                 source_id="source_a",
-                source_label="source_a",
+                source_label="Источник A",
                 default_mart_build_id=build.mart_build_id,
             ),
         ),
