@@ -2,15 +2,23 @@
 
 from __future__ import annotations
 
+import os
 import tempfile
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
+from enum import StrEnum
 from pathlib import Path
 from typing import Any
 
 import polars as pl
+import yaml  # type: ignore[import-untyped]
 
-from retail_analytics.history import PeriodGrain, SourceLedgerEntry, source_artifact_id
+from retail_analytics.history import (
+    PeriodGrain,
+    SourceLedgerEntry,
+    read_source_ledger,
+    source_artifact_id,
+)
 from retail_analytics.mart import (
     DashboardMartQueryService,
     EffectiveMetricCatalogEntry,
@@ -20,8 +28,10 @@ from retail_analytics.mart import (
     PrivateLabelScope,
     PrivateMetricCatalogOverride,
     RangeAggregationStrategy,
+    load_private_metric_catalog_overrides,
     load_public_metric_catalog,
     merge_metric_catalog,
+    read_mart_build_metadata,
     write_mart_metric_facts,
 )
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA
@@ -31,6 +41,16 @@ SUPPORTED_GRAINS = ("network", "category", "manufacturer", "brand", "sku", "stor
 SUPPORTED_PERIOD_MODES = ("SINGLE_PERIOD", "DATE_RANGE", "FULL_AVAILABLE_HISTORY")
 SUPPORTED_COMPARISON_MODES = ("NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE")
 SUPPORTED_PRIVATE_LABEL_SCOPES = ("INCLUDE", "EXCLUDE", "ONLY")
+DEFAULT_DASHBOARD_CONFIG_ENV = "RETAIL_ANALYTICS_DASHBOARD_CONFIG"
+DEFAULT_DASHBOARD_MODE_ENV = "RETAIL_ANALYTICS_DASHBOARD_MODE"
+
+
+class DashboardRuntimeMode(StrEnum):
+    """Explicit dashboard runtime modes."""
+
+    DEMO = "DEMO"
+    PRIVATE = "PRIVATE"
+    PRODUCTION = "PRODUCTION"
 
 
 @dataclass(frozen=True)
@@ -46,12 +66,54 @@ class DashboardRuntimeRetailer:
 
 
 @dataclass(frozen=True)
+class DashboardRuntimeConfig:
+    """Generic runtime config for a dashboard over persisted mart datasets."""
+
+    mode: DashboardRuntimeMode
+    metric_facts_path: Path | None = None
+    mart_builds_path: Path | None = None
+    source_ledger_path: Path | None = None
+    public_metric_catalog_path: Path = Path("config/public/dashboard_metric_catalog.yaml")
+    private_metric_catalog_path: Path | None = None
+    retailers: tuple[DashboardRuntimeRetailer, ...] = ()
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "mode", DashboardRuntimeMode(self.mode))
+        for field_name in (
+            "metric_facts_path",
+            "mart_builds_path",
+            "source_ledger_path",
+            "public_metric_catalog_path",
+            "private_metric_catalog_path",
+        ):
+            value = getattr(self, field_name)
+            if value is not None and not isinstance(value, Path):
+                object.__setattr__(self, field_name, Path(value))
+        if self.mode in {DashboardRuntimeMode.PRIVATE, DashboardRuntimeMode.PRODUCTION}:
+            missing = [
+                name
+                for name in (
+                    "metric_facts_path",
+                    "mart_builds_path",
+                    "source_ledger_path",
+                    "private_metric_catalog_path",
+                )
+                if getattr(self, name) is None
+            ]
+            if missing:
+                raise ValueError(f"Dashboard private runtime config is missing required paths: {', '.join(missing)}")
+            if not self.retailers:
+                raise ValueError("Dashboard private runtime config must declare at least one retailer/source scope")
+
+
+@dataclass(frozen=True)
 class DashboardRuntime:
     """Concrete dashboard runtime over a mart query service."""
 
     query_service: DashboardMartQueryService
     catalog: tuple[EffectiveMetricCatalogEntry, ...]
     retailers: tuple[DashboardRuntimeRetailer, ...]
+    mode: DashboardRuntimeMode = DashboardRuntimeMode.DEMO
 
     def runtime_metadata(self) -> dict[str, Any]:
         """Return dashboard shell metadata without private business semantics."""
@@ -59,6 +121,7 @@ class DashboardRuntime:
         default = self.retailers[0]
         return {
             "app_title": APP_TITLE,
+            "runtime_mode": self.mode.value,
             "retailers": [
                 {
                     "retailer_id": item.retailer_id,
@@ -86,6 +149,121 @@ class DashboardRuntime:
             for entry in self.catalog
             if entry.retailer_id == retailer_id and entry.source_id in (None, source_id)
         )
+
+
+def build_dashboard_runtime(
+    config: DashboardRuntimeConfig | None = None,
+    *,
+    mode: str | DashboardRuntimeMode | None = None,
+    config_path: str | Path | None = None,
+) -> DashboardRuntime:
+    """Build an explicit demo or private dashboard runtime.
+
+    Production/private modes require configuration and never fall back to the
+    synthetic demo runtime.
+    """
+
+    env_mode = os.environ.get(DEFAULT_DASHBOARD_MODE_ENV)
+    mode_was_explicit = mode is not None or env_mode is not None
+    selected_mode = DashboardRuntimeMode(mode or env_mode or DashboardRuntimeMode.DEMO)
+    if selected_mode == DashboardRuntimeMode.DEMO and config is None and config_path is None:
+        return build_synthetic_dashboard_runtime()
+    resolved_config = config or load_dashboard_runtime_config(config_path, mode=selected_mode)
+    if (
+        mode_was_explicit
+        and selected_mode in {DashboardRuntimeMode.PRIVATE, DashboardRuntimeMode.PRODUCTION}
+        and resolved_config.mode != selected_mode
+    ):
+        raise ValueError(
+            f"Dashboard runtime mode mismatch: requested {selected_mode.value}, "
+            f"config declares {resolved_config.mode.value}"
+        )
+    if resolved_config.mode == DashboardRuntimeMode.DEMO:
+        return build_synthetic_dashboard_runtime()
+    return build_private_dashboard_runtime(resolved_config)
+
+
+def load_dashboard_runtime_config(
+    path: str | Path | None = None,
+    *,
+    mode: str | DashboardRuntimeMode | None = None,
+) -> DashboardRuntimeConfig:
+    """Load generic private dashboard runtime configuration from YAML."""
+
+    selected_mode = DashboardRuntimeMode(mode or os.environ.get(DEFAULT_DASHBOARD_MODE_ENV, DashboardRuntimeMode.DEMO))
+    raw_path = path or os.environ.get(DEFAULT_DASHBOARD_CONFIG_ENV)
+    if raw_path in (None, ""):
+        if selected_mode == DashboardRuntimeMode.DEMO:
+            return DashboardRuntimeConfig(mode=DashboardRuntimeMode.DEMO)
+        raise ValueError(
+            f"{selected_mode.value} dashboard runtime requires {DEFAULT_DASHBOARD_CONFIG_ENV} "
+            "or an explicit config_path"
+        )
+    config_path = Path(raw_path)
+    with config_path.open("r", encoding="utf-8") as handle:
+        payload = yaml.safe_load(handle) or {}
+    if not isinstance(payload, dict):
+        raise TypeError(f"Dashboard runtime config must contain a mapping: {config_path}")
+    base = config_path.parent
+    config_mode = DashboardRuntimeMode(str(payload.get("mode") or selected_mode))
+    retailers = tuple(_runtime_retailer(row) for row in payload.get("retailers") or ())
+    public_catalog_path = (
+        _config_path(payload.get("public_metric_catalog_path"), base)
+        if payload.get("public_metric_catalog_path")
+        else Path("config/public/dashboard_metric_catalog.yaml")
+    )
+    return DashboardRuntimeConfig(
+        mode=config_mode,
+        metric_facts_path=_config_path(payload.get("metric_facts_path"), base),
+        mart_builds_path=_config_path(payload.get("mart_builds_path"), base),
+        source_ledger_path=_config_path(payload.get("source_ledger_path"), base),
+        public_metric_catalog_path=public_catalog_path,
+        private_metric_catalog_path=_config_path(payload.get("private_metric_catalog_path"), base),
+        retailers=retailers,
+    )
+
+
+def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> DashboardRuntime:
+    """Build a dashboard runtime from private mart/config paths."""
+
+    if config.mode not in {DashboardRuntimeMode.PRIVATE, DashboardRuntimeMode.PRODUCTION}:
+        raise ValueError(f"Private runtime builder does not accept mode: {config.mode.value}")
+    required_paths = (
+        config.metric_facts_path,
+        config.mart_builds_path,
+        config.source_ledger_path,
+        config.public_metric_catalog_path,
+        config.private_metric_catalog_path,
+    )
+    missing_paths = [str(path) for path in required_paths if path is None or not path.exists()]
+    if missing_paths:
+        raise FileNotFoundError(f"Dashboard private runtime paths do not exist: {missing_paths}")
+    public_catalog = load_public_metric_catalog(config.public_metric_catalog_path)
+    private_overrides = load_private_metric_catalog_overrides(config.private_metric_catalog_path)
+    catalog = tuple(
+        entry
+        for retailer in config.retailers
+        for entry in merge_metric_catalog(
+            public_catalog,
+            private_overrides,
+            retailer_id=retailer.retailer_id,
+            source_id=retailer.source_id,
+        )
+    )
+    if not catalog:
+        raise ValueError("Dashboard private runtime resolved an empty effective metric catalog")
+    service = DashboardMartQueryService(
+        config.metric_facts_path,
+        catalog=catalog,
+        mart_builds=_read_mart_builds(config.mart_builds_path),
+        source_ledger=_read_source_ledger_entries(config.source_ledger_path),
+    )
+    return DashboardRuntime(
+        query_service=service,
+        catalog=catalog,
+        retailers=config.retailers,
+        mode=config.mode,
+    )
 
 
 def build_synthetic_dashboard_runtime(storage_root: str | Path | None = None) -> DashboardRuntime:
@@ -121,7 +299,53 @@ def build_synthetic_dashboard_runtime(storage_root: str | Path | None = None) ->
                 default_mart_build_id=build.mart_build_id,
             ),
         ),
+        mode=DashboardRuntimeMode.DEMO,
     )
+
+
+def _runtime_retailer(row: dict[str, Any]) -> DashboardRuntimeRetailer:
+    return DashboardRuntimeRetailer(
+        retailer_id=str(row["retailer_id"]),
+        display_label=str(row.get("display_label") or row["retailer_id"]),
+        source_id=str(row["source_id"]),
+        source_label=str(row.get("source_label") or row["source_id"]),
+        private_label_display_name=str(row.get("private_label_display_name") or "выбранный ассортимент"),
+        default_mart_build_id=_optional_str(row.get("default_mart_build_id")),
+    )
+
+
+def _config_path(value: object, base: Path) -> Path | None:
+    if value in (None, ""):
+        return None
+    path = Path(str(value))
+    return path if path.is_absolute() else (base / path)
+
+
+def _read_mart_builds(path: Path) -> tuple[MartBuildMetadata, ...]:
+    if path.is_file():
+        return read_mart_build_metadata(path)
+    return tuple(
+        build
+        for parquet_path in sorted(path.rglob("*.parquet"))
+        for build in read_mart_build_metadata(parquet_path)
+    )
+
+
+def _read_source_ledger_entries(path: Path) -> tuple[SourceLedgerEntry, ...]:
+    if path.is_file():
+        return read_source_ledger(path)
+    return tuple(
+        entry
+        for parquet_path in sorted(path.rglob("*.parquet"))
+        for entry in read_source_ledger(parquet_path)
+    )
+
+
+def _optional_str(value: object) -> str | None:
+    if value is None:
+        return None
+    text = str(value)
+    return text if text else None
 
 
 def serialize_catalog(entries: tuple[EffectiveMetricCatalogEntry, ...]) -> list[dict[str, Any]]:

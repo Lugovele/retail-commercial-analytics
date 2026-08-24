@@ -11,7 +11,7 @@ from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
 from retail_analytics.dashboard.runtime import (
     DashboardRuntime,
-    build_synthetic_dashboard_runtime,
+    build_dashboard_runtime,
     serialize_catalog,
 )
 from retail_analytics.dashboard.schemas import (
@@ -23,7 +23,7 @@ from retail_analytics.dashboard.schemas import (
 def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIApplication:
     """Create a small WSGI app for local dashboard use and integration tests."""
 
-    resolved_runtime = runtime or build_synthetic_dashboard_runtime()
+    resolved_runtime = runtime or build_dashboard_runtime()
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
         method = str(environ.get("REQUEST_METHOD", "GET")).upper()

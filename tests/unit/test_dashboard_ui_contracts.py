@@ -2,16 +2,28 @@ from __future__ import annotations
 
 from datetime import date
 from importlib import resources
+from pathlib import Path
 
 import pytest
 
 from retail_analytics.dashboard import (
+    DashboardRuntimeConfig,
+    DashboardRuntimeMode,
     DashboardUiQueryPayload,
     build_backend_query_request,
+    build_dashboard_runtime,
+    build_private_dashboard_runtime,
     build_synthetic_dashboard_runtime,
+    load_dashboard_runtime_config,
     serialize_dashboard_query_response,
 )
-from retail_analytics.mart import ComparisonMode, PeriodMode, PrivateLabelScope
+from retail_analytics.history import write_source_ledger
+from retail_analytics.mart import (
+    ComparisonMode,
+    PeriodMode,
+    PrivateLabelScope,
+    write_mart_build_metadata,
+)
 
 
 def test_ui_payload_builds_exact_backend_query_request() -> None:
@@ -92,6 +104,80 @@ def test_synthetic_runtime_queries_backend_with_scope_and_lineage(tmp_path) -> N
     assert payload["metric_results"][0]["provenance"]["source_evidence"]["status"] == "PARTIAL_AGGREGATED_FACT_NO_ROW_IDS"
     assert response.missing_periods
     assert "range_aggregation_period_only" in {item.issue_code for item in response.limitations}
+
+
+def test_private_runtime_mode_requires_explicit_config(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("RETAIL_ANALYTICS_DASHBOARD_CONFIG", raising=False)
+    monkeypatch.setenv("RETAIL_ANALYTICS_DASHBOARD_MODE", "PRODUCTION")
+
+    with pytest.raises(ValueError, match="requires RETAIL_ANALYTICS_DASHBOARD_CONFIG"):
+        build_dashboard_runtime()
+
+
+def test_private_runtime_rejects_demo_config_mode(tmp_path) -> None:
+    config_path = tmp_path / "dashboard_runtime.yaml"
+    config_path.write_text("mode: DEMO\n", encoding="utf-8")
+
+    with pytest.raises(ValueError, match="mode mismatch"):
+        build_dashboard_runtime(mode=DashboardRuntimeMode.PRIVATE, config_path=config_path)
+
+
+def test_private_runtime_loads_configured_mart_without_synthetic_fallback(tmp_path) -> None:
+    demo = build_synthetic_dashboard_runtime(tmp_path / "demo")
+    builds_path = tmp_path / "mart_run_metadata" / "build.parquet"
+    ledger_path = tmp_path / "mart_source_ledger" / "ledger.parquet"
+    private_catalog_path = tmp_path / "private_dashboard_metric_catalog.yaml"
+    config_path = tmp_path / "dashboard_runtime.yaml"
+    write_mart_build_metadata(demo.query_service.mart_builds, builds_path)
+    write_source_ledger(demo.query_service.source_ledger, ledger_path)
+    private_catalog_path.write_text(
+        """
+overrides:
+  - retailer_id: retailer_a
+    source_id: source_a
+    metric_definition_id: retailer_a.network.revenue_vat.v1
+    metric_definition_version: v1
+    metric_concept: revenue_vat
+    display_label: Оборот с НДС
+    grain_support: [network]
+    period_support: [month]
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    availability_status: READY
+    metric_config_hash: metric_hash_dashboard_synthetic
+    rule_version: rules_dashboard_synthetic_v1
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+""".strip(),
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        f"""
+mode: PRIVATE
+metric_facts_path: {(tmp_path / "demo" / "synthetic_metric_facts.parquet").as_posix()}
+mart_builds_path: {builds_path.as_posix()}
+source_ledger_path: {ledger_path.as_posix()}
+public_metric_catalog_path: {Path("config/public/dashboard_metric_catalog.yaml").resolve().as_posix()}
+private_metric_catalog_path: {private_catalog_path.as_posix()}
+retailers:
+  - retailer_id: retailer_a
+    display_label: Retailer A Runtime
+    source_id: source_a
+    source_label: Source A Runtime
+    private_label_display_name: Private Label
+    default_mart_build_id: build_dashboard_synthetic
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_dashboard_runtime_config(config_path, mode=DashboardRuntimeMode.PRIVATE)
+    runtime = build_private_dashboard_runtime(config)
+    metadata = runtime.runtime_metadata()
+
+    assert isinstance(config, DashboardRuntimeConfig)
+    assert metadata["runtime_mode"] == "PRIVATE"
+    assert metadata["retailers"][0]["display_label"] == "Retailer A Runtime"
+    assert metadata["retailers"][0]["default_mart_build_id"] == "build_dashboard_synthetic"
+    assert runtime.query_service.metric_facts_path == tmp_path / "demo" / "synthetic_metric_facts.parquet"
+    assert len(runtime.catalog) == 1
 
 
 def test_public_ui_assets_do_not_hardcode_private_retailer_terms() -> None:
