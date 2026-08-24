@@ -273,7 +273,6 @@ def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> Non
         "Оборот",
         "Покрытие данных",
         "Показатель доступен только по отдельным периодам",
-        "Данные обновлены",
         "Определяется витриной",
         "Не удалось загрузить данные",
         "н/д",
@@ -304,15 +303,62 @@ def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> Non
 
 
 def test_workflow_navigation_uses_wrapping_without_visible_horizontal_scrollbar() -> None:
+    html = (
+        resources.files("retail_analytics.dashboard.templates")
+        .joinpath("index.html")
+        .read_text(encoding="utf-8")
+    )
     css = (
         resources.files("retail_analytics.dashboard.static")
         .joinpath("styles.css")
         .read_text(encoding="utf-8")
     )
 
+    assert '<div class="system-state visually-hidden" id="system-state" role="status">' in html
     assert ".workflow-nav" in css
     assert "flex-wrap: wrap" in css
+    nav_body = css.split(".nav-item {", 1)[1].split(".nav-item.is-active", 1)[0]
+    assert "background: transparent;" in nav_body
+    assert "border: 0;" in nav_body
+    active_body = css.split(".nav-item.is-active {", 1)[1].split(".nav-item.is-active::after", 1)[0]
+    assert "color: var(--brand-menu-blue);" in active_body
+    assert ".nav-item.is-active::after" in css
+    assert "height: 2px;" in css
     assert ".folder-tabs" not in css
+
+
+def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
+    html = (
+        resources.files("retail_analytics.dashboard.templates")
+        .joinpath("index.html")
+        .read_text(encoding="utf-8")
+    )
+    css = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("styles.css")
+        .read_text(encoding="utf-8")
+    )
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "filter-count" in html
+    assert "filter-chevron" in html
+    assert "context-coverage-note" in html
+    assert 'document.getElementById("context-coverage-note").textContent = coverageNoteText(response);' in script
+    context_body = script.split("function renderContextStrip", 1)[1].split("function renderBreadcrumb", 1)[0]
+    assert "runtime.display_label" not in context_body
+    assert "`${available} из ${requested} периодов доступны`" not in context_body
+    assert 'INCLUDE: `${scopeName} включена`' in script
+    assert 'EXCLUDE: `${scopeName} исключена`' in script
+    period_body = css.split(".period-control {", 1)[1].split(".period-mode", 1)[0]
+    assert "background: transparent;" in period_body
+    assert "border-radius: 0;" in period_body
+    active_mode_body = css.split(".mode-button.is-active {", 1)[1].split(".period-fields", 1)[0]
+    assert "var(--brand-secondary)" not in active_mode_body
+    assert "rgba(42, 125, 225, 0.1)" in active_mode_body
 
 
 def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> None:

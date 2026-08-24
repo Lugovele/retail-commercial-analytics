@@ -9,18 +9,20 @@
   <body>
     <div class="app-shell">
       <header class="app-header">
-        <div class="brand-block">
-          <p class="eyebrow">аналитика продаж</p>
-          <h1>Аналитика продаж</h1>
+        <h1 class="app-title">АНАЛИТИКА ПРОДАЖ</h1>
+        <div class="app-header-actions" aria-label="Действия приложения">
+          <button type="button" class="header-link" data-header-action="reports">ОТЧЁТЫ</button>
+          <button type="button" class="header-icon" data-header-action="settings" aria-label="Настройки" title="Настройки">⚙</button>
+          <button type="button" class="header-icon" data-header-action="help" aria-label="Помощь" title="Помощь">?</button>
         </div>
-        <nav class="workflow-nav" aria-label="Разделы аналитики">
-          <button type="button" class="nav-item is-active" data-view="overview">Обзор</button>
-          <button type="button" class="nav-item" data-view="market" aria-disabled="true" title="Будет раскрыто в следующей фазе">Рынок и ассортимент</button>
-          <button type="button" class="nav-item" data-view="signals" aria-disabled="true" title="Полный список сигналов будет раскрыт позже">Сигналы</button>
-          <button type="button" class="nav-item" data-view="data" aria-disabled="true" title="Данные и качество будут раскрыты позже">Данные и качество</button>
-        </nav>
-        <div class="system-state" id="system-state" role="status">Загрузка данных</div>
       </header>
+      <nav class="workflow-nav" aria-label="Разделы аналитики">
+        <button type="button" class="nav-item is-active" data-view="overview">Обзор</button>
+        <button type="button" class="nav-item" data-view="market" aria-disabled="true" title="Будет раскрыто в следующей фазе">Рынок и ассортимент</button>
+        <button type="button" class="nav-item" data-view="signals" aria-disabled="true" title="Полный список сигналов будет раскрыт позже">Сигналы</button>
+        <button type="button" class="nav-item" data-view="data" aria-disabled="true" title="Данные и качество будут раскрыты позже">Данные и качество</button>
+      </nav>
+      <div class="system-state visually-hidden" id="system-state" role="status">Загрузка данных</div>
 
       <main>
         <section class="scope-panel" aria-label="Аналитический срез">
@@ -75,7 +77,11 @@
           </div>
 
           <details class="filter-drawer">
-            <summary>Фильтры</summary>
+            <summary>
+              <span>Фильтры</span>
+              <span class="filter-count" id="filter-count">0 выбрано</span>
+              <span class="filter-chevron" aria-hidden="true">⌄</span>
+            </summary>
             <div class="filter-grid">
               <label class="control">
                 <span>Категория</span>
@@ -118,6 +124,7 @@
         </section>
 
         <p class="context-strip" id="context-strip"></p>
+        <p class="context-coverage-note" id="context-coverage-note"></p>
 
         <section class="breadcrumb-row" aria-label="Иерархия среза">
           <button type="button" class="crumb is-active" data-drill-grain="network">Все данные</button>

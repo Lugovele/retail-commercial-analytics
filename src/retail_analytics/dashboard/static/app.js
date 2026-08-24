@@ -87,6 +87,9 @@ function bindStaticControls() {
       document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("is-active", item === button));
     });
   });
+  document.querySelectorAll("[data-header-action]").forEach((button) => {
+    button.addEventListener("click", () => showToast("Раздел будет доступен позже."));
+  });
 
   document.querySelectorAll("[data-drill-grain]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -487,19 +490,16 @@ function renderOverviewTable() {
 }
 
 function renderContextStrip() {
-  const runtime = selectedRetailer();
   const response = state.summaryResponse;
   if (!response) return;
   updateComparisonPeriodDisplay(response);
-  const available = response.available_periods.length;
-  const requested = available + response.missing_periods.length;
+  updateFilterCount();
   document.getElementById("context-strip").textContent = [
-    runtime.display_label,
     periodContextText(),
     contextFilterText(),
-    privateLabelScopeText(response.private_label_scope),
-    `${available} из ${requested} периодов доступны`
+    privateLabelScopeText(response.private_label_scope)
   ].filter(Boolean).join(" · ");
+  document.getElementById("context-coverage-note").textContent = coverageNoteText(response);
 }
 
 function renderBreadcrumb() {
@@ -812,10 +812,24 @@ function contextFilterText() {
 function privateLabelScopeText(scope) {
   const scopeName = selectedRetailer().private_label_display_name;
   return {
-    INCLUDE: `${scopeName} включены`,
-    EXCLUDE: `${scopeName} исключены`,
+    INCLUDE: `${scopeName} включена`,
+    EXCLUDE: `${scopeName} исключена`,
     ONLY: `только ${scopeName}`
   }[scope] || scope;
+}
+
+function coverageNoteText(response) {
+  if (!response?.missing_periods?.length) return "";
+  const available = response.available_periods.length;
+  const requested = available + response.missing_periods.length;
+  return `Покрытие: ${available} из ${requested} периодов. Пропущены: ${response.missing_periods.map(formatPeriod).join(", ")}`;
+}
+
+function updateFilterCount() {
+  const count = Object.keys(selectedFilterValues()).length;
+  const target = document.getElementById("filter-count");
+  if (!target) return;
+  target.textContent = count ? `${count} выбрано` : "0 выбрано";
 }
 
 function entityDisplayLabel(grain, entityId) {
