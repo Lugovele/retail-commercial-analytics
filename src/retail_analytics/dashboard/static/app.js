@@ -98,7 +98,7 @@ function bindStaticControls() {
 
 async function loadRuntime() {
   state.runtime = await getJson("/api/dashboard/runtime");
-  document.getElementById("system-state").textContent = "Backend context ready";
+  document.getElementById("system-state").textContent = "Контекст витрины готов";
 }
 
 async function loadCatalog() {
@@ -176,7 +176,7 @@ async function runQuery() {
     renderAll();
     setLoading(false);
   } catch (error) {
-    setLoading(false, `Ошибка backend: ${error.message}`);
+    setLoading(false, `Ошибка витрины: ${error.message}`);
   }
 }
 
@@ -242,6 +242,17 @@ function comparisonLabel(mode) {
   return comparisonLabels[mode] || mode;
 }
 
+function statusLabel(status) {
+  return {
+    READY: "Готово",
+    PARTIAL: "Частично",
+    NOT_AVAILABLE: "Недоступно",
+    NOT_APPLICABLE: "Не применимо",
+    COMPLETE: "Полное",
+    UNSUPPORTED: "Не поддерживается"
+  }[status] || status;
+}
+
 function renderChartMetricOptions() {
   const select = document.getElementById("chart-metric");
   const metrics = metricGroups[state.metricGroup].filter((concept) => catalogEntry(concept));
@@ -272,12 +283,12 @@ function renderChart() {
   const entry = catalogEntry(state.chartMetric);
   const box = document.getElementById("chart-box");
   if (!result) {
-    replaceWithMessage(box, "empty-state", "Метрика недоступна в текущем catalog scope.");
+    replaceWithMessage(box, "empty-state", "Показатель недоступен в текущем срезе каталога.");
     return;
   }
   const points = result.period_values.map((item) => ({ period: item.period_start, value: item.value })).filter((item) => item.value !== null);
   if (!points.length) {
-    replaceWithMessage(box, "limitation", `Range value unavailable: ${result.limitations.join(", ") || "no period values"}`);
+    replaceWithMessage(box, "limitation", `Значение диапазона недоступно: ${result.limitations.join(", ") || "нет периодов"}`);
     return;
   }
   box.replaceChildren();
@@ -288,7 +299,7 @@ function buildSvgChart(points, entry) {
   const width = 760;
   const height = 320;
   const pad = { left: 60, right: 24, top: 20, bottom: 48 };
-  const svg = svgEl("svg", { class: "chart-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${entry.display_label} trend` });
+  const svg = svgEl("svg", { class: "chart-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${entry.display_label}: динамика` });
   const values = points.map((point) => point.value);
   const max = Math.max(...values, 1);
   const min = Math.min(0, ...values);
@@ -328,7 +339,7 @@ function buildSvgChart(points, entry) {
 function renderComparisonTable() {
   const table = document.getElementById("comparison-table");
   if (state.periodMode !== "SINGLE_PERIOD" || !state.response.comparisons.length) {
-    renderMessageRow(table, "Нет валидного A/B сравнения для текущего scope.");
+    renderMessageRow(table, "Нет валидного A/B сравнения для текущего среза.");
     return;
   }
   const rows = state.response.comparisons.slice(0, 6).map((item) => {
@@ -336,7 +347,7 @@ function renderComparisonTable() {
     const entry = catalogEntry(concept);
     return [entry?.display_label || item.metric_definition_id, item.current_value, item.comparison_value, item.delta, item.pct_delta, entry?.format || "decimal"];
   });
-  renderRows(table, ["metric", "A", "B", "delta", "%"], rows.map((row) => [
+  renderRows(table, ["Показатель", "A", "B", "Отклонение", "%"], rows.map((row) => [
     row[0],
     formatValue(row[1], row[5]),
     formatValue(row[2], row[5]),
@@ -349,7 +360,7 @@ function renderDetailTable() {
   const table = document.getElementById("detail-table");
   const concepts = columnGroups[state.columnGroup];
   if (!concepts.length) {
-    renderMessageRow(table, "Колонная группа пока не поддержана backend catalog для UI-1.", "limitation");
+    renderMessageRow(table, "Группа колонок пока не поддержана каталогом витрины.", "limitation");
     return;
   }
   const rows = [[entityForGrain(state.grain), ...concepts.map((concept) => {
@@ -370,22 +381,22 @@ function renderSourceTable() {
     formatValue(period.value, "currency"),
     period.quality_status
   ]);
-  renderRows(table, ["period", "entity", "source period", "revenue", "quality"], rows);
+  renderRows(table, ["Период", "Объект", "Период источника", "Оборот", "Качество данных"], rows);
 }
 
 function renderBusiness() {
   const list = document.getElementById("business-list");
   const items = [
-    ["Category share", "READY", "Отображается только при наличии declared share_scope и backend components."],
-    ["Manufacturer ranking", "PARTIAL", "Extended analytics panel вынесен в следующий UI unit по architecture split."],
-    ["ABC / SKU tiering", "PARTIAL", "Business-rule resolution не подтверждает user-facing tiering labels как готовый статус."],
-    ["Brand status", "PARTIAL", "Показывать оценочные labels нельзя без утверждённой политики."],
-    ["Broad competitors", "PARTIAL", "Доступно только через подтверждённые backend projections, не в UI-1."]
+    ["Доля в категории", "READY", "Показывается только при наличии объявленного среза знаменателя и компонентов витрины."],
+    ["Место производителя", "PARTIAL", "Расширенная панель бизнес-оценок будет подключена отдельным этапом интерфейса."],
+    ["ABC / группировка SKU", "PARTIAL", "Бизнес-ревью не подтвердило пользовательский термин группировки как готовый статус."],
+    ["Статус бренда", "PARTIAL", "Оценочные статусы нельзя показывать без утверждённой политики."],
+    ["Широкий пул конкурентов", "PARTIAL", "Доступен только через подтверждённые проекции витрины; отдельная панель будет подключена позже."]
   ];
   list.replaceChildren(...items.map(([title, status, text]) => {
     const node = document.createElement("article");
     node.className = "business-item";
-    appendText(node, "strong", `${title} · ${status}`);
+    appendText(node, "strong", `${title} · ${statusLabel(status)}`);
     appendText(node, "span", text);
     return node;
   }));
@@ -395,15 +406,15 @@ function renderSignals() {
   const list = document.getElementById("signal-list");
   const limitationCodes = state.response.limitations.map((item) => item.issue_code);
   const items = [
-    ["Coverage", state.response.coverage_status, `${state.response.available_periods.length} available · ${state.response.missing_periods.length} missing`],
-    ["Range limitations", limitationCodes.length ? limitationCodes.join(", ") : "No limitations returned"],
-    ["Event windows", "Недоступно", "EDLP/stability windows требуют дополнительной семантики."]
+    ["Покрытие периода", state.response.coverage_status, `${state.response.available_periods.length} доступно · ${state.response.missing_periods.length} пропущено`],
+    ["Ограничения диапазона", limitationCodes.length ? limitationCodes.join(", ") : "Ограничения не возвращены"],
+    ["Окна событий", "Недоступно", "Окна EDLP/стабильности требуют дополнительной семантики."]
   ];
   list.replaceChildren(...items.map(([title, status, text]) => {
     const node = document.createElement("article");
     node.className = "signal-item";
     const strong = appendText(node, "strong", `${title} · `);
-    const statusNode = appendText(strong, "span", status);
+    const statusNode = appendText(strong, "span", statusLabel(status));
     statusNode.className = "severity-warning";
     appendText(node, "span", text);
     return node;
@@ -416,8 +427,8 @@ function openProvenance() {
   const provenance = result?.provenance;
   content.replaceChildren();
   if (!provenance) {
-    appendText(content, "dt", "Provenance");
-    appendText(content, "dd", "Backend provenance is unavailable for this value.");
+    appendText(content, "dt", "Происхождение");
+    appendText(content, "dd", "Происхождение из витрины недоступно для этого значения.");
   }
   Object.entries(provenanceFields(provenance || {})).forEach(([key, value]) => {
     appendText(content, "dt", key);
@@ -438,36 +449,36 @@ function provenanceFields(provenance) {
   const source = provenance.source_evidence || {};
   const quality = provenance.quality || {};
   return {
-    "Current analytical scope": compactJson(scope),
-    "Retailer / source": [scope.retailer_id, scope.source_id].filter(Boolean).join(" / ") || "n/a",
-    "Period or comparison periods": compactJson({
+    "Текущий срез": compactJson(scope),
+    "Сеть / источник": [scope.retailer_id, scope.source_id].filter(Boolean).join(" / ") || "н/д",
+    "Период или периоды сравнения": compactJson({
       requested: scope.requested_periods,
       available: scope.available_periods,
       missing: scope.missing_periods,
       comparison: comparison.periods
     }),
-    "Grain / entity": [scope.grain_id, scope.entity_id].filter(Boolean).join(" / ") || "n/a",
-    "Metric concept": metric.metric_concept || "n/a",
-    "Metric definition": [metric.metric_definition_id, metric.metric_definition_version, metric.metric_config_hash].filter(Boolean).join(" / ") || "n/a",
-    "Value": value.value ?? "n/a",
-    "Numerator": value.numerator_value ?? "n/a",
-    "Denominator": value.denominator_value ?? "n/a",
-    "Aggregation / range strategy": value.range_aggregation_strategy || "n/a",
-    "Comparison type / quality": [comparison.comparison_mode, (comparison.quality_statuses || []).join(", ") || comparison.status].filter(Boolean).join(" / "),
-    "Business rule": [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "n/a",
-    "Analysis run": (run.analysis_run_ids || []).join(", ") || "n/a",
-    "Mart build": run.mart_build_id || "n/a",
-    "Source revision": (run.source_revision_ids || []).join(", ") || "n/a",
-    "Source evidence": source.status || "n/a",
-    "Quality flags": compactJson(quality),
-    "Scope including STM": scope.private_label_scope || "n/a",
-    "Missing provenance fields": (provenance.missing_fields || []).join(", ") || "None"
+    "Гранулярность / объект": [scope.grain_id, scope.entity_id].filter(Boolean).join(" / ") || "н/д",
+    "Показатель": metric.metric_concept || "н/д",
+    "Определение показателя": [metric.metric_definition_id, metric.metric_definition_version, metric.metric_config_hash].filter(Boolean).join(" / ") || "н/д",
+    "Значение": value.value ?? "н/д",
+    "Числитель": value.numerator_value ?? "н/д",
+    "Знаменатель": value.denominator_value ?? "н/д",
+    "Агрегация / стратегия диапазона": value.range_aggregation_strategy || "н/д",
+    "Тип сравнения / качество": [comparison.comparison_mode, (comparison.quality_statuses || []).join(", ") || comparison.status].filter(Boolean).join(" / "),
+    "Бизнес-правило": [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "н/д",
+    "Запуск анализа": (run.analysis_run_ids || []).join(", ") || "н/д",
+    "Версия аналитической витрины": run.mart_build_id || "н/д",
+    "Ревизия источника": (run.source_revision_ids || []).join(", ") || "н/д",
+    "Доказательство по источнику": source.status || "н/д",
+    "Качество данных": compactJson(quality),
+    "Срез с учётом выбранного ассортимента": scope.private_label_scope || "н/д",
+    "Недостающие поля происхождения": (provenance.missing_fields || []).join(", ") || "нет"
   };
 }
 
 function compactJson(value) {
-  if (value === null || value === undefined) return "n/a";
-  if (Array.isArray(value)) return value.length ? value.join(", ") : "None";
+  if (value === null || value === undefined) return "н/д";
+  if (Array.isArray(value)) return value.length ? value.join(", ") : "нет";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 }
@@ -581,7 +592,7 @@ function applyFilterGrain(filterId) {
 
 function syncFilterAvailability() {
   ["category-filter", "manufacturer-filter", "brand-filter", "sku-filter", "store-filter"].forEach((id) => {
-    document.getElementById(id).title = "Выбор меняет grain/entity scope запроса";
+    document.getElementById(id).title = "Выбор меняет гранулярность и объект запроса";
   });
 }
 
@@ -633,7 +644,7 @@ function replaceWithMessage(parent, className, message) {
 
 function formatValue(value, format) {
   if (value === null || value === undefined || Number.isNaN(value)) {
-    return "n/a";
+    return "н/д";
   }
   if (format === "currency") {
     return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
@@ -670,7 +681,7 @@ function option(value, label) {
 }
 
 function setLoading(isLoading, message) {
-  document.getElementById("system-state").textContent = message || (isLoading ? "Запрос к mart/query" : "Backend context ready");
+  document.getElementById("system-state").textContent = message || (isLoading ? "Запрос к витрине" : "Контекст витрины готов");
 }
 
 async function getJson(url) {

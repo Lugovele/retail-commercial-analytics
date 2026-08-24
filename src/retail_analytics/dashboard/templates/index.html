@@ -10,10 +10,10 @@
     <div class="app-shell">
       <header class="topbar">
         <div>
-          <p class="eyebrow">dashboard</p>
+          <p class="eyebrow">аналитическая витрина</p>
           <h1>Аналитика продаж</h1>
         </div>
-        <div class="system-state" id="system-state" role="status">Загрузка backend context</div>
+        <div class="system-state" id="system-state" role="status">Загрузка контекста витрины</div>
       </header>
 
       <main>
@@ -35,7 +35,7 @@
               </label>
               <div class="derived-field">
                 <span>Период B</span>
-                <strong id="period-b-derived">Определяется backend</strong>
+                <strong id="period-b-derived">Определяется витриной</strong>
               </div>
               <label>
                 <span>Тип сравнения</span>
@@ -59,7 +59,7 @@
             </div>
           </div>
 
-          <div class="secondary-filters" aria-label="Secondary filters">
+          <div class="secondary-filters" aria-label="Вторичные фильтры">
             <label>
               <span>Категория</span>
               <select id="category-filter"></select>
@@ -85,11 +85,11 @@
               <span id="private-label-label">Учитывать выбранный ассортимент</span>
             </label>
             <label>
-              <span>Аналитический scope</span>
+              <span>Аналитический срез</span>
               <select id="private-label-scope">
-                <option value="INCLUDE">INCLUDE</option>
-                <option value="EXCLUDE">EXCLUDE</option>
-                <option value="ONLY">ONLY</option>
+                <option value="INCLUDE">Включить</option>
+                <option value="EXCLUDE">Исключить</option>
+                <option value="ONLY">Только выбранный ассортимент</option>
               </select>
             </label>
           </div>
@@ -110,7 +110,7 @@
             <div class="section-heading">
               <div>
                 <h2>Исходные данные</h2>
-                <p>Строки source-like view для выбранного scope; технический audit доступен через lineage.</p>
+                <p>Строки, близкие к исходному представлению, для выбранного среза; техническая проверка доступна через происхождение.</p>
               </div>
               <button type="button" class="icon-text" data-open-provenance>Откуда эта цифра?</button>
             </div>
@@ -181,7 +181,7 @@
             <div class="section-heading">
               <div>
                 <h2>Бизнес-оценки</h2>
-                <p>Только deterministic projections; неподтверждённые статусы не показываются как факты.</p>
+                <p>Только проверенные аналитические проекции; неподтверждённые статусы не показываются как факты.</p>
               </div>
             </div>
             <div class="business-list" id="business-list"></div>
@@ -191,7 +191,7 @@
             <div class="section-heading">
               <div>
                 <h2>Сигналы</h2>
-                <p>Attention list строится из подтверждённых deterministic сигналов и ограничений backend.</p>
+                <p>Список внимания строится из подтверждённых сигналов и ограничений витрины.</p>
               </div>
             </div>
             <div class="signal-list" id="signal-list"></div>
@@ -200,7 +200,7 @@
           <section class="tab-panel" id="tab-recommendations">
             <div class="disabled-panel">
               <h2>Рекомендации</h2>
-              <p>В разработке. Раздел будет подключён после появления deterministic recommendation backend.</p>
+              <p>В разработке. Раздел будет подключён после появления проверенного механизма рекомендаций.</p>
               <span>Сейчас интерфейс не генерирует рекомендации и не добавляет AI-логику.</span>
             </div>
           </section>

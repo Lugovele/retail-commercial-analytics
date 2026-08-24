@@ -138,6 +138,60 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert 'id="period-b"' not in html
 
 
+def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> None:
+    html = (
+        resources.files("retail_analytics.dashboard.templates")
+        .joinpath("index.html")
+        .read_text(encoding="utf-8")
+    )
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    surface = f"{html}\n{script}"
+
+    expected = (
+        "Период",
+        "Объект",
+        "Период источника",
+        "Оборот",
+        "Качество данных",
+        "Доля в категории",
+        "Место производителя",
+        "Покрытие периода",
+        "Ограничения диапазона",
+        "Окна событий",
+        "Контекст витрины готов",
+        "Определяется витриной",
+        "Группа колонок пока не поддержана каталогом витрины",
+        "Ошибка витрины",
+        "н/д",
+    )
+    forbidden = (
+        "Category share",
+        "Manufacturer ranking",
+        "Coverage",
+        "Range limitations",
+        "Event windows",
+        "Backend context ready",
+        "Range value unavailable",
+        "Определяется backend",
+        "source-like view",
+        "technical audit",
+        "Attention list",
+        "deterministic",
+        "backend catalog",
+        "UI unit",
+        "grain/entity scope",
+        "Ошибка backend",
+        "n/a",
+    )
+
+    assert all(label in surface for label in expected)
+    assert not any(label in surface for label in forbidden)
+
+
 def test_folder_tabs_use_wrapping_without_visible_horizontal_scrollbar() -> None:
     css = (
         resources.files("retail_analytics.dashboard.static")
@@ -193,3 +247,53 @@ def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:
     assert "source_evidence" in script
     assert "Provided by backend audit metadata" not in script
     assert "const lineage = result?.lineage" not in script
+
+
+def test_provenance_drawer_uses_russian_presentation_labels() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    expected = (
+        "Текущий срез",
+        "Сеть / источник",
+        "Период или периоды сравнения",
+        "Гранулярность / объект",
+        "Определение показателя",
+        "Числитель",
+        "Знаменатель",
+        "Агрегация / стратегия диапазона",
+        "Тип сравнения / качество",
+        "Бизнес-правило",
+        "Запуск анализа",
+        "Версия аналитической витрины",
+        "Ревизия источника",
+        "Доказательство по источнику",
+        "Качество данных",
+        "Срез с учётом выбранного ассортимента",
+        "Недостающие поля происхождения",
+    )
+    forbidden = (
+        "Current analytical scope",
+        "Retailer / source",
+        "Period or comparison periods",
+        "Grain / entity",
+        "Metric definition",
+        "Numerator",
+        "Denominator",
+        "Aggregation / range strategy",
+        "Comparison type / quality",
+        "Business rule",
+        "Analysis run",
+        "Mart build",
+        "Source revision",
+        "Source evidence",
+        "Quality flags",
+        "Scope including STM",
+        "Missing provenance fields",
+    )
+
+    assert all(label in script for label in expected)
+    assert not any(label in script for label in forbidden)
