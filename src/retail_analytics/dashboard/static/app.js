@@ -6,11 +6,15 @@ const state = {
   chartResponse: null,
   tableResponse: null,
   contributionResponse: null,
+  salesDriversResponse: null,
+  salesDriversChartResponse: null,
+  salesDriversTableResponse: null,
   activeView: "overview",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
   chartMetric: "revenue",
+  salesDriverMetric: "revenue",
   previewGrain: "category",
   tablePageSize: 40,
   overviewPreviewRowLimit: 8,
@@ -80,6 +84,30 @@ const driverBucketsByGrain = {
     { title: "Структура", concepts: ["sku_count", "brand_count"] }
   ]
 };
+const salesDriverBuckets = [
+  { title: "Результат", concepts: ["revenue"] },
+  { title: "Объём", concepts: ["units"] },
+  { title: "Цена", concepts: ["weighted_shelf_price_vat", "weighted_input_price_vat"] },
+  { title: "Присутствие", concepts: ["selling_store_count", "distribution"] },
+  { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+  { title: "Экономика", concepts: ["retailer_margin_abs", "retailer_margin_pct"] },
+  { title: "Структура", concepts: ["sku_count", "brand_count", "category_count"] }
+];
+const salesDriverGrainSupport = {
+  revenue: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  units: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  retailer_margin_abs: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  retailer_margin_pct: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  weighted_shelf_price_vat: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  weighted_input_price_vat: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  selling_store_count: ["network", "category", "manufacturer", "brand", "sku"],
+  distribution: ["category", "manufacturer", "brand", "sku"],
+  velocity: ["category", "manufacturer", "brand", "sku"],
+  revenue_velocity: ["category", "manufacturer", "brand", "sku"],
+  sku_count: ["network", "category", "manufacturer", "brand", "store"],
+  brand_count: ["network", "category", "manufacturer", "store"],
+  category_count: ["network", "manufacturer", "store"]
+};
 const previewColumns = {
   category: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count", "selling_store_count"],
   manufacturer: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
@@ -137,7 +165,7 @@ function bindStaticControls() {
         item.classList.toggle("is-active", item === button);
       });
       updatePeriodPanels();
-      await runOverviewQuery();
+      await runActiveViewQuery();
     });
   });
 
@@ -164,7 +192,7 @@ function bindStaticControls() {
     resetAllEntityFilters();
     await refreshRuntimeOptions();
     updatePreviewGrain();
-    await runOverviewQuery();
+    await runActiveViewQuery();
   });
   const filterDrawer = document.querySelector(".filter-drawer");
   filterDrawer?.querySelector("summary")?.setAttribute("aria-expanded", filterDrawer.open ? "true" : "false");
@@ -184,16 +212,16 @@ async function initializeDashboard() {
     updatePeriodPanels();
     updatePrivateLabelTerminology();
     updatePreviewGrain();
-    setActiveView(state.activeView);
+    setActiveView(state.activeView, { refresh: false });
     renderChartMetricOptions();
-    await runOverviewQuery();
+    await runActiveViewQuery();
   } catch (error) {
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
 }
 
-function setActiveView(view) {
+function setActiveView(view, { refresh = true } = {}) {
   const target = view || "overview";
   state.activeView = target;
   document.querySelectorAll("[data-view]").forEach((button) => {
@@ -209,6 +237,7 @@ function setActiveView(view) {
     const isActive = panel.dataset.viewPanel === target;
     panel.classList.toggle("is-hidden", !isActive);
   });
+  if (refresh) void runActiveViewQuery();
 }
 
 function setupRetailerControl() {
@@ -225,7 +254,7 @@ function setupRetailerControl() {
     await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
     updatePrivateLabelTerminology();
     updatePreviewGrain();
-    await runOverviewQuery();
+    await runActiveViewQuery();
   });
 }
 
@@ -248,12 +277,12 @@ function renderRetailerIdentity() {
 function bindDynamicControls() {
   document.getElementById("comparison-mode").addEventListener("change", async (event) => {
     state.comparisonMode = event.target.value;
-    await runOverviewQuery();
+    await runActiveViewQuery();
   });
   document.getElementById("private-label-toggle").addEventListener("change", async (event) => {
     document.getElementById("private-label-scope").value = event.target.checked ? "INCLUDE" : "EXCLUDE";
     await refreshRuntimeOptions({ resetEntities: true });
-    await runOverviewQuery();
+    await runActiveViewQuery();
   });
   document.getElementById("chart-metric").addEventListener("change", async (event) => {
     state.chartMetric = event.target.value;
@@ -272,7 +301,7 @@ function bindDynamicControls() {
       applyFilterDrilldown(id);
       await refreshRuntimeOptions();
       updatePreviewGrain();
-      await runOverviewQuery();
+      await runActiveViewQuery();
     });
   }
 
@@ -297,16 +326,17 @@ function bindDynamicControls() {
       clearEntityFilter(button.dataset.clearFilter);
       await refreshRuntimeOptions();
       updatePreviewGrain();
-      await runOverviewQuery();
+      await runActiveViewQuery();
     });
   });
 
   ["period-single", "period-a", "date-from", "date-to"].forEach((id) => {
     document.getElementById(id).addEventListener("change", async () => {
       await refreshRuntimeOptions({ resetEntities: true });
-      await runOverviewQuery();
+      await runActiveViewQuery();
     });
   });
+  document.getElementById("sales-drivers-provenance")?.addEventListener("click", () => openSalesDriverProvenance());
 }
 
 async function loadCatalog() {
@@ -358,6 +388,16 @@ function setupPeriodSelect(id, selected, resetSelection) {
     : selected;
 }
 
+async function runActiveViewQuery() {
+  if (state.activeView === "sales_drivers") {
+    await runSalesDriversQuery();
+    return;
+  }
+  if (state.activeView === "overview") {
+    await runOverviewQuery();
+  }
+}
+
 async function runOverviewQuery() {
   setLoading(true, "Запрос к витрине");
   renderSkeletons();
@@ -370,6 +410,31 @@ async function runOverviewQuery() {
     state.contributionResponse = await loadContributionRows();
     state.tableResponse = await postJson("/api/dashboard/query", previewPayload);
     renderOverview();
+    setLoading(false, "Данные обновлены");
+  } catch (error) {
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
+  }
+}
+
+async function runSalesDriversQuery() {
+  setLoading(true, "Запрос к витрине");
+  renderSalesDriverSkeletons();
+  try {
+    const concepts = salesDriverConcepts();
+    if (!concepts.length) {
+      renderSalesDriversUnavailable("Для выбранного среза нет поддержанных показателей.");
+      setLoading(false, "Данные обновлены");
+      return;
+    }
+    if (!concepts.includes(state.salesDriverMetric)) state.salesDriverMetric = concepts[0];
+    const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts);
+    const chartPayload = buildSalesDriverChartQueryPayload();
+    const detailPayload = buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts());
+    state.salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);
+    state.salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);
+    state.salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);
+    renderSalesDrivers();
     setLoading(false, "Данные обновлены");
   } catch (error) {
     setLoading(false, "Не удалось загрузить данные.");
@@ -417,6 +482,19 @@ function buildChartQueryPayload() {
   };
 }
 
+function buildSalesDriverChartQueryPayload() {
+  const periods = state.options.periods.map((period) => period.value);
+  const dateFrom = state.periodMode === "DATE_RANGE" ? selectedDateFrom() : periods[0] || selectedDateFrom();
+  const dateTo = state.periodMode === "DATE_RANGE" ? selectedDateTo() : periods[periods.length - 1] || selectedDateTo();
+  return {
+    ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), [state.salesDriverMetric]),
+    date_from: dateFrom,
+    date_to: dateTo,
+    period_mode: "DATE_RANGE",
+    comparison_mode: "NONE"
+  };
+}
+
 function buildContributionPayload() {
   if (state.periodMode !== "COMPARE") return null;
   const metricConcept = contributionMetricForOverview();
@@ -457,8 +535,19 @@ function overviewConcepts() {
     .filter((concept) => catalogEntry(concept));
 }
 
+function salesDriverConcepts() {
+  return [...new Set(salesDriverBuckets.flatMap((group) => group.concepts))]
+    .filter((concept) => salesDriverMetricEntry(concept));
+}
+
 function tableConcepts() {
   return previewColumns[state.previewGrain].filter((concept) => catalogEntry(concept));
+}
+
+function salesDriverDetailConcepts() {
+  const grain = salesDriverDetailGrain();
+  return (previewColumns[grain] || ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"])
+    .filter((concept) => metricEntryForGrain(concept, grain));
 }
 
 function renderOverview() {
@@ -471,6 +560,14 @@ function renderOverview() {
   renderDiagnosis();
   renderAttention();
   renderOverviewTable();
+}
+
+function renderSalesDrivers() {
+  renderContextStripForResponse(state.salesDriversResponse);
+  renderBreadcrumb();
+  renderSalesDriverMatrix();
+  renderSalesDriverTrend();
+  renderSalesDriverDetailTable();
 }
 
 function renderKpis() {
@@ -637,6 +734,196 @@ function renderDiagnosis() {
   grid.replaceChildren(...cards);
 }
 
+function renderSalesDriverMatrix() {
+  const table = document.getElementById("sales-drivers-matrix");
+  if (!state.salesDriversResponse?.metric_results?.length) {
+    renderMessageRow(table, "За выбранный период данных нет.");
+    document.getElementById("sales-drivers-context").textContent = "Нет данных для выбранного среза.";
+    return;
+  }
+  const headers = salesDriverMatrixHeaders();
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headers.forEach((header) => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = header;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  const tbody = document.createElement("tbody");
+  salesDriverRows().forEach(({ group, concept, result, entry }) => {
+    const tr = document.createElement("tr");
+    tr.className = concept === state.salesDriverMetric ? "is-selected" : "";
+    const groupCell = document.createElement("td");
+    groupCell.textContent = group;
+    tr.appendChild(groupCell);
+    const metricCell = document.createElement("td");
+    const metricButton = document.createElement("button");
+    metricButton.type = "button";
+    metricButton.className = "table-link";
+    metricButton.textContent = displayLabel(concept);
+    metricButton.setAttribute("aria-pressed", concept === state.salesDriverMetric ? "true" : "false");
+    metricButton.addEventListener("click", async () => {
+      state.salesDriverMetric = concept;
+      await runSalesDriversQuery();
+    });
+    metricCell.appendChild(metricButton);
+    tr.appendChild(metricCell);
+    salesDriverMetricCells(result, entry).forEach((value) => {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+    const actionCell = document.createElement("td");
+    if (result?.provenance) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "inline-link";
+      button.textContent = "Откуда?";
+      button.addEventListener("click", () => openProvenance(concept));
+      actionCell.appendChild(button);
+    } else {
+      actionCell.textContent = "н/д";
+    }
+    tr.appendChild(actionCell);
+    tbody.appendChild(tr);
+  });
+  table.replaceChildren(thead, tbody);
+  const caption = table.createCaption();
+  caption.textContent = salesDriverMatrixCaption();
+  document.getElementById("sales-drivers-context").textContent = salesDriversContextText();
+}
+
+function salesDriverMatrixHeaders() {
+  if (state.periodMode === "COMPARE") {
+    return ["Группа", "Показатель", "Сейчас", "Сравнение", "Изменение", "Доказательство"];
+  }
+  if (state.periodMode === "DATE_RANGE") return ["Группа", "Показатель", "Диапазон", "Статус", "Доказательство"];
+  return ["Группа", "Показатель", "Сейчас", "Статус", "Доказательство"];
+}
+
+function salesDriverRows() {
+  const rows = [];
+  salesDriverBuckets.forEach((bucket) => {
+    bucket.concepts
+      .filter((concept) => salesDriverMetricEntry(concept))
+      .forEach((concept) => {
+        rows.push({
+          group: bucket.title,
+          concept,
+          result: salesDriverResultFor(concept),
+          entry: catalogEntry(concept)
+        });
+      });
+  });
+  return rows;
+}
+
+function salesDriverMetricCells(result, entry) {
+  if (!result || !entry) {
+    return state.periodMode === "COMPARE"
+      ? ["Недоступно", "Недоступно", "Недоступно"]
+      : ["Недоступно", "Показатель недоступен для выбранного среза."];
+  }
+  const limitation = limitationText(result);
+  if (state.periodMode === "DATE_RANGE") {
+    if (entry.range_aggregation_strategy === "period_only" || result.limitations?.includes("range_aggregation_period_only")) {
+      return ["Недоступно", "Показатель доступен только по отдельным периодам."];
+    }
+    return [compactMetricText(result, entry), limitation || "Показано за доступные периоды диапазона."];
+  }
+  if (state.periodMode === "SINGLE_PERIOD") {
+    return [formatValue(result.value, entry.format), limitation || "Состояние за выбранный период."];
+  }
+  const comparison = comparisonFor(state.salesDriversResponse, result);
+  if (!comparison) {
+    return [formatValue(result.value, entry.format), "Нет периода", "Нет подходящего периода сравнения."];
+  }
+  const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
+  return [
+    formatValue(comparison.current_value, entry.format),
+    formatValue(comparison.comparison_value, entry.format),
+    `${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`
+  ];
+}
+
+function renderSalesDriverTrend() {
+  const result = salesDriverChartResultFor(state.salesDriverMetric) || salesDriverResultFor(state.salesDriverMetric);
+  const entry = catalogEntry(state.salesDriverMetric);
+  const box = document.getElementById("sales-drivers-chart-box");
+  const footnote = document.getElementById("sales-drivers-chart-footnote");
+  document.getElementById("sales-drivers-trend-title").textContent = entry ? `Динамика: ${entry.display_label}` : "Динамика показателя";
+  document.getElementById("sales-drivers-trend-context").textContent =
+    "Один выбранный показатель, фактические доступные периоды без заполнения пропусков.";
+  if (!result || !entry) {
+    replaceWithMessage(box, "empty-state", "Показатель недоступен для выбранного среза.");
+    footnote.textContent = "";
+    return;
+  }
+  const points = result.period_values
+    .map((item) => ({ period: item.period_start, value: item.value }))
+    .filter((item) => item.value !== null && item.value !== undefined);
+  if (!points.length) {
+    replaceWithMessage(box, "empty-state", "За выбранный период данных нет.");
+    footnote.textContent = limitationText(result);
+    return;
+  }
+  box.replaceChildren(buildSvgChart(points, entry));
+  const missing = (state.salesDriversChartResponse?.missing_periods || []).map(formatPeriod).join(", ");
+  footnote.textContent = [
+    missing ? `Пропущены периоды: ${missing}` : "Показаны только реальные доступные периоды.",
+    limitationText(result)
+  ].filter(Boolean).join(" ");
+}
+
+function renderSalesDriverDetailTable() {
+  const table = document.getElementById("sales-drivers-detail-table");
+  const grain = salesDriverDetailGrain();
+  const concepts = salesDriverDetailConcepts();
+  const headers = [grainLabels[grain], ...concepts.map(displayLabel)];
+  document.getElementById("sales-drivers-table-title").textContent = `${grainLabels[grain]}: детализация`;
+  if (!state.salesDriversTableResponse?.metric_results?.length) {
+    renderMessageRow(table, "За выбранный период данных нет.");
+    document.getElementById("sales-drivers-table-context").textContent = `Нет объектов уровня «${grainLabels[grain]}» для текущего среза.`;
+    return;
+  }
+  const entities = [...new Set(state.salesDriversTableResponse.metric_results.map((result) => result.entity_id))];
+  const rows = entities.map((entityId) => {
+    const cells = concepts.map((concept) => {
+      const result = salesDriverTableResultFor(concept, entityId);
+      const entry = catalogEntry(concept);
+      return result && entry ? metricCellTextForResponse(result, entry, state.salesDriversTableResponse) : "Недоступно";
+    });
+    return { cells: [entityDisplayLabel(grain, entityId) || entityId, ...cells], meta: { entityId } };
+  });
+  renderRows(table, headers, rows, {
+    onFirstCellClick: (_label, meta) => {
+      if (meta?.entityId) void drillIntoEntity(String(meta.entityId));
+    },
+    rowLimit: state.tablePageSize,
+    onSort: renderSalesDriverDetailTable
+  });
+  const caption = table.createCaption();
+  caption.textContent = `Показаны первые ${Math.min(rows.length, state.tablePageSize)} из ${entities.length}`;
+  document.getElementById("sales-drivers-table-context").textContent =
+    `${grainLabels[grain]} для текущего среза; сортировка доступна по столбцам таблицы.`;
+}
+
+function renderSalesDriverSkeletons() {
+  const matrix = document.getElementById("sales-drivers-matrix");
+  const detail = document.getElementById("sales-drivers-detail-table");
+  if (matrix) renderMessageRow(matrix, "Загрузка показателей...");
+  replaceWithMessage(document.getElementById("sales-drivers-chart-box"), "loading-state", "Загрузка динамики...");
+  if (detail) renderMessageRow(detail, "Загрузка детализации...");
+}
+
+function renderSalesDriversUnavailable(message) {
+  renderMessageRow(document.getElementById("sales-drivers-matrix"), message);
+  replaceWithMessage(document.getElementById("sales-drivers-chart-box"), "empty-state", message);
+  renderMessageRow(document.getElementById("sales-drivers-detail-table"), message);
+}
+
 function renderAttention() {
   const list = document.getElementById("attention-list");
   const items = attentionItems();
@@ -768,7 +1055,10 @@ function renderContributionTable(table) {
 }
 
 function renderContextStrip() {
-  const response = state.summaryResponse;
+  renderContextStripForResponse(state.summaryResponse);
+}
+
+function renderContextStripForResponse(response) {
   if (!response) return;
   updateComparisonPeriodDisplay(response);
   updateFilterCount();
@@ -813,7 +1103,7 @@ async function activateBreadcrumbGrain(grain) {
   renderBreadcrumb();
   updatePreviewGrain();
   await refreshRuntimeOptions();
-  await runOverviewQuery();
+  await runActiveViewQuery();
 }
 
 function breadcrumbLabel(grain, value) {
@@ -1012,7 +1302,7 @@ async function selectComboboxValue(id, item) {
   applyFilterDrilldown(id);
   await refreshRuntimeOptions();
   updatePreviewGrain();
-  await runOverviewQuery();
+  await runActiveViewQuery();
 }
 
 function handleComboboxKeydown(event, id) {
@@ -1151,7 +1441,7 @@ async function drillIntoEntity(entityId) {
   renderBreadcrumb();
   updatePreviewGrain();
   await refreshRuntimeOptions();
-  await runOverviewQuery();
+  await runActiveViewQuery();
 }
 
 function selectedRetailer() {
@@ -1206,6 +1496,10 @@ function selectedParentFiltersForGrain(grain) {
   );
 }
 
+function salesDriverDetailGrain() {
+  return previewByGrain[state.currentGrain] || "store";
+}
+
 function entityIdsForSummary() {
   if (state.currentGrain === "network") return firstEntityIds("network", 1);
   const selected = document.getElementById(`${state.currentGrain}-filter`)?.value;
@@ -1220,12 +1514,32 @@ function entityIdsForPreview() {
   return firstEntityIds(state.previewGrain, state.overviewPreviewRowLimit);
 }
 
+function entityIdsForSalesDriverDetail() {
+  return firstEntityIds(salesDriverDetailGrain(), state.tablePageSize);
+}
+
 function firstEntityIds(grain, limit) {
   return (state.options.entities?.[grain] || []).slice(0, limit).map((item) => item.value);
 }
 
 function catalogEntry(concept) {
   return state.catalog.find((entry) => entry.metric_concept === concept);
+}
+
+function catalogEntries(concept) {
+  return state.catalog.filter((entry) => entry.metric_concept === concept);
+}
+
+function salesDriverMetricEntry(concept) {
+  return metricEntryForGrain(concept, state.currentGrain);
+}
+
+function metricEntryForGrain(concept, grain) {
+  const entry = catalogEntries(concept).find((item) => item.grain_support?.includes(grain));
+  if (!entry || !["READY", "PARTIAL"].includes(entry.availability_status)) return null;
+  if (!salesDriverGrainSupport[concept]?.includes(grain)) return null;
+  if (state.periodMode === "DATE_RANGE" && entry.range_aggregation_strategy === "period_only") return entry;
+  return entry;
 }
 
 function displayLabel(concept) {
@@ -1239,6 +1553,18 @@ function contributionMetricForOverview() {
 
 function summaryResultFor(concept) {
   return state.summaryResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
+function salesDriverResultFor(concept) {
+  return state.salesDriversResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
+function salesDriverChartResultFor(concept) {
+  return state.salesDriversChartResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
+function salesDriverTableResultFor(concept, entityId) {
+  return state.salesDriversTableResponse?.metric_results.find((result) => result.metric_concept === concept && result.entity_id === entityId);
 }
 
 function chartResultFor(concept) {
@@ -1265,7 +1591,20 @@ function comparisonFor(response, result) {
   return response.comparisons.find((item) => item.entity_id === result.entity_id && item.metric_definition_id === result.lineage?.metric_definition_id);
 }
 
+function metricCellTextForResponse(result, entry, response) {
+  const comparison = comparisonFor(response, result);
+  if (state.periodMode === "COMPARE" && comparison) {
+    const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
+    return `${formatValue(result.value, entry.format)} (${formatDeltaValue(comparison.delta, deltaFormat)})`;
+  }
+  if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
+  return formatValue(result.value, entry.format);
+}
+
 function resultForProvenance(concept) {
+  if (state.activeView === "sales_drivers") {
+    return salesDriverResultFor(concept) || state.salesDriversResponse?.metric_results[0] || state.salesDriversTableResponse?.metric_results[0];
+  }
   return summaryResultFor(concept) || state.summaryResponse?.metric_results[0] || state.tableResponse?.metric_results[0];
 }
 
@@ -1308,13 +1647,7 @@ function movementText(result, entry) {
 }
 
 function metricCellText(result, entry, response) {
-  const comparison = comparisonFor(response, result);
-  if (state.periodMode === "COMPARE" && comparison) {
-    const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
-    return `${formatValue(result.value, entry.format)} (${formatDeltaValue(comparison.delta, deltaFormat)})`;
-  }
-  if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
-  return formatValue(result.value, entry.format);
+  return metricCellTextForResponse(result, entry, response);
 }
 
 function limitationText(result) {
@@ -1388,7 +1721,7 @@ function updateActiveFilterChips() {
       clearEntityFilter(key);
       await refreshRuntimeOptions();
       updatePreviewGrain();
-      await runOverviewQuery();
+      await runActiveViewQuery();
     });
     return chip;
   }));
@@ -1407,6 +1740,20 @@ function tableContextText(count, reason = "") {
   if (!count) return `Нет объектов уровня «${next}» для текущего среза.`;
   if (reason) return `${next}: объекты в выбранном срезе. ${reason}`;
   return `${next}: первые ${Math.min(count, state.tablePageSize)} объектов для среза «${current}».`;
+}
+
+function salesDriversContextText() {
+  if (state.periodMode === "COMPARE") return "Показатели сравниваются без вывода о том, что одно изменение объясняет другое.";
+  if (state.periodMode === "DATE_RANGE") return "Диапазон используется для динамики; периодические показатели не показываются как агрегат.";
+  return "Текущее состояние показателей и историческая динамика.";
+}
+
+function salesDriverMatrixCaption() {
+  const unavailable = salesDriverRows().filter(({ result }) => result?.limitations?.includes("range_aggregation_period_only")).length;
+  if (state.periodMode === "DATE_RANGE" && unavailable) {
+    return `${unavailable} ${pluralRu(unavailable, "показатель доступен", "показателя доступны", "показателей доступны")} только по отдельным периодам.`;
+  }
+  return "Строка матрицы переключает динамику выбранного показателя.";
 }
 
 function contributionFallbackReason() {
@@ -1459,6 +1806,10 @@ function openProvenance(concept) {
   document.getElementById("provenance-drawer").classList.add("is-open");
   document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
   document.getElementById("scrim").classList.add("is-open");
+}
+
+function openSalesDriverProvenance() {
+  openProvenance(state.salesDriverMetric);
 }
 
 function openContributionProvenance(row) {
@@ -1641,7 +1992,8 @@ function closeReportsPanel() {
 }
 
 function renderRows(table, headers, rows, options = {}) {
-  const renderedRows = sortedRows(headers, rows).slice(0, options.rowLimit || rows.length);
+  const normalizedRows = rows.map((row) => Array.isArray(row) ? { cells: row, meta: null } : row);
+  const renderedRows = sortedRows(headers, normalizedRows).slice(0, options.rowLimit || normalizedRows.length);
   const thead = document.createElement("thead");
   const headRow = document.createElement("tr");
   headers.forEach((header) => {
@@ -1651,7 +2003,11 @@ function renderRows(table, headers, rows, options = {}) {
     th.addEventListener("click", () => {
       state.sortColumn = header;
       state.sortDirection = state.sortDirection === "asc" ? "desc" : "asc";
-      renderOverviewTable();
+      if (options.onSort) {
+        options.onSort();
+      } else {
+        renderOverviewTable();
+      }
     });
     headRow.appendChild(th);
   });
@@ -1659,14 +2015,14 @@ function renderRows(table, headers, rows, options = {}) {
   const tbody = document.createElement("tbody");
   renderedRows.forEach((row) => {
     const tr = document.createElement("tr");
-    row.forEach((cell, index) => {
+    row.cells.forEach((cell, index) => {
       const td = document.createElement("td");
       if (index === 0 && options.onFirstCellClick) {
         const button = document.createElement("button");
         button.type = "button";
         button.className = "table-link";
         button.textContent = cell;
-        button.addEventListener("click", () => options.onFirstCellClick(cell));
+        button.addEventListener("click", () => options.onFirstCellClick(cell, row.meta));
         td.appendChild(button);
       } else {
         td.textContent = cell;
@@ -1694,7 +2050,7 @@ function sortedRows(headers, rows) {
   if (index < 0) return rows;
   return [...rows].sort((left, right) => {
     const direction = state.sortDirection === "asc" ? 1 : -1;
-    return String(left[index]).localeCompare(String(right[index]), "ru-RU", { numeric: true }) * direction;
+    return String(left.cells[index]).localeCompare(String(right.cells[index]), "ru-RU", { numeric: true }) * direction;
   });
 }
 
@@ -1771,7 +2127,10 @@ function setLoading(isLoading, message) {
 }
 
 function showPageError(error) {
-  replaceWithMessage(document.getElementById("chart-box"), "error-state", "Не удалось загрузить данные. Повторите попытку.");
+  const target = state.activeView === "sales_drivers"
+    ? document.getElementById("sales-drivers-chart-box")
+    : document.getElementById("chart-box");
+  replaceWithMessage(target, "error-state", "Не удалось загрузить данные. Повторите попытку.");
   showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
 }
 

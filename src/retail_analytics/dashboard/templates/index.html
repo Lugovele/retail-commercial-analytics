@@ -225,12 +225,47 @@
           </section>
         </section>
 
-        <section class="dashboard-view section-shell is-hidden" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
-          <div class="section-shell-content">
+        <section class="dashboard-view sales-drivers-layout is-hidden" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
+          <div class="screen-heading">
             <p class="eyebrow">диагностика продаж</p>
             <h2 id="sales-drivers-title">Продажи и драйверы</h2>
-            <p>Раздел будет подключён на следующем этапе. Здесь будут собраны показатели результата, объёма, цены, присутствия, скорости продаж, экономики и структуры.</p>
+            <p>Показывает, как изменился коммерческий результат и какие показатели изменились одновременно.</p>
           </div>
+          <section class="surface driver-matrix-panel" aria-label="Матрица показателей продаж">
+            <div class="panel-heading">
+              <div>
+                <h2>Картина по драйверам</h2>
+                <p id="sales-drivers-context">Сравнение доступных показателей для выбранного среза.</p>
+              </div>
+            </div>
+            <div class="table-wrap driver-table-wrap">
+              <table id="sales-drivers-matrix"></table>
+            </div>
+          </section>
+
+          <section class="surface chart-panel" aria-label="Динамика выбранного показателя">
+            <div class="panel-heading">
+              <div>
+                <h2 id="sales-drivers-trend-title">Динамика показателя</h2>
+                <p id="sales-drivers-trend-context">Выберите строку в матрице, чтобы сменить показатель.</p>
+              </div>
+              <button type="button" class="text-button" id="sales-drivers-provenance">Откуда эта цифра?</button>
+            </div>
+            <div class="chart-box" id="sales-drivers-chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
+            <div class="chart-footnote" id="sales-drivers-chart-footnote"></div>
+          </section>
+
+          <section class="surface table-panel" aria-label="Детализация продаж">
+            <div class="panel-heading">
+              <div>
+                <h2 id="sales-drivers-table-title">Детализация</h2>
+                <p id="sales-drivers-table-context">Первые объекты следующего уровня для текущего среза.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="sales-drivers-detail-table"></table>
+            </div>
+          </section>
         </section>
 
         <section class="dashboard-view section-shell is-hidden" data-view-panel="portfolio_market" aria-labelledby="portfolio-market-title">

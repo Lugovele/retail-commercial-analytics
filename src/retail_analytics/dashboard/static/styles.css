@@ -638,6 +638,27 @@ input {
   gap: var(--space-3);
 }
 
+.sales-drivers-layout {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.sales-drivers-layout .screen-heading {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.sales-drivers-layout .screen-heading h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.sales-drivers-layout .screen-heading p:not(.eyebrow) {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
 .section-shell {
   min-height: 280px;
   padding: var(--space-6);
@@ -942,12 +963,24 @@ th {
   cursor: pointer;
 }
 
+tr.is-selected td {
+  background: rgba(42, 125, 225, 0.06);
+}
+
+tr.is-selected td:first-child {
+  border-left: 3px solid var(--brand-menu-blue);
+}
+
 td:first-child,
 th:first-child {
   position: sticky;
   left: 0;
   z-index: 2;
   background: inherit;
+}
+
+.driver-table-wrap table {
+  min-width: 760px;
 }
 
 th:first-child {

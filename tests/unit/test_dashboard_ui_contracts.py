@@ -307,7 +307,9 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     )
     assert not any(term in shell_text for term in forbidden_shell_terms)
     assert 'activeView: "overview"' in script
-    assert "function setActiveView(view)" in script
+    assert "function setActiveView(view, { refresh = true } = {})" in script
+    assert 'setActiveView(state.activeView, { refresh: false });' in script
+    assert "if (refresh) void runActiveViewQuery();" in script
     assert 'button.setAttribute("aria-current", "page");' in script
     assert 'button.removeAttribute("aria-current");' in script
     assert 'panel.dataset.viewPanel === target' in script
@@ -316,6 +318,84 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     assert "runOverviewQuery" not in nav_handler
     assert "resetAllEntityFilters" not in nav_handler
     assert "private-label-scope" not in nav_handler
+
+
+def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    sales_panel = html.split('data-view-panel="sales_drivers"', 1)[1].split('data-view-panel="portfolio_market"', 1)[0]
+    assert 'id="sales-drivers-matrix"' in sales_panel
+    assert 'id="sales-drivers-chart-box"' in sales_panel
+    assert 'id="sales-drivers-detail-table"' in sales_panel
+    assert "Раздел будет подключён" not in sales_panel
+    assert "как изменился коммерческий результат" in sales_panel
+    assert "какие показатели изменились одновременно" in sales_panel
+
+    assert "const salesDriverBuckets = [" in script
+    for bucket in ("Результат", "Объём", "Цена", "Присутствие", "Скорость", "Экономика", "Структура"):
+        assert bucket in script
+    assert 'return ["Группа", "Показатель", "Сейчас", "Сравнение", "Изменение", "Доказательство"];' in script
+    assert 'return ["Группа", "Показатель", "Диапазон", "Статус", "Доказательство"];' in script
+    assert "state.salesDriverMetric = concept;" in script
+    assert "buildSalesDriverChartQueryPayload()" in script
+    assert "salesDriverDetailGrain()" in script
+    assert "salesDriverDetailConcepts()" in script
+    assert "function catalogEntries(concept)" in script
+    assert "catalogEntries(concept).find((item) => item.grain_support?.includes(grain))" in script
+    assert "metricEntryForGrain(concept, grain)" in script
+    assert "const salesDriverGrainSupport = {" in script
+    assert "period_only" in script
+    assert 'return ["Недоступно", "Показатель доступен только по отдельным периодам."];' in script
+    assert "Показатель доступен только по отдельным периодам." in script
+    assert "Для выбранного среза нет поддержанных показателей." in script
+    assert "сортировка доступна по столбцам таблицы" in script
+    assert "retailer_margin_pct" in script
+    assert "weighted_input_price_vat" in script
+    assert "revenue_velocity" in script
+    assert "manufacturer_rank_revenue" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
+    assert "category_revenue_share" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
+    assert "contribution_to_delta" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
+
+
+def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
+    script = html_or_script("app.js")
+
+    assert "async function runActiveViewQuery()" in script
+    assert 'if (state.activeView === "sales_drivers")' in script
+    assert "async function runSalesDriversQuery()" in script
+    assert 'state.salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);' in script
+    assert 'state.salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);' in script
+    assert 'state.salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
+    assert "buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts)" in script
+    assert "buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts())" in script
+    assert "comparisonFor(state.salesDriversResponse, result)" in script
+    assert '["READY", "PARTIAL"].includes(entry.availability_status)' in script
+    assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
+    assert "!salesDriverGrainSupport[concept]?.includes(grain)" in script
+    assert 'distribution: ["category", "manufacturer", "brand", "sku"]' in script
+    assert 'velocity: ["category", "manufacturer", "brand", "sku"]' in script
+    assert "margin / revenue" not in script
+    assert "sum(" not in script.lower()
+
+
+def test_sales_drivers_provenance_and_drilldown_keep_view_identity() -> None:
+    script = html_or_script("app.js")
+
+    provenance_body = script.split("function resultForProvenance(concept)", 1)[1].split("function comparisonMarkerPeriods", 1)[0]
+    assert 'if (state.activeView === "sales_drivers")' in provenance_body
+    assert "salesDriverResultFor(concept)" in provenance_body
+    assert "summaryResultFor(concept)" in provenance_body
+    assert provenance_body.index("salesDriverResultFor(concept)") < provenance_body.index("summaryResultFor(concept)")
+
+    render_rows_body = script.split("function renderRows(table, headers, rows, options = {})", 1)[1].split("function renderMessageRow", 1)[0]
+    assert "const normalizedRows = rows.map" in render_rows_body
+    assert "row.cells.forEach" in render_rows_body
+    assert "options.onFirstCellClick(cell, row.meta)" in render_rows_body
+    assert "String(left.cells[index])" in script
+    assert "meta: { entityId }" in script
+    assert "if (meta?.entityId) void drillIntoEntity(String(meta.entityId));" in script
+    assert "rows.findIndex((row) => row[0] === label)" not in script
 
 
 def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> None:
