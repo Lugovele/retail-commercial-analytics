@@ -1499,10 +1499,10 @@ def test_stores_screen_uses_store_ranking_without_fake_contribution() -> None:
     assert "margin_velocity" not in store_constants
     assert "Это не вклад в изменение" in script
     assert "вклад по ТТ не рассчитывается" in script
-    assert "storesHasProductFilters()" in script
-    assert "renderStoresProductFilterUnsupported()" in script
-    assert "Разрез ТТ внутри выбранной категории, производителя, бренда или SKU пока не рассчитан." in script
-    assert "Store-level витрина не содержит подтверждённого разреза" in script
+    assert "storesHasProductFilters()" not in script
+    assert "renderStoresProductFilterUnsupported()" not in script
+    assert "Разрез ТТ внутри выбранной категории, производителя, бренда или SKU пока не рассчитан." not in script
+    assert "Store-level витрина не содержит подтверждённого разреза" not in script
     assert 'state.storesScopeStatus = "no_supported_metrics";' in script
     assert "renderStoresNoSupportedMetrics()" in script
     assert "buildStoresPayload()" not in script.split("async function runStoresQuery()", 1)[1].split("if (!storeConcepts().length)", 1)[0]
@@ -1514,7 +1514,7 @@ def test_stores_screen_uses_store_ranking_without_fake_contribution() -> None:
     assert "renderStoresContextStripWithoutResponse()" in script
     assert "updateActiveFilterChips();" not in script.split("function renderStoresContextStripWithoutResponse()", 1)[1].split("function renderStoreMetricOptions", 1)[0]
     assert 'document.getElementById("context-coverage-note").textContent = coverageNote;' in script
-    assert "Разрез ТТ по продуктным фильтрам пока не рассчитан" in script
+    assert "Разрез ТТ по продуктным фильтрам пока не рассчитан" not in script
 
 
 def test_store_filter_remains_filter_while_store_click_sets_drilldown() -> None:

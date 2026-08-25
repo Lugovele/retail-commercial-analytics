@@ -932,14 +932,6 @@ async function runStoresQuery() {
     setLoading(false, "Показатели ТТ недоступны");
     return;
   }
-  if (storesHasProductFilters()) {
-    state.storesResponse = null;
-    state.storesScopeStatus = "product_filter_unsupported";
-    renderStores();
-    state.loadedViews.stores = true;
-    setLoading(false, "Есть ограничение среза");
-    return;
-  }
   state.storesScopeStatus = "ready";
   try {
     state.storesResponse = await postJson("/api/dashboard/query", buildStoresPayload());
@@ -1710,10 +1702,6 @@ function renderStores() {
     renderStoresNoSupportedMetrics();
     return;
   }
-  if (state.storesScopeStatus === "product_filter_unsupported") {
-    renderStoresProductFilterUnsupported();
-    return;
-  }
   renderStoreRanking();
   renderSelectedStoreKpi();
   renderStoresTable();
@@ -1724,31 +1712,6 @@ function renderStoresSkeletons() {
   replaceWithMessage(document.getElementById("stores-ranking"), "loading-state compact", "Загрузка рейтинга ТТ...");
   replaceWithMessage(document.getElementById("stores-selected-kpi"), "loading-state compact", "Загрузка выбранной ТТ...");
   renderMessageRow(document.getElementById("stores-table"), "Загрузка таблицы ТТ...");
-}
-
-function renderStoresProductFilterUnsupported() {
-  document.getElementById("stores-ranking-context").textContent =
-    "Текущая витрина поддерживает рейтинг ТТ по сети, без продуктных фильтров.";
-  replaceWithMessage(
-    document.getElementById("stores-ranking"),
-    "empty-state compact",
-    "Разрез ТТ внутри выбранной категории, производителя, бренда или SKU пока не рассчитан."
-  );
-  document.getElementById("stores-selected-context").textContent =
-    "Снимите продуктные фильтры, чтобы увидеть подтверждённые store-level показатели.";
-  replaceWithMessage(
-    document.getElementById("stores-selected-kpi"),
-    "empty-state compact",
-    "Показатели выбранной ТТ в продуктном срезе недоступны."
-  );
-  document.getElementById("stores-table-context").textContent =
-    "Чтобы не показывать неподтверждённую аналитику, таблица ТТ скрыта для этого среза.";
-  renderMessageRow(
-    document.getElementById("stores-table"),
-    "Store-level витрина не содержит подтверждённого разреза по выбранным продуктным фильтрам."
-  );
-  document.getElementById("stores-detail").textContent =
-    "Детализация ТТ по категориям, брендам и SKU требует отдельного подтверждённого маршрута данных.";
 }
 
 function renderStoresNoSupportedMetrics() {
@@ -2234,10 +2197,6 @@ function renderStoresContextStripWithoutResponse() {
     privateLabelScopeText(document.getElementById("private-label-scope").value)
   ].filter(Boolean);
   let coverageNote = "";
-  if (state.storesScopeStatus === "product_filter_unsupported") {
-    parts.push("Разрез ТТ по продуктным фильтрам пока не рассчитан");
-    coverageNote = "Разрез ТТ по выбранным продуктным фильтрам требует отдельного подтверждённого маршрута данных.";
-  }
   if (state.storesScopeStatus === "no_supported_metrics") {
     coverageNote = "Для выбранной сети нет подтверждённых store-level показателей этого экрана.";
   }
@@ -3487,11 +3446,6 @@ function selectedStoreIds() {
 
 function selectedStoreId() {
   return selectedStoreIds()[0] || "";
-}
-
-function storesHasProductFilters() {
-  const selected = selectedFilterValues();
-  return ["category", "manufacturer", "brand", "sku"].some((key) => Boolean(selected[key]?.length));
 }
 
 function firstEntityIds(grain, limit) {

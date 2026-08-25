@@ -58,6 +58,17 @@ def test_dashboard_filter_apply_updates_rendered_kpi_when_browser_url_is_provide
             assert selected != "Все"
             assert before != after
             assert "Недоступно" not in "\n".join(after)
+
+            page.locator('[data-view="stores"]').click()
+            page.wait_for_selector("#stores-table")
+            page.wait_for_function(
+                """() => {
+                    const text = document.querySelector("#stores-table")?.innerText || "";
+                    return text.includes("Оборот") && !text.includes("разреза по выбранным продуктным фильтрам");
+                }""",
+                timeout=15000,
+            )
+            assert "Разрез ТТ внутри выбранной категории" not in page.locator("#stores").inner_text()
         finally:
             browser.close()
 
