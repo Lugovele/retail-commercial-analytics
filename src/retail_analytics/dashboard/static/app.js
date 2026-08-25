@@ -257,12 +257,12 @@ const comparisonLabels = {
   NONE: "Без сравнения"
 };
 const filterConfig = {
-  category: { label: "Все категории", title: "Категория", searchPlaceholder: "Найти категорию", childFilters: ["manufacturer", "brand", "sku"] },
-  manufacturer: { label: "Все производители", title: "Производитель", searchPlaceholder: "Найти производителя", childFilters: ["brand", "sku"] },
-  brand: { label: "Все бренды", title: "Бренд", searchPlaceholder: "Найти бренд", childFilters: ["sku"] },
-  sku: { label: "Все SKU", title: "SKU", searchPlaceholder: "Найти SKU", childFilters: [] },
+  category: { label: "Все", title: "Категория", searchPlaceholder: "Найти категорию", childFilters: ["manufacturer", "brand", "sku"] },
+  manufacturer: { label: "Все", title: "Производитель", searchPlaceholder: "Найти производителя", childFilters: ["brand", "sku"] },
+  brand: { label: "Все", title: "Бренд", searchPlaceholder: "Найти бренд", childFilters: ["sku"] },
+  sku: { label: "Все", title: "SKU", searchPlaceholder: "Найти SKU", childFilters: [] },
   store: {
-    label: "Все ТТ",
+    label: "Все",
     title: "ТТ",
     searchPlaceholder: "Найти ТТ",
     childFilters: []
@@ -667,7 +667,7 @@ function renderRetailerIdentity() {
   control?.classList.toggle("has-multiple-retailers", hasMultipleRetailers);
   if (!identity || hasMultipleRetailers) return;
   identity.replaceChildren();
-  appendText(identity, "strong", retailer.display_label || "Текущий отчёт");
+  appendText(identity, "strong", retailer.display_label || "Текущий отчёт").className = "scope-value";
 }
 
 function bindDynamicControls() {
@@ -3272,13 +3272,15 @@ function updateFilterTriggerSummary(id) {
   const selected = selectedValuesForFilter(id);
   document.querySelector(`[data-inline-clear-filter="${id}"]`)?.classList.toggle("is-hidden", selected.length === 0);
   trigger.classList.toggle("has-selection", selected.length > 0);
+  summary.classList.toggle("is-default", selected.length === 0);
+  summary.classList.toggle("is-active-value", selected.length > 0);
   if (!selected.length) {
     summary.textContent = filterConfig[id].label;
     trigger.removeAttribute("title");
     return;
   }
   const labels = selected.map((value) => entityDisplayLabel(id, value)).filter(Boolean);
-  const text = labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1}`;
+  const text = labels.length === 1 ? labels[0] : `${labels.length} выбрано`;
   summary.textContent = text;
   trigger.title = labels.join(", ");
 }
@@ -3820,7 +3822,7 @@ function contextFilterText() {
 function contextSummaryText(response) {
   const selected = selectedFilterValues();
   const count = Object.values(selected).reduce((total, values) => total + values.length, 0);
-  const filterText = count ? `${count} ${pluralRu(count, "фильтр", "фильтра", "фильтров")}` : "Все категории";
+  const filterText = count ? `${count} ${pluralRu(count, "фильтр", "фильтра", "фильтров")}` : "Без доп. фильтров";
   return [
     periodContextText(),
     filterText,
@@ -3908,7 +3910,7 @@ function contributionMixedSignNote() {
 function updatePrivateLabelTerminology() {
   const scopeName = selectedRetailer().private_label_display_name || "выбранного ассортимента";
   const select = document.getElementById("private-label-scope");
-  document.getElementById("private-label-label").textContent = "Ассортимент";
+  document.getElementById("private-label-label").textContent = "СТМ";
   const labels = {
     INCLUDE: "Весь ассортимент",
     EXCLUDE: `Без ${scopeName}`,
@@ -3917,6 +3919,8 @@ function updatePrivateLabelTerminology() {
   Array.from(select?.options || []).forEach((optionNode) => {
     optionNode.textContent = labels[optionNode.value] || optionNode.textContent;
   });
+  select?.classList.toggle("is-default", select.value === "INCLUDE");
+  select?.classList.toggle("is-active-value", select.value !== "INCLUDE");
 }
 
 function pluralRu(count, one, few, many) {

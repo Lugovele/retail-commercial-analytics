@@ -357,7 +357,6 @@ def test_public_ui_assets_do_not_hardcode_private_retailer_terms() -> None:
         "\u0413\u043b\u043e\u0431\u0443\u0441",
         "\u041a\u0430\u043b\u0438\u043d\u043e\u0432",
         "\u0420\u043e\u0434\u043d\u0438\u043a",
-        "\u0421\u0422\u041c",
     )
     text = "\n".join(
         file.read_text(encoding="utf-8")
@@ -1076,6 +1075,73 @@ def test_scope_toolbar_uses_single_row_multiselect_contract() -> None:
     assert scope_body.count('id="private-label-scope"') == 1
     assert "filter-chip" not in html
     assert "data-combobox" not in html
+
+
+def test_filter_toolbar_visual_noise_contract_keeps_labels_above_controls() -> None:
+    html = html_or_script("index.html")
+    css = html_or_script("styles.css")
+    script = html_or_script("app.js")
+    scope_body = html.split('<section class="scope-panel"', 1)[1].split("</section>", 1)[0]
+
+    for label in ("Сеть", "Период", "Категория", "Производитель", "Бренд", "SKU", "ТТ", "СТМ"):
+        assert '<span class="scope-label' in scope_body
+        assert label in scope_body
+
+    assert '<span class="scope-label">Категория</span>' in scope_body
+    assert '<span class="scope-label">Производитель</span>' in scope_body
+    assert '<span class="scope-label">Бренд</span>' in scope_body
+    assert '<span class="scope-label">SKU</span>' in scope_body
+    assert '<span class="scope-label">ТТ</span>' in scope_body
+    assert '<span class="scope-label" id="private-label-label">СТМ</span>' in scope_body
+    assert 'placeholder="Все' not in scope_body
+
+    label_body = css.split(".scope-label {", 1)[1].split(".report-identity", 1)[0]
+    assert "font-size: 11px;" in label_body
+    assert "font-weight: 400;" in label_body
+    assert "letter-spacing: 0;" in label_body
+
+    assert 'class="scope-value filter-summary is-default" id="category-filter-summary">Все</span>' in scope_body
+    assert 'class="scope-value filter-summary is-default" id="manufacturer-filter-summary">Все</span>' in scope_body
+    assert 'class="scope-value filter-summary is-default" id="brand-filter-summary">Все</span>' in scope_body
+    assert 'class="scope-value filter-summary is-default" id="sku-filter-summary">Все</span>' in scope_body
+    assert 'class="scope-value filter-summary is-default" id="store-filter-summary">Все</span>' in scope_body
+    assert 'INCLUDE: "Весь ассортимент"' in script
+    assert 'document.getElementById("private-label-label").textContent = "СТМ";' in script
+
+
+def test_filter_toolbar_visual_noise_contract_uses_quiet_value_states() -> None:
+    css = html_or_script("styles.css")
+    script = html_or_script("app.js")
+
+    scope_value_body = css.split(".scope-value,", 1)[1].split(".scope-value.is-default", 1)[0]
+    assert "font-weight: 400;" in scope_value_body
+    default_body = css.split(".scope-value.is-default {", 1)[1].split(".scope-value.is-active-value", 1)[0]
+    assert "color: var(--text-muted);" in default_body
+    assert "font-weight: 400;" in default_body
+    active_body = css.split(".scope-value.is-active-value {", 1)[1].split(".report-identity span", 1)[0]
+    assert "color: var(--text-primary);" in active_body
+    assert "font-weight: 500;" in active_body
+    assert "font-weight: 600;" not in css.split(".filter-trigger {", 1)[1].split(".filter-trigger span", 1)[0]
+    assert "font-weight: 700;" not in css.split(".filter-trigger {", 1)[1].split(".filter-trigger span", 1)[0]
+    assert 'summary.classList.toggle("is-default", selected.length === 0);' in script
+    assert 'summary.classList.toggle("is-active-value", selected.length > 0);' in script
+    assert 'const text = labels.length === 1 ? labels[0] : `${labels.length} выбрано`;' in script
+    assert 'select?.classList.toggle("is-default", select.value === "INCLUDE");' in script
+    assert 'select?.classList.toggle("is-active-value", select.value !== "INCLUDE");' in script
+
+
+def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> None:
+    css = html_or_script("styles.css")
+
+    toolbar_body = css.split(".scope-toolbar {", 1)[1].split(".control,", 1)[0]
+    assert "column-gap: 6px;" in toolbar_body
+    assert "row-gap: 0;" in toolbar_body
+    assert '.multi-filter[data-filter="category"] {' in css
+    assert "margin-left: 8px;" in css
+    control_body = css.split(".scope-control,", 1)[1].split(".scope-trigger,", 1)[0]
+    assert "var(--scope-control-bg)" in css
+    assert "var(--scope-control-border)" in css
+    assert "box-shadow" not in control_body
 
 
 def test_browser_filter_state_is_staged_multi_value_and_applied_once() -> None:

@@ -32,7 +32,7 @@
             <div class="scope-field report-control" id="retailer-control">
               <span class="scope-label">Сеть</span>
               <div class="scope-control report-identity" id="retailer-identity" aria-live="polite">
-                <strong>Загрузка отчёта</strong>
+                <strong class="scope-value">Загрузка отчёта</strong>
               </div>
               <label class="control control-retailer is-hidden" id="retailer-select-control">
                 <span>Сеть</span>
@@ -43,8 +43,8 @@
             <div class="scope-field period-control" aria-label="Период">
               <span class="scope-label">Период</span>
               <button type="button" class="scope-control scope-trigger period-trigger" id="period-popover-button" aria-haspopup="dialog" aria-expanded="false" aria-controls="period-popover">
-                <strong id="period-summary">Загрузка</strong>
-                <span class="period-summary-detail" id="period-summary-detail">Сравнение</span>
+                <strong class="scope-value" id="period-summary">Загрузка</strong>
+                <span class="period-summary-detail scope-meta" id="period-summary-detail">Сравнение</span>
               </button>
               <div class="period-popover is-hidden" id="period-popover" role="dialog" aria-label="Настройка периода">
                 <div class="period-mode" role="group" aria-label="Режим периода">
@@ -93,7 +93,7 @@
               <div class="scope-field multi-filter" data-filter="category">
                 <span class="scope-label">Категория</span>
                 <button type="button" class="scope-control filter-trigger" id="category-filter-trigger" data-filter-trigger="category" aria-haspopup="dialog" aria-expanded="false" aria-controls="category-filter-popover">
-                  <span id="category-filter-summary">Все категории</span>
+                  <span class="scope-value filter-summary is-default" id="category-filter-summary">Все</span>
                 </button>
                 <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="category" aria-label="Очистить категорию" title="Очистить категорию">×</button>
                 <select id="category-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
@@ -112,7 +112,7 @@
               <div class="scope-field multi-filter" data-filter="manufacturer">
                 <span class="scope-label">Производитель</span>
                 <button type="button" class="scope-control filter-trigger" id="manufacturer-filter-trigger" data-filter-trigger="manufacturer" aria-haspopup="dialog" aria-expanded="false" aria-controls="manufacturer-filter-popover">
-                  <span id="manufacturer-filter-summary">Все производители</span>
+                  <span class="scope-value filter-summary is-default" id="manufacturer-filter-summary">Все</span>
                 </button>
                 <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="manufacturer" aria-label="Очистить производителя" title="Очистить производителя">×</button>
                 <select id="manufacturer-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
@@ -131,7 +131,7 @@
               <div class="scope-field multi-filter" data-filter="brand">
                 <span class="scope-label">Бренд</span>
                 <button type="button" class="scope-control filter-trigger" id="brand-filter-trigger" data-filter-trigger="brand" aria-haspopup="dialog" aria-expanded="false" aria-controls="brand-filter-popover">
-                  <span id="brand-filter-summary">Все бренды</span>
+                  <span class="scope-value filter-summary is-default" id="brand-filter-summary">Все</span>
                 </button>
                 <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="brand" aria-label="Очистить бренд" title="Очистить бренд">×</button>
                 <select id="brand-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
@@ -150,7 +150,7 @@
               <div class="scope-field multi-filter" data-filter="sku">
                 <span class="scope-label">SKU</span>
                 <button type="button" class="scope-control filter-trigger" id="sku-filter-trigger" data-filter-trigger="sku" aria-haspopup="dialog" aria-expanded="false" aria-controls="sku-filter-popover">
-                  <span id="sku-filter-summary">Все SKU</span>
+                  <span class="scope-value filter-summary is-default" id="sku-filter-summary">Все</span>
                 </button>
                 <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="sku" aria-label="Очистить SKU" title="Очистить SKU">×</button>
                 <select id="sku-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
@@ -169,7 +169,7 @@
               <div class="scope-field multi-filter" data-filter="store">
                 <span class="scope-label">ТТ</span>
                 <button type="button" class="scope-control filter-trigger" id="store-filter-trigger" data-filter-trigger="store" aria-haspopup="dialog" aria-expanded="false" aria-controls="store-filter-popover">
-                  <span id="store-filter-summary">Все ТТ</span>
+                  <span class="scope-value filter-summary is-default" id="store-filter-summary">Все</span>
                 </button>
                 <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="store" aria-label="Очистить ТТ" title="Очистить ТТ">×</button>
                 <select id="store-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
@@ -186,8 +186,8 @@
                 </div>
               </div>
               <label class="scope-field toggle-control">
-                <span class="scope-label" id="private-label-label">Ассортимент</span>
-                <select class="scope-control" id="private-label-scope">
+                <span class="scope-label" id="private-label-label">СТМ</span>
+                <select class="scope-control scope-value is-default" id="private-label-scope">
                   <option value="INCLUDE">Весь ассортимент</option>
                   <option value="EXCLUDE">Без выбранного ассортимента</option>
                   <option value="ONLY">Только выбранный ассортимент</option>
