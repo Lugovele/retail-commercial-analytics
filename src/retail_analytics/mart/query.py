@@ -21,6 +21,7 @@ from retail_analytics.mart.metric_catalog import (
     catalog_entry_for_fact,
 )
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA, RangeAggregationStrategy
+from retail_analytics.mart.product_store_facts import PRODUCT_STORE_SUPPORTED_CONCEPTS
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
 
 FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
@@ -220,8 +221,10 @@ class DashboardMartQueryService:
         catalog: tuple[EffectiveMetricCatalogEntry, ...] = (),
         mart_builds: tuple[MartBuildMetadata, ...] = (),
         source_ledger: tuple[SourceLedgerEntry, ...] = (),
+        product_store_facts_path: str | Path | None = None,
     ) -> None:
         self.metric_facts_path = Path(metric_facts_path)
+        self.product_store_facts_path = Path(product_store_facts_path) if product_store_facts_path is not None else None
         self.catalog = catalog
         self.mart_builds = mart_builds
         self.source_ledger = source_ledger
@@ -235,14 +238,14 @@ class DashboardMartQueryService:
         fetch_start = _comparison_fetch_start(request)
         limitations = list(self._private_label_scope_materialization_limitations(request))
         scoped_rollup_grain: str | None = None
+        serving_fact_grain: str | None = None
         if _has_product_store_intersection(request):
-            raw = pl.DataFrame()
-            limitations.append(
-                QueryLimitation(
-                    "product_store_filter_intersection_not_materialized",
-                    "Product and store filters require a materialized product-store analytical scope.",
-                )
+            raw, serving_fact_grain, product_store_limitations = self._read_product_store_rollup_facts(
+                request,
+                mart_build_id=mart_build_id,
+                period_start=fetch_start,
             )
+            limitations.extend(product_store_limitations)
         else:
             raw = self._read_facts(request, mart_build_id=mart_build_id, period_start=fetch_start)
         if raw.is_empty() and request.entity_filters and not _has_product_store_intersection(request):
@@ -288,6 +291,7 @@ class DashboardMartQueryService:
             comparisons=comparisons,
             response_quality_flags=quality_flags,
             scoped_rollup_grain=scoped_rollup_grain,
+            serving_fact_grain=serving_fact_grain,
         )
         lineage = tuple(result.lineage for result in metric_results if request.include_lineage and result.lineage is not None)
 
@@ -473,6 +477,126 @@ class DashboardMartQueryService:
             ORDER BY period_start, grain_id, entity_id, metric_definition_id
         """
         return duckdb.sql(sql, params=[_duckdb_path(self.metric_facts_path), *params]).pl()
+
+    def _read_product_store_rollup_facts(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        mart_build_id: str,
+        period_start: date | None,
+    ) -> tuple[pl.DataFrame, str | None, tuple[QueryLimitation, ...]]:
+        if self.product_store_facts_path is None or not self.product_store_facts_path.exists():
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                None,
+                (
+                    QueryLimitation(
+                        "product_store_filter_intersection_not_materialized",
+                        "Product and store filters require a materialized product-store analytical scope.",
+                    ),
+                ),
+            )
+        if request.metric_definition_ids:
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                "sku_store",
+                (
+                    QueryLimitation(
+                        "product_store_intersection_not_supported_for_metric_definition_id",
+                        "Product-store rollup does not reinterpret explicit metric definition ids.",
+                    ),
+                ),
+            )
+        requested_concepts = request.metric_concepts or tuple(PRODUCT_STORE_SUPPORTED_CONCEPTS)
+        supported = tuple(concept for concept in requested_concepts if concept in PRODUCT_STORE_SUPPORTED_CONCEPTS)
+        limitations = [
+            QueryLimitation(
+                "product_store_intersection_not_supported_for_metric",
+                "Metric is not safely recomputable from product-store serving facts.",
+                metric_concept=concept,
+            )
+            for concept in requested_concepts
+            if concept not in PRODUCT_STORE_SUPPORTED_CONCEPTS
+        ]
+        if not supported:
+            return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), "sku_store", tuple(limitations)
+
+        clauses = [
+            "retailer_id = ?",
+            "source_id = ?",
+            "period_grain = ?",
+            "mart_build_id = ?",
+            "private_label_scope = ?",
+        ]
+        params: list[Any] = [
+            request.retailer_id,
+            request.source_id,
+            request.period_grain,
+            mart_build_id,
+            request.private_label_scope.value,
+        ]
+        if period_start is not None:
+            clauses.append("period_start >= CAST(? AS DATE)")
+            params.append(period_start.isoformat())
+        if request.date_to is not None:
+            clauses.append("period_start <= CAST(? AS DATE)")
+            params.append(request.date_to.isoformat())
+        _add_in_filter(clauses, params, "metric_concept", supported)
+        for column, values in (request.entity_filters or {}).items():
+            if column not in PARENT_ENTITY_JSON_KEYS:
+                raise ValueError(f"Unsupported query filter column: {column}")
+            _add_in_filter(clauses, params, _product_store_filter_column(column), values)
+        _add_product_store_entity_id_filter(clauses, params, request.grain_id, request.entity_ids)
+        if request.quality_policy == QualityPolicy.VALID_ONLY:
+            clauses.append("quality_status = ?")
+            params.append("valid")
+        sql = f"""
+            SELECT *
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            ORDER BY period_start, canonical_store_id, canonical_product_id, metric_concept
+        """
+        source = duckdb.sql(sql, params=[_duckdb_path(self.product_store_facts_path), *params]).pl()
+        if source.is_empty():
+            limitations.append(
+                QueryLimitation(
+                    "product_store_intersection_no_data",
+                    "No product-store facts match the selected analytical scope.",
+                )
+            )
+        return _roll_up_product_store_facts(source, request, self._metric_templates(request, mart_build_id)), "sku_store", tuple(limitations)
+
+    def _metric_templates(
+        self,
+        request: DashboardMetricQueryRequest,
+        mart_build_id: str,
+    ) -> dict[str, dict[str, Any]]:
+        concepts = tuple(concept for concept in (request.metric_concepts or ()) if concept in PRODUCT_STORE_SUPPORTED_CONCEPTS)
+        clauses = [
+            "retailer_id = ?",
+            "source_id = ?",
+            "period_grain = ?",
+            "grain_id = ?",
+            "mart_build_id = ?",
+        ]
+        params: list[Any] = [request.retailer_id, request.source_id, request.period_grain, request.grain_id, mart_build_id]
+        if self._facts_have_private_label_scope():
+            clauses.append("private_label_scope = ?")
+            params.append(request.private_label_scope.value)
+        _add_in_filter(clauses, params, "metric_concept", concepts)
+        rows = duckdb.sql(
+            f"""
+                SELECT *
+                FROM read_parquet(?)
+                WHERE {" AND ".join(clauses)}
+                ORDER BY period_start DESC, metric_concept
+            """,
+            params=[_duckdb_path(self.metric_facts_path), *params],
+        ).pl()
+        templates: dict[str, dict[str, Any]] = {}
+        for row in rows.to_dicts():
+            templates.setdefault(str(row["metric_concept"]), row)
+        return templates
 
     def _read_scoped_rollup_facts(
         self,
@@ -900,6 +1024,7 @@ def _attach_provenance(
     comparisons: tuple[ComparisonResult, ...],
     response_quality_flags: tuple[str, ...],
     scoped_rollup_grain: str | None = None,
+    serving_fact_grain: str | None = None,
 ) -> tuple[MetricQueryResult, ...]:
     return tuple(
         replace(
@@ -916,6 +1041,7 @@ def _attach_provenance(
                     comparisons=comparisons,
                     response_quality_flags=response_quality_flags,
                     scoped_rollup_grain=scoped_rollup_grain,
+                    serving_fact_grain=serving_fact_grain,
                 )
             ),
         )
@@ -935,6 +1061,7 @@ def _provenance_payload(
     comparisons: tuple[ComparisonResult, ...],
     response_quality_flags: tuple[str, ...],
     scoped_rollup_grain: str | None = None,
+    serving_fact_grain: str | None = None,
 ) -> dict[str, Any]:
     lineage = result.lineage
     period_source_revisions = tuple(sorted({period.source_revision_id for period in result.period_values}))
@@ -1043,14 +1170,15 @@ def _provenance_payload(
             "source_row_ids": (),
         },
         "scoped_rollup": {
-            "status": "DERIVED_FROM_FILTERED_FACTS" if scoped_rollup_grain else "NOT_APPLICABLE",
-            "source_fact_grain": scoped_rollup_grain,
+            "status": _rollup_provenance_status(scoped_rollup_grain, serving_fact_grain),
+            "source_fact_grain": serving_fact_grain or scoped_rollup_grain,
             "requested_grain": request.grain_id,
             "entity_filters": request.entity_filters or {},
             "formula": "sum child values or recompute ratio from child numerators and denominators"
-            if scoped_rollup_grain
+            if scoped_rollup_grain or serving_fact_grain
             else None,
             "rolled_period_count": len(result.period_values),
+            "serving_projection_version": "product_store_serving.v1" if serving_fact_grain else None,
         },
         "quality": {
             "quality_statuses": quality_statuses,
@@ -1110,8 +1238,131 @@ def _effective_filter_grain(request: DashboardMetricQueryRequest) -> str | None:
 def _has_product_store_intersection(request: DashboardMetricQueryRequest) -> bool:
     selected = request.entity_filters or {}
     product_scope_requested = request.grain_id in {"category", "manufacturer", "brand", "sku"}
+    store_scope_requested = request.grain_id == "store"
     product_scope_filtered = any(selected.get(key) for key in ("category", "manufacturer", "brand", "sku"))
-    return bool(selected.get("store")) and (product_scope_requested or product_scope_filtered)
+    store_scope_filtered = bool(selected.get("store"))
+    return (store_scope_filtered and (product_scope_requested or product_scope_filtered)) or (
+        store_scope_requested and product_scope_filtered
+    )
+
+
+def _product_store_filter_column(filter_name: str) -> str:
+    return PARENT_ENTITY_JSON_KEYS[filter_name]
+
+
+def _add_product_store_entity_id_filter(
+    clauses: list[str],
+    params: list[Any],
+    grain_id: str,
+    entity_ids: tuple[str, ...],
+) -> None:
+    if not entity_ids:
+        return
+    if grain_id == "network":
+        return
+    _add_in_filter(clauses, params, _product_store_filter_column(grain_id), entity_ids)
+
+
+def _roll_up_product_store_facts(
+    frame: pl.DataFrame,
+    request: DashboardMetricQueryRequest,
+    templates: dict[str, dict[str, Any]],
+) -> pl.DataFrame:
+    if frame.is_empty():
+        return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+    for row in frame.to_dicts():
+        entity_id, parent_entity_ids = _product_store_result_identity(row, request)
+        key = (
+            row["retailer_id"],
+            row["source_id"],
+            row["source_revision_id"],
+            row["analysis_run_id"],
+            row["mart_build_id"],
+            row.get("private_label_scope"),
+            row["period_grain"],
+            row["period_start"],
+            row["period_end"],
+            row["business_period_id"],
+            row["metric_concept"],
+            request.grain_id,
+            entity_id,
+            parent_entity_ids,
+        )
+        grouped[key].append(row)
+    rolled: list[dict[str, Any]] = []
+    for key, rows in grouped.items():
+        concept = str(key[10])
+        template = templates.get(concept, rows[0])
+        value, numerator_value, denominator_value = _roll_up_metric_values(rows)
+        rolled.append(
+            {
+                "retailer_id": key[0],
+                "source_id": key[1],
+                "source_revision_id": key[2],
+                "analysis_run_id": key[3],
+                "mart_build_id": key[4],
+                "private_label_scope": key[5],
+                "period_grain": key[6],
+                "period_start": key[7],
+                "period_end": key[8],
+                "business_period_id": key[9],
+                "grain_id": key[11],
+                "entity_id": key[12],
+                "parent_entity_ids": key[13],
+                "metric_concept": concept,
+                "metric_name": template["metric_name"],
+                "metric_definition_id": template["metric_definition_id"],
+                "metric_definition_version": template["metric_definition_version"],
+                "metric_config_hash": template["metric_config_hash"],
+                "semantic_family": template["semantic_family"],
+                "semantic_compatibility_version": template["semantic_compatibility_version"],
+                "cross_retailer_comparable": template["cross_retailer_comparable"],
+                "value": value,
+                "numerator_value": numerator_value,
+                "denominator_value": denominator_value,
+                "aggregation": template["aggregation"],
+                "range_aggregation_strategy": template["range_aggregation_strategy"],
+                "share_scope": template["share_scope"],
+                "rule_version": template["rule_version"],
+                "quality_status": _roll_up_quality_status(rows),
+                "quality_flags": _roll_up_quality_flags(rows),
+                "created_at": max(item["created_at"] for item in rows if item["created_at"] is not None),
+            }
+        )
+    return pl.DataFrame(rolled, schema=MART_METRIC_FACT_SCHEMA)
+
+
+def _product_store_result_identity(row: dict[str, Any], request: DashboardMetricQueryRequest) -> tuple[str, str]:
+    if request.grain_id == "network":
+        return (request.entity_ids[0] if request.entity_ids else "network"), "{}"
+    if request.grain_id == "category":
+        return str(row["category"]), "{}"
+    if request.grain_id == "manufacturer":
+        return str(row["manufacturer"]), _json_parent_ids({"category": row.get("category")})
+    if request.grain_id == "brand":
+        return str(row["brand"]), _json_parent_ids({"category": row.get("category"), "manufacturer": row.get("manufacturer")})
+    if request.grain_id == "sku":
+        return str(row["canonical_product_id"]), _json_parent_ids(
+            {"category": row.get("category"), "manufacturer": row.get("manufacturer"), "brand": row.get("brand")}
+        )
+    if request.grain_id == "store":
+        return str(row["canonical_store_id"]), "{}"
+    raise ValueError(f"Unsupported product-store rollup grain_id: {request.grain_id}")
+
+
+def _json_parent_ids(values: dict[str, Any]) -> str:
+    import json
+
+    return json.dumps({key: value for key, value in values.items() if value is not None}, ensure_ascii=False, sort_keys=True)
+
+
+def _rollup_provenance_status(scoped_rollup_grain: str | None, serving_fact_grain: str | None) -> str:
+    if serving_fact_grain:
+        return "DERIVED_FROM_PRODUCT_STORE_FACTS"
+    if scoped_rollup_grain:
+        return "DERIVED_FROM_FILTERED_FACTS"
+    return "NOT_APPLICABLE"
 
 
 def _scoped_rollup_limitations(frame: pl.DataFrame) -> tuple[QueryLimitation, ...]:

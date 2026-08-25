@@ -6,7 +6,7 @@ import json
 import os
 from collections.abc import Iterable
 from dataclasses import replace
-from datetime import date
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any
 from wsgiref.types import WSGIApplication
@@ -15,7 +15,11 @@ import polars as pl
 
 from retail_analytics.dashboard import build_synthetic_dashboard_runtime, create_dashboard_wsgi_app
 from retail_analytics.dashboard.app import _asset_version
-from retail_analytics.mart import DashboardMartQueryService
+from retail_analytics.mart import (
+    DashboardMartQueryService,
+    build_product_store_metric_facts,
+    write_product_store_metric_facts,
+)
 
 
 def test_dashboard_filter_apply_updates_rendered_kpi_when_browser_url_is_provided() -> None:
@@ -290,6 +294,79 @@ def test_dashboard_query_route_resolves_cascading_source_like_filters(tmp_path: 
     }
     assert provenance["current_analytical_scope"]["execution_entity_filters"] == {"sku": ["SKU_A_001"]}
     assert provenance["scoped_rollup"]["source_fact_grain"] == "sku"
+
+
+
+def test_dashboard_query_route_uses_product_store_serving_for_store_and_product_filters(tmp_path: Path) -> None:
+    source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
+    runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")
+    build = runtime.query_service.mart_builds[0]
+    product_store_path = tmp_path / "product_store.parquet"
+    write_product_store_metric_facts(
+        build_product_store_metric_facts(
+            pl.read_parquet(source_rows_path),
+            build_metadata=build,
+            source_revision_id=build.source_revision_ids[0],
+            created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        ),
+        product_store_path,
+    )
+    runtime = replace(
+        runtime,
+        source_like_rows_path=source_rows_path,
+        product_store_facts_path=product_store_path,
+        query_service=DashboardMartQueryService(
+            runtime.query_service.metric_facts_path,
+            catalog=runtime.query_service.catalog,
+            mart_builds=runtime.query_service.mart_builds,
+            source_ledger=runtime.query_service.source_ledger,
+            product_store_facts_path=product_store_path,
+        ),
+    )
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/query",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": ["network"],
+            "entity_filters": {"category": ["CATEGORY_STANDARD"], "store": ["STORE_001"]},
+            "metric_concepts": ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    values = {item["metric_concept"]: item["value"] for item in response["metric_results"]}
+    assert values == {
+        "revenue": 80.0,
+        "units": 8.0,
+        "retailer_margin_abs": 20.0,
+        "retailer_margin_pct": 0.25,
+    }
+    assert response["request_scope"]["user_entity_filters"] == {
+        "category": ["CATEGORY_STANDARD"],
+        "store": ["STORE_001"],
+    }
+    assert response["request_scope"]["entity_filters"] == {"category": ["CATEGORY_STANDARD"], "store": ["STORE_001"]}
+    provenance = response["metric_results"][0]["provenance"]
+    assert provenance["scoped_rollup"]["status"] == "DERIVED_FROM_PRODUCT_STORE_FACTS"
+    assert provenance["scoped_rollup"]["source_fact_grain"] == "sku_store"
+    assert provenance["current_analytical_scope"]["execution_entity_filters"] == {
+        "category": ["CATEGORY_STANDARD"],
+        "store": ["STORE_001"],
+    }
 
 
 def test_dashboard_contribution_route_returns_structured_rows(tmp_path: Path) -> None:
@@ -594,6 +671,40 @@ def test_dashboard_data_route_uses_current_build_revisions_for_rows_and_coverage
         if "source_revision_id" in row
     } == set()
 
+
+
+def _write_product_store_source_like_rows(path: Path) -> Path:
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a", "retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a", "source_a", "source_a"],
+            "source_revision_id": [
+                "revision_dashboard_synthetic",
+                "revision_dashboard_synthetic",
+                "revision_dashboard_synthetic",
+                "revision_dashboard_synthetic",
+            ],
+            "analysis_run_id": ["analysis_dashboard_synthetic"] * 4,
+            "period": [date(2025, 6, 1), date(2026, 6, 1), date(2026, 6, 1), date(2026, 6, 1)],
+            "category": ["CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_PREMIUM"],
+            "manufacturer": ["Manufacturer A", "Manufacturer A", "Manufacturer B", "Manufacturer C"],
+            "brand": ["Brand A", "Brand A", "Brand B", "Brand C"],
+            "sku_name": ["SKU A", "SKU A", "SKU B", "SKU C"],
+            "canonical_product_id": ["SKU_A_001", "SKU_A_001", "SKU_B_001", "SKU_C_001"],
+            "canonical_store_id": ["STORE_001", "STORE_001", "STORE_002", "STORE_001"],
+            "units": [6.0, 8.0, 5.0, 2.0],
+            "revenue_vat": [72.0, 96.0, 60.0, 36.0],
+            "revenue_net": [60.0, 80.0, 50.0, 30.0],
+            "retailer_margin_abs": [15.0, 20.0, 10.0, 6.0],
+            "shelf_price_vat": [12.0, 12.0, 12.0, 18.0],
+            "input_price_vat": [8.0, 8.0, 10.0, 12.0],
+            "private_label_flag": [False, False, True, False],
+            "source_row_number": [1, 2, 3, 4],
+            "store_format": ["format_a", "format_a", "format_b", "format_a"],
+            "region": ["region_a", "region_a", "region_b", "region_a"],
+        }
+    ).write_parquet(path)
+    return path
 
 def _write_source_like_rows(path: Path) -> Path:
     pl.DataFrame(

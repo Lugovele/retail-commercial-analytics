@@ -1271,3 +1271,39 @@ capabilities:
   provenance_supported: false
   signal_eligible: false
   recommendation_eligible_future: true
+
+- concept_id: product_store_filter_intersection
+  ui_label_ru: Пересечение товаров и ТТ
+  ui_description_ru: Backend serving layer for product filters combined with store filters.
+  tab: Данные
+  group: Query serving
+  presentation_level: AUDIT_ONLY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: READY
+  range_aggregation_strategy: metric_specific
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: mixed
+  unit: metric_specific
+  backend_fact_source: mart_product_store_metric_facts
+  availability_status: READY
+  limitations:
+  - additive_ratio_and_weighted_metrics_only
+  - distinct_presence_velocity_share_rank_and_portfolio_metrics_not_supported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: false

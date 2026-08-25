@@ -104,6 +104,7 @@ class DashboardRuntimeConfig:
     events_path: Path | None = None
     event_rules_path: Path | None = None
     source_like_rows_path: Path | None = None
+    product_store_facts_path: Path | None = None
     public_metric_catalog_path: Path = Path("config/public/dashboard_metric_catalog.yaml")
     private_metric_catalog_path: Path | None = None
     retailers: tuple[DashboardRuntimeRetailer, ...] = ()
@@ -117,6 +118,7 @@ class DashboardRuntimeConfig:
             "events_path",
             "event_rules_path",
             "source_like_rows_path",
+            "product_store_facts_path",
             "public_metric_catalog_path",
             "private_metric_catalog_path",
         ):
@@ -151,6 +153,7 @@ class DashboardRuntime:
     events_path: Path | None = None
     event_rules_path: Path | None = None
     source_like_rows_path: Path | None = None
+    product_store_facts_path: Path | None = None
 
     def runtime_metadata(self) -> dict[str, Any]:
         """Return dashboard shell metadata without private business semantics."""
@@ -178,6 +181,7 @@ class DashboardRuntime:
             "supported_private_label_scopes": list(SUPPORTED_PRIVATE_LABEL_SCOPES),
             "signal_feed_configured": self.events_path is not None,
             "source_like_rows_configured": self.source_like_rows_path is not None,
+            "product_store_facts_configured": self.product_store_facts_path is not None,
         }
 
     def effective_catalog(self, *, retailer_id: str, source_id: str) -> tuple[EffectiveMetricCatalogEntry, ...]:
@@ -402,6 +406,7 @@ def load_dashboard_runtime_config(
         events_path=_config_path(payload.get("events_path"), base),
         event_rules_path=_config_path(payload.get("event_rules_path"), base),
         source_like_rows_path=_config_path(payload.get("source_like_rows_path"), base),
+        product_store_facts_path=_config_path(payload.get("product_store_facts_path"), base),
         public_metric_catalog_path=public_catalog_path,
         private_metric_catalog_path=_config_path(payload.get("private_metric_catalog_path"), base),
         retailers=retailers,
@@ -423,7 +428,7 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
     missing_paths = [str(path) for path in required_paths if path is None or not path.exists()]
     missing_paths.extend(
         str(path)
-        for path in (config.events_path, config.event_rules_path, config.source_like_rows_path)
+        for path in (config.events_path, config.event_rules_path, config.source_like_rows_path, config.product_store_facts_path)
         if path is not None and not path.exists()
     )
     if missing_paths:
@@ -451,6 +456,7 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
         catalog=catalog,
         mart_builds=_read_mart_builds(config.mart_builds_path),
         source_ledger=_read_source_ledger_entries(config.source_ledger_path),
+        product_store_facts_path=config.product_store_facts_path,
     )
     return DashboardRuntime(
         query_service=service,
@@ -460,6 +466,7 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
         events_path=config.events_path,
         event_rules_path=config.event_rules_path,
         source_like_rows_path=config.source_like_rows_path,
+        product_store_facts_path=config.product_store_facts_path,
     )
 
 

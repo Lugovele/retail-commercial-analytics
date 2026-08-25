@@ -78,6 +78,15 @@ from retail_analytics.mart.portfolio_market import (
     PortfolioMarketResponse,
     PortfolioMarketService,
 )
+from retail_analytics.mart.product_store_facts import (
+    PRODUCT_STORE_FACT_SCHEMA,
+    PRODUCT_STORE_SERVING_FACT_GRAIN,
+    PRODUCT_STORE_SERVING_VERSION,
+    PRODUCT_STORE_SUPPORTED_CONCEPTS,
+    build_product_store_metric_facts,
+    read_product_store_metric_facts,
+    write_product_store_metric_facts,
+)
 from retail_analytics.mart.query import (
     ComparisonMode,
     ComparisonResult,
@@ -118,6 +127,10 @@ from retail_analytics.mart.signals import (
 
 __all__ = [
     "ADDITIVE_CONTRIBUTION_METRICS",
+    "PRODUCT_STORE_FACT_SCHEMA",
+    "PRODUCT_STORE_SERVING_FACT_GRAIN",
+    "PRODUCT_STORE_SERVING_VERSION",
+    "PRODUCT_STORE_SUPPORTED_CONCEPTS",
     "UNKNOWN_REGION",
     "ActiveSkuSummary",
     "AdditiveContributionService",
@@ -180,6 +193,7 @@ __all__ = [
     "SignalType",
     "apply_private_label_scope",
     "build_mart_metric_facts",
+    "build_product_store_metric_facts",
     "calculate_active_sku_summary",
     "calculate_category_share",
     "calculate_decline_speed_ratio",
@@ -204,11 +218,13 @@ __all__ = [
     "rank_manufacturers",
     "read_mart_build_metadata",
     "read_mart_metric_facts",
+    "read_product_store_metric_facts",
     "scope_identity_hash",
     "validate_metric_catalog",
     "write_mart_build_metadata",
     "write_mart_build_metadata_dataset",
     "write_mart_metric_fact_dataset",
     "write_mart_metric_facts",
+    "write_product_store_metric_facts",
 ]
 

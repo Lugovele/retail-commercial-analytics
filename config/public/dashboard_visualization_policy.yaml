@@ -880,6 +880,15 @@ metric_rules:
     grain_support: [category, manufacturer, brand, sku]
     period_modes: [COMPARE]
     readiness_requirement: READY_QUERY
+  - concept_id: product_store_filter_intersection
+    allowed_screens: [data]
+    preferred_visualization: PROVENANCE_DRAWER
+    alternative_visualizations: [DETAIL_TABLE]
+    forbidden_visualizations: [KPI, PIE, DONUT, GAUGE, WATERFALL]
+    presentation_priority: AUDIT
+    grain_support: [network, category, manufacturer, brand, sku, store]
+    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
+    readiness_requirement: READY_QUERY
   - concept_id: recommendations
     allowed_screens: []
     preferred_visualization: DETAIL_TABLE
