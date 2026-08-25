@@ -97,7 +97,11 @@ Private-label terminology:
 
 Traceability action:
 
-`Откуда эта цифра?`
+`Проверка показателя`
+
+Important numeric values open the inspector directly. A separate
+`Откуда эта цифра?` label may appear only as a compact fallback, not as the
+dominant presentation pattern.
 
 Audit hierarchy:
 

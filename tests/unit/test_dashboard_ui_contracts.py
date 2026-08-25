@@ -324,7 +324,8 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "Рекомендации" not in html
     assert "Показатели" not in html
     assert "Бизнес-оценки" not in html
-    assert "Откуда эта цифра?" in html
+    assert "Проверка показателя" in html
+    assert "Откуда эта цифра?" not in html
     assert "Один период" in html
     assert "Сравнение" in html
     assert "Весь диапазон" in html
@@ -587,7 +588,7 @@ def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() ->
     assert "metricEntryForGrain(concept, grain)" in script
     assert "const salesDriverGrainSupport = {" in script
     assert "period_only" in script
-    assert 'return ["Недоступно", "Показатель доступен только по отдельным периодам."];' in script
+    assert 'return [staticCell("Недоступно"), staticCell("Показатель доступен только по отдельным периодам.")];' in script
     assert "Показатель доступен только по отдельным периодам." in script
     assert "Для выбранного среза нет поддержанных показателей." in script
     assert "сортировка доступна по столбцам таблицы" in script
@@ -633,7 +634,7 @@ def test_sales_drivers_provenance_and_drilldown_keep_view_identity() -> None:
     assert "const normalizedRows = rows.map" in render_rows_body
     assert "row.cells.forEach" in render_rows_body
     assert "options.onFirstCellClick(cell, row.meta)" in render_rows_body
-    assert "String(left.cells[index])" in script
+    assert "cellText(left.cells[index])" in script
     assert "meta: { entityId }" in script
     assert "if (meta?.entityId) void drillIntoEntity(String(meta.entityId));" in script
     assert "rows.findIndex((row) => row[0] === label)" not in script
@@ -711,6 +712,9 @@ def test_portfolio_market_visual_policy_and_private_label_guardrails() -> None:
     assert "row.provenance || rank.provenance" in script
     assert "value: row.rank" in script
     assert "value: row.metric_value" not in script
+    assert "function appendPortfolioAssortmentValue" in script
+    assert "metric-value-button--inline" in script
+    assert "portfolioResultForInspector(item)" in script
     assert "onSort: renderPortfolioCompetitors" in script
     assert "return provenanceSections(provenance" in script
     assert "`Рынок и ${privateLabelDisplayName()}`" in script
@@ -1303,7 +1307,7 @@ def test_stores_screen_provenance_and_period_guardrails() -> None:
 
     assert "function openStoreProvenance(result)" in script
     assert "function storeProvenanceButton(result)" in script
-    assert "provenanceSections(result.provenance || {}, result)" in script
+    assert "openMetricInspector({ concept: result.metric_concept, result, response: state.storesResponse, mode: \"value\" })" in script
     assert 'if (state.activeView === "stores")' in script
     assert "storeResultFor(concept, storeId)" in script
     assert "range_aggregation_period_only" in script
@@ -1327,6 +1331,61 @@ def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:
     assert "openContributionProvenance(row)" in script
     assert "contributionProvenanceSections(row.provenance || {}, row)" in script
     assert "entityDisplayLabel(state.previewGrain, row.child_entity_id)" in script
+
+
+def test_metric_inspector_replaces_icon_only_provenance_affordance() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert 'aria-label="Проверка показателя"' in html
+    assert 'id="metric-inspector-title">Проверка показателя</h2>' in html
+    assert 'title="Откуда эта цифра?"' not in html
+    assert "button.title" not in script
+
+    assert "function openMetricInspector" in script
+    assert "function metricValueButton" in script
+    assert "function metricDeltaButton" in script
+    assert "openMetricInspector({ concept, result, response, mode, sections })" in script
+    assert "openMetricInspector({ concept, result, response, mode: \"comparison\", sections })" in script
+    assert "contributionResultFromRow(row, cell.value)" in script
+    assert 'heading.textContent = title || "Проверка показателя"' in script
+    assert "label || \"Проверка показателя\"" not in script
+    assert "Формула берётся" not in script
+    assert "Определение берётся" not in script
+    assert "Изменение объекта делится" not in script
+    assert "closeMetricInspector();" in script
+    assert "metric-value-button--kpi" in script
+    assert "metric-delta-button" in script
+
+    assert ".metric-value-button" in styles
+    assert ".metric-value-button:focus-visible" in styles
+    assert ".metric-inspector" in styles
+
+
+def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert "OUTCOME_DIRECTIONAL" in script
+    assert "NEUTRAL_DIRECTIONAL" in script
+    assert "RANK_DIRECTIONAL" in script
+    assert "lower" not in script.lower() or "меньшее значение означает движение вверх" in script
+    assert "retailer_margin_pct" in script
+    assert "function deltaFormatFor(format)" in script
+    assert 'return format === "percent" ? "percentage_points" : format;' in script
+    assert "formatDeltaValue(comparison.delta, deltaFormatFor(entry.format))" in script
+    assert "formatDeltaValue(row.delta, deltaFormatFor(metric?.format || \"decimal\"))" in script
+    assert "delta-rank-improved" in script
+    assert "delta-rank-declined" in script
+    assert "delta-neutral-up" in script
+    assert "delta-neutral-down" in script
+
+    assert "--delta-outcome-up" in styles
+    assert "--delta-outcome-down" in styles
+    assert "--delta-neutral-up" in styles
+    assert "--delta-neutral-down" in styles
+    assert "--delta-rank-improved" in styles
 
 
 def test_provenance_drawer_uses_russian_presentation_labels() -> None:

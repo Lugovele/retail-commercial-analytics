@@ -6,6 +6,10 @@ metrics:
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Какой оборот с НДС сформирован в выбранном срезе?
+    decision_use: Проверить общий денежный масштаб продаж с учётом НДС.
+    formula_summary: Сумма оборота с НДС по фактам выбранного среза.
+    delta_semantics: OUTCOME_DIRECTIONAL
   - metric_concept: revenue
     default_display_label: Оборот без НДС
     description: Оборот без НДС из deterministic metric outputs.
@@ -13,6 +17,10 @@ metrics:
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Какой коммерческий оборот сформирован в выбранном срезе?
+    decision_use: Оценить основной денежный результат и его изменение.
+    formula_summary: Сумма оборота без НДС по фактам выбранного среза.
+    delta_semantics: OUTCOME_DIRECTIONAL
   - metric_concept: units
     default_display_label: Продажи, шт.
     description: Продажи в штуках из deterministic metric outputs.
@@ -20,6 +28,10 @@ metrics:
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Сколько единиц продано в выбранном срезе?
+    decision_use: Отделить изменение физического объёма от ценового эффекта.
+    formula_summary: Сумма проданных единиц по фактам выбранного среза.
+    delta_semantics: OUTCOME_DIRECTIONAL
   - metric_concept: retailer_margin_abs
     default_display_label: Абсолютная маржа
     description: Абсолютная маржа из deterministic metric outputs.
@@ -27,6 +39,10 @@ metrics:
     dashboard_group: economics
     default_range_aggregation_strategy: sum_available_periods
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Сколько абсолютной маржи сформировано?
+    decision_use: Оценить денежный вклад среза в экономику сети.
+    formula_summary: Сумма абсолютной маржи по фактам выбранного среза.
+    delta_semantics: OUTCOME_DIRECTIONAL
   - metric_concept: retailer_margin_pct
     default_display_label: Маржинальность
     description: Маржинальность; range-safe только через сохранённые numerator и denominator.
@@ -34,6 +50,10 @@ metrics:
     dashboard_group: economics
     default_range_aggregation_strategy: ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Какой уровень маржинальности у выбранного среза?
+    decision_use: Проверить экономическую эффективность продаж.
+    formula_summary: Отношение суммы абсолютной маржи к сумме оборота в выбранном срезе.
+    delta_semantics: OUTCOME_DIRECTIONAL
   - metric_concept: weighted_shelf_price_vat
     default_display_label: Средняя полочная цена с НДС
     description: Средневзвешенная полочная цена с НДС из deterministic metric outputs.
@@ -41,6 +61,10 @@ metrics:
     dashboard_group: price
     default_range_aggregation_strategy: weighted_ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: По какой средней полочной цене продавался срез?
+    decision_use: Проверить движение цены без вывода о качестве результата.
+    formula_summary: Средневзвешенная полочная цена по продажам выбранного среза.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: weighted_input_price_vat
     default_display_label: Средняя входная цена с НДС
     description: Средневзвешенная входная цена с НДС из deterministic metric outputs.
@@ -48,6 +72,10 @@ metrics:
     dashboard_group: price
     default_range_aggregation_strategy: weighted_ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Какой средний входной уровень цены у среза?
+    decision_use: Проверить изменение входной цены как контекст экономики.
+    formula_summary: Средневзвешенная входная цена по продажам выбранного среза.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: selling_store_count
     default_display_label: ТТ с продажами
     description: Количество ТТ с продажами на уровне периода.
@@ -56,6 +84,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: В скольких ТТ были продажи выбранного среза?
+    decision_use: Оценить присутствие продаж в торговых точках.
+    formula_summary: Количество торговых точек с продажами за период.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: active_store_count
     default_display_label: Активные ТТ
     description: Количество активных ТТ на уровне периода.
@@ -64,6 +96,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Сколько ТТ входит в активную базу периода?
+    decision_use: Проверить размер доступной базы для оценки присутствия.
+    formula_summary: Количество активных торговых точек в периоде.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: distribution
     default_display_label: Дистрибуция
     description: Дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
@@ -72,6 +108,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Какая доля активных ТТ продаёт выбранный срез?
+    decision_use: Оценить ширину присутствия без причинной интерпретации.
+    formula_summary: Отношение ТТ с продажами к активным ТТ в периоде.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: velocity
     default_display_label: Продажи на ТТ
     description: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
@@ -80,6 +120,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Сколько единиц продаётся на одну ТТ с продажами?
+    decision_use: Оценить интенсивность продаж там, где товар присутствует.
+    formula_summary: Продажи в штуках, делённые на количество ТТ с продажами.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: revenue_velocity
     default_display_label: Оборот на ТТ
     description: Оборот на ТТ на уровне периода.
@@ -88,6 +132,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Какой оборот приходится на одну ТТ с продажами?
+    decision_use: Оценить денежную интенсивность продаж в точках присутствия.
+    formula_summary: Оборот, делённый на количество ТТ с продажами.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: margin_velocity
     default_display_label: Маржа на ТТ
     description: Маржа на ТТ на уровне периода.
@@ -96,6 +144,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Какая маржа приходится на одну ТТ с продажами?
+    decision_use: Оценить экономическую интенсивность в точках присутствия.
+    formula_summary: Абсолютная маржа, делённая на количество ТТ с продажами.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: sku_count
     default_display_label: SKU в периоде
     description: Количество distinct SKU на уровне периода.
@@ -104,6 +156,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Сколько SKU реально продавалось в периоде?
+    decision_use: Оценить ширину активного ассортимента.
+    formula_summary: Количество distinct SKU с продажами за период.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: brand_count
     default_display_label: Активные бренды
     description: Количество distinct брендов на уровне периода.
@@ -112,6 +168,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Сколько брендов реально продавалось в периоде?
+    decision_use: Оценить ширину активного брендового портфеля.
+    formula_summary: Количество distinct брендов с продажами за период.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: category_count
     default_display_label: Категории
     description: Количество distinct категорий на уровне периода.
@@ -120,6 +180,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_unavailable]
+    business_question: Сколько категорий реально продавалось в периоде?
+    decision_use: Оценить ширину активного категорийного портфеля.
+    formula_summary: Количество distinct категорий с продажами за период.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: category_revenue_share
     default_display_label: Доля в обороте категории
     description: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
@@ -128,6 +192,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_requires_declared_scope]
+    business_question: Какую долю оборота категории занимает выбранный срез?
+    decision_use: Оценить позицию внутри категории и её движение.
+    formula_summary: Оборот выбранного среза, делённый на оборот категории в объявленном scope.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: category_units_share
     default_display_label: Доля в штуках категории
     description: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
@@ -136,6 +204,10 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_requires_declared_scope]
+    business_question: Какую долю продаж категории в штуках занимает выбранный срез?
+    decision_use: Оценить физическую позицию внутри категории.
+    formula_summary: Продажи выбранного среза в штуках, делённые на продажи категории в объявленном scope.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: category_margin_share
     default_display_label: Доля в марже категории
     description: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
@@ -144,3 +216,7 @@ metrics:
     default_range_aggregation_strategy: period_only
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
     generic_limitations: [selected_range_value_requires_declared_scope]
+    business_question: Какую долю маржи категории занимает выбранный срез?
+    decision_use: Оценить экономическую позицию внутри категории.
+    formula_summary: Абсолютная маржа выбранного среза, делённая на маржу категории в объявленном scope.
+    delta_semantics: NEUTRAL_DIRECTIONAL

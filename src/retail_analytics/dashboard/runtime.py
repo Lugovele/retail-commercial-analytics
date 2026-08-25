@@ -729,6 +729,10 @@ def serialize_catalog(entries: tuple[EffectiveMetricCatalogEntry, ...]) -> list[
             "metric_config_hash": entry.metric_config_hash,
             "rule_version": entry.rule_version,
             "private_label_scope_support": [scope.value for scope in entry.private_label_scope_support],
+            "business_question": entry.business_question,
+            "decision_use": entry.decision_use,
+            "formula_summary": entry.formula_summary,
+            "delta_semantics": entry.delta_semantics,
         }
         for entry in entries
     ]

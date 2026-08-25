@@ -1,4 +1,4 @@
-policy_version: dashboard_visualization_policy.v1.1.0
+policy_version: dashboard_visualization_policy.v1.2.0
 purpose: Public-safe authority for dashboard screen design and visualization choices.
 semantic_boundary:
   metric_catalog_role: taxonomy_of_data
@@ -101,6 +101,10 @@ enums:
     - SECONDARY
     - DETAIL
     - AUDIT
+  delta_semantics:
+    - OUTCOME_DIRECTIONAL
+    - NEUTRAL_DIRECTIONAL
+    - RANK_DIRECTIONAL
 
 interaction_model:
   report_structure: continuous_vertical_report
@@ -144,6 +148,65 @@ interaction_model:
     cascade: category_to_manufacturer_to_brand_to_sku
     invalid_child_selection: clear_automatically
     store_filter: orthogonal
+  metric_inspector:
+    status: REQUIRED
+    primary_affordance: clickable_numeric_value
+    entity_label_action: drilldown_or_selection
+    metric_value_action: open_metric_inspector
+    metric_delta_action: open_comparison_inspector
+    old_icon_only_affordance_allowed: fallback_only
+    hover_instruction_tooltips_allowed: false
+    keyboard:
+      trigger_keys: [Enter, Space]
+      close_keys: [Escape]
+      focus_visible_required: true
+    sections_default_open:
+      - business_definition
+      - value
+      - calculation
+      - comparison
+      - scope
+      - data_coverage
+      - business_rule
+      - quality
+    sections_collapsed:
+      - technical_audit
+    formula_source: metric_catalog_and_backend_provenance
+    frontend_business_formulas_allowed: false
+  semantic_delta_color:
+    principle: direction_not_good_bad
+    outcome_directional_metrics:
+      - revenue
+      - revenue_vat
+      - units
+      - retailer_margin_abs
+      - retailer_margin_pct
+    neutral_directional_metrics:
+      - weighted_shelf_price_vat
+      - weighted_input_price_vat
+      - selling_store_count
+      - active_store_count
+      - distribution
+      - velocity
+      - revenue_velocity
+      - margin_velocity
+      - sku_count
+      - brand_count
+      - category_count
+      - category_revenue_share
+      - category_units_share
+      - category_margin_share
+      - contribution_to_delta
+    rank_directional_metrics:
+      - manufacturer_rank_revenue
+      - manufacturer_rank_units
+    rank_rule: lower_rank_number_is_position_improvement
+    percentage_metric_delta_format: percentage_points
+    forbidden_copy:
+      - good
+      - bad
+      - cause
+      - recommendation
   drilldown:
     breadcrumb_represents: selected_analytical_entity_path_only
     breadcrumb_hidden_without_drilldown: true

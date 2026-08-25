@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from retail_analytics.dashboard.runtime import serialize_catalog
 from retail_analytics.mart import (
     CatalogIssueSeverity,
     DashboardGroup,
@@ -26,6 +27,22 @@ def test_public_catalog_loads_generic_metadata() -> None:
     concepts = {entry.metric_concept for entry in catalog}
     assert {"revenue", "units", "retailer_margin_pct", "distribution", "velocity"} <= concepts
     assert all("retailer_a" not in entry.default_display_label for entry in catalog)
+
+
+def test_public_catalog_carries_metric_inspector_metadata() -> None:
+    catalog = load_public_metric_catalog("config/public/dashboard_metric_catalog.yaml")
+    allowed_delta_semantics = {"OUTCOME_DIRECTIONAL", "NEUTRAL_DIRECTIONAL", "RANK_DIRECTIONAL"}
+
+    assert all(entry.business_question for entry in catalog)
+    assert all(entry.decision_use for entry in catalog)
+    assert all(entry.formula_summary for entry in catalog)
+    assert {entry.delta_semantics for entry in catalog}.issubset(allowed_delta_semantics)
+
+    by_concept = {entry.metric_concept: entry for entry in catalog}
+    assert by_concept["revenue"].delta_semantics == "OUTCOME_DIRECTIONAL"
+    assert by_concept["retailer_margin_pct"].delta_semantics == "OUTCOME_DIRECTIONAL"
+    assert by_concept["weighted_shelf_price_vat"].delta_semantics == "NEUTRAL_DIRECTIONAL"
+    assert by_concept["distribution"].delta_semantics == "NEUTRAL_DIRECTIONAL"
 
 
 def test_private_override_merges_with_public_defaults() -> None:
@@ -54,6 +71,10 @@ def test_private_override_merges_with_public_defaults() -> None:
     assert merged[0].format == MetricFormat.CURRENCY
     assert merged[0].range_aggregation_strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS
     assert merged[0].cross_retailer_comparable is False
+    serialized = serialize_catalog(merged)[0]
+    assert serialized["business_question"] == "Проверить значение показателя в выбранном срезе."
+    assert serialized["formula_summary"] == "Synthetic catalog entry."
+    assert serialized["delta_semantics"] == "NEUTRAL_DIRECTIONAL"
 
 
 def test_private_override_for_unknown_concept_is_invalid() -> None:
@@ -286,4 +307,8 @@ def _public(
         dashboard_group=DashboardGroup.SALES,
         default_range_aggregation_strategy=strategy,
         default_comparison_support=("NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE"),
+        business_question="Проверить значение показателя в выбранном срезе.",
+        decision_use="Synthetic decision use.",
+        formula_summary="Synthetic catalog entry.",
+        delta_semantics="NEUTRAL_DIRECTIONAL",
     )

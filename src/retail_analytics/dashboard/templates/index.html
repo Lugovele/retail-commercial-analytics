@@ -227,7 +227,7 @@
                     <span>Показатель</span>
                     <select id="chart-metric"></select>
                   </label>
-                  <button type="button" class="text-button inline-link" data-open-provenance aria-label="Откуда эта цифра?" title="Откуда эта цифра?">i</button>
+                  <button type="button" class="text-button inline-link" data-open-provenance aria-label="Проверить выбранный показатель">i</button>
                 </div>
               </div>
               <div class="chart-box" id="chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
@@ -304,7 +304,7 @@
                 <h2 id="sales-drivers-trend-title">Динамика показателя</h2>
                 <p id="sales-drivers-trend-context">Выберите строку в матрице, чтобы сменить показатель.</p>
               </div>
-              <button type="button" class="text-button" id="sales-drivers-provenance">Откуда эта цифра?</button>
+              <button type="button" class="text-button subtle-action" id="sales-drivers-provenance">Проверить показатель</button>
             </div>
             <div class="chart-box" id="sales-drivers-chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
             <div class="chart-footnote" id="sales-drivers-chart-footnote"></div>
@@ -538,11 +538,11 @@
       </main>
     </div>
 
-    <aside class="drawer" id="provenance-drawer" aria-hidden="true" aria-label="Откуда эта цифра?">
+    <aside class="drawer metric-inspector" id="provenance-drawer" aria-hidden="true" aria-label="Проверка показателя">
       <div class="drawer-header">
         <div>
           <p class="eyebrow">проверка показателя</p>
-          <h2>Откуда эта цифра?</h2>
+          <h2 id="metric-inspector-title">Проверка показателя</h2>
         </div>
         <button type="button" class="icon-button" id="close-drawer" aria-label="Закрыть">×</button>
       </div>

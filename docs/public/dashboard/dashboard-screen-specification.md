@@ -382,20 +382,37 @@ Explicitly excluded:
 | Contribution to delta | not applicable | valid for additive metrics | not applicable | Comparison-driven only. |
 | Signals | partial | partial | partial | Only confirmed deterministic signal routes. |
 
-## Provenance Defaults
+## Metric Inspector / Provenance Defaults
 
-Every important number should offer `Откуда эта цифра?` when backend provenance
-is available.
+Every important number should open the Metric Inspector directly. Separate
+icon-only `Откуда эта цифра?` controls are fallback affordances only, not the
+primary interaction pattern.
+
+Entity labels and first-column table names remain drilldown/select actions.
+Numeric values and deltas inspect the metric value, comparison, scope, formula,
+coverage, quality, and lineage. This distinction prevents row clicks from
+mixing drilldown with audit.
 
 Default drawer hierarchy:
 
 1. Что это за показатель.
-2. Срез.
-3. Расчёт.
-4. Сравнение.
-5. Покрытие данных.
-6. Бизнес-правило.
-7. Качество.
-8. Технические детали.
+2. Бизнес-вопрос / для решения.
+3. Срез.
+4. Расчёт.
+5. Сравнение.
+6. Покрытие данных.
+7. Бизнес-правило.
+8. Качество.
+9. Технические детали.
 
 Technical details are collapsed by default.
+
+Delta color is semantic and direction-only:
+
+| Metric class | Behavior |
+| --- | --- |
+| Outcome directional | Revenue, units, absolute margin, and margin rate can show increase/decrease colors without good/bad wording. |
+| Neutral directional | Prices, distribution, velocity, shares, counts, and contribution shares show neutral movement. |
+| Rank directional | Lower rank number means position improvement; higher rank number means position decline. |
+
+Margin-rate and share deltas use percentage points (`п.п.`).

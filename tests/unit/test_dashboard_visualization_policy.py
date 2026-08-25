@@ -41,7 +41,7 @@ def test_visualization_policy_defines_approved_screens_and_vocabularies() -> Non
 
     assert screen_ids == EXPECTED_SCREENS
     assert len(screen_ids) == len(set(screen_ids))
-    assert policy["policy_version"] == "dashboard_visualization_policy.v1.1.0"
+    assert policy["policy_version"] == "dashboard_visualization_policy.v1.2.0"
 
     visualizations = set(policy["enums"]["visualization_types"])
     assert {
@@ -113,6 +113,31 @@ def test_contribution_policy_is_additive_only_and_table_first() -> None:
     assert rule["allowed_screens"] == ["overview"]
     assert rule["period_modes"] == ["COMPARE"]
     assert rule["readiness_requirement"] == "READY_QUERY"
+
+
+def test_metric_inspector_and_delta_semantics_are_governed() -> None:
+    policy = _load_policy()
+    inspector = policy["interaction_model"]["metric_inspector"]
+    colors = policy["interaction_model"]["semantic_delta_color"]
+
+    assert inspector["primary_affordance"] == "clickable_numeric_value"
+    assert inspector["entity_label_action"] == "drilldown_or_selection"
+    assert inspector["metric_delta_action"] == "open_comparison_inspector"
+    assert inspector["hover_instruction_tooltips_allowed"] is False
+    assert inspector["frontend_business_formulas_allowed"] is False
+    assert "technical_audit" in inspector["sections_collapsed"]
+
+    assert "OUTCOME_DIRECTIONAL" in policy["enums"]["delta_semantics"]
+    assert colors["principle"] == "direction_not_good_bad"
+    assert {"revenue", "units", "retailer_margin_abs", "retailer_margin_pct"}.issubset(
+        set(colors["outcome_directional_metrics"])
+    )
+    assert {"weighted_shelf_price_vat", "distribution", "velocity", "category_revenue_share"}.issubset(
+        set(colors["neutral_directional_metrics"])
+    )
+    assert colors["rank_directional_metrics"] == ["manufacturer_rank_revenue", "manufacturer_rank_units"]
+    assert colors["rank_rule"] == "lower_rank_number_is_position_improvement"
+    assert colors["percentage_metric_delta_format"] == "percentage_points"
 
 
 def test_store_policy_blocks_distribution_and_velocity() -> None:

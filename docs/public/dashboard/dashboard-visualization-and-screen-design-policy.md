@@ -1,6 +1,6 @@
 # Dashboard Visualization and Screen Design Policy
 
-Version: `dashboard_visualization_policy.v1.1.0`
+Version: `dashboard_visualization_policy.v1.2.0`
 
 This document is the authoritative public-safe design policy for the
 `Аналитика продаж` dashboard. It governs dashboard information architecture,
@@ -377,6 +377,40 @@ For example, revenue growth may coexist with margin deterioration.
 Use arrows, signs, labels, line styles, or markers in addition to color. Do not
 encode meaning with red/green alone.
 
+Semantic delta color classes are governed by the Metric Catalog and screen
+policy:
+
+- `OUTCOME_DIRECTIONAL`: revenue, units, absolute margin, and margin rate may
+  use increase/decrease color, but the copy must still say direction rather than
+  good/bad.
+- `NEUTRAL_DIRECTIONAL`: prices, presence, distribution, velocity, shares,
+  counts, and contribution shares must show movement neutrally.
+- `RANK_DIRECTIONAL`: rank metrics invert numeric direction because a lower rank
+  number means a higher position.
+
+Percent-rate deltas, including margin rate and share-point gaps, are displayed
+in percentage points (`п.п.`), not as ordinary relative percent changes.
+
+## Metric Inspector
+
+Every important numeric value is an inspection affordance. The number itself,
+not a separate dominant `i` button, should open the Metric Inspector. Entity
+labels keep their separate meaning: they drill down or select an analytical
+object.
+
+The Metric Inspector is not a recommendation surface. It answers:
+
+1. What is this metric?
+2. What business question does it answer?
+3. What value or comparison is being inspected?
+4. How is it calculated according to catalog/provenance metadata?
+5. What scope, comparison, coverage, rules, and quality apply?
+6. What technical lineage supports it?
+
+Technical lineage is collapsed by default. Hover-only instructional tooltips are
+not allowed for numeric inspection; accessible names and visible focus states
+are required. Escape closes the inspector.
+
 ## Role Depth
 
 Use one layered dashboard rather than separate products:
@@ -498,7 +532,7 @@ Tests are required evidence, not a substitute for review.
 
 ## Versioning
 
-The current policy version is `dashboard_visualization_policy.v1.1.0`.
+The current policy version is `dashboard_visualization_policy.v1.2.0`.
 
 Semantic design changes require a version bump. CSS-only implementation changes
 do not require a policy version bump unless they alter screen hierarchy,

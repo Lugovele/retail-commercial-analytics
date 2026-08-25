@@ -79,6 +79,10 @@ class PublicMetricCatalogEntry:
     default_comparison_support: tuple[str, ...] = ("NONE",)
     generic_limitations: tuple[str, ...] = ()
     private_label_scope_support: tuple[PrivateLabelScope, ...] = ()
+    business_question: str = ""
+    decision_use: str = ""
+    formula_summary: str = ""
+    delta_semantics: str = "NEUTRAL_DIRECTIONAL"
 
 
 @dataclass(frozen=True)
@@ -149,6 +153,10 @@ class EffectiveMetricCatalogEntry:
     rule_version: str | None
     metric_config_hash: str | None
     private_label_scope_support: tuple[PrivateLabelScope, ...]
+    business_question: str
+    decision_use: str
+    formula_summary: str
+    delta_semantics: str
     default_visible: bool = True
     sort_order: int | None = None
 
@@ -315,6 +323,10 @@ def _merge_entry(
         metric_config_hash=override.metric_config_hash,
         private_label_scope_support=override.private_label_scope_support
         or public.private_label_scope_support,
+        business_question=public.business_question,
+        decision_use=public.decision_use,
+        formula_summary=public.formula_summary,
+        delta_semantics=public.delta_semantics,
     )
 
 
@@ -402,6 +414,10 @@ def _public_entry(row: dict[str, Any]) -> PublicMetricCatalogEntry:
         private_label_scope_support=_private_label_scope_tuple(
             row.get("private_label_scope_support") or DEFAULT_PRIVATE_LABEL_SCOPE_SUPPORT
         ),
+        business_question=str(row.get("business_question") or ""),
+        decision_use=str(row.get("decision_use") or ""),
+        formula_summary=str(row.get("formula_summary") or ""),
+        delta_semantics=str(row.get("delta_semantics") or "NEUTRAL_DIRECTIONAL"),
     )
 
 
