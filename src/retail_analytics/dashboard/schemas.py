@@ -13,6 +13,8 @@ from retail_analytics.mart import (
     DashboardMetricQueryRequest,
     DashboardMetricQueryResponse,
     PeriodMode,
+    PortfolioMarketQueryRequest,
+    PortfolioMarketResponse,
     PrivateLabelScope,
     QualityPolicy,
 )
@@ -80,6 +82,27 @@ class DashboardUiContributionPayload:
     child_metric_definition_id: str | None = None
 
 
+@dataclass(frozen=True)
+class DashboardUiPortfolioMarketPayload:
+    """UI-facing product route request for portfolio-market analytics."""
+
+    retailer_id: str
+    source_id: str
+    period_mode: PeriodMode | str
+    period_grain: str
+    grain_id: str
+    concept_ids: tuple[str, ...]
+    date_from: date | str | None = None
+    date_to: date | str | None = None
+    entity_ids: tuple[str, ...] = ()
+    entity_filters: dict[str, tuple[str, ...]] | None = None
+    comparison_mode: str = "NONE"
+    private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE
+    mart_build_id: str | None = None
+    quality_policy: QualityPolicy | str = QualityPolicy.INCLUDE_ALL
+    include_lineage: bool = True
+
+
 def build_backend_query_request(payload: DashboardUiQueryPayload | dict[str, Any]) -> DashboardMetricQueryRequest:
     """Build the exact backend query request from a UI payload."""
 
@@ -125,6 +148,31 @@ def build_contribution_request(payload: DashboardUiContributionPayload | dict[st
         limit=data.limit,
         parent_metric_definition_id=data.parent_metric_definition_id,
         child_metric_definition_id=data.child_metric_definition_id,
+    )
+
+
+def build_portfolio_market_request(
+    payload: DashboardUiPortfolioMarketPayload | dict[str, Any],
+) -> PortfolioMarketQueryRequest:
+    """Build a concept-explicit portfolio-market backend request."""
+
+    data = _coerce_portfolio_market_payload(payload)
+    return PortfolioMarketQueryRequest(
+        retailer_id=data.retailer_id,
+        source_id=data.source_id,
+        date_from=_date_or_none(data.date_from),
+        date_to=_date_or_none(data.date_to),
+        period_mode=PeriodMode(data.period_mode),
+        period_grain=data.period_grain,
+        grain_id=data.grain_id,
+        concept_ids=tuple(data.concept_ids),
+        entity_ids=tuple(data.entity_ids),
+        entity_filters=data.entity_filters,
+        comparison_mode=ComparisonMode(data.comparison_mode),
+        private_label_scope=PrivateLabelScope(data.private_label_scope),
+        mart_build_id=data.mart_build_id,
+        quality_policy=QualityPolicy(data.quality_policy),
+        include_lineage=data.include_lineage,
     )
 
 
@@ -207,6 +255,39 @@ def serialize_contribution_response(response: ContributionQueryResponse) -> dict
         "mart_build_id": response.mart_build_id,
         "analysis_run_ids": list(response.analysis_run_ids),
         "source_revision_ids": list(response.source_revision_ids),
+    }
+
+
+def serialize_portfolio_market_response(response: PortfolioMarketResponse) -> dict[str, Any]:
+    """Serialize portfolio-market route output without changing semantics."""
+
+    return {
+        "request_scope": _json_ready(response.request_scope),
+        "items": [
+            {
+                "concept_id": item.concept_id,
+                "status": item.status.value,
+                "block_id": item.block_id,
+                "grain_id": item.grain_id,
+                "entity_id": item.entity_id,
+                "label": item.label,
+                "value": item.value,
+                "unit": item.unit,
+                "current_value": item.current_value,
+                "reference_value": item.reference_value,
+                "delta": item.delta,
+                "pct_delta": item.pct_delta,
+                "numerator_value": item.numerator_value,
+                "denominator_value": item.denominator_value,
+                "rows": _json_ready(item.rows),
+                "limitations": list(item.limitations),
+                "provenance": _json_ready(item.provenance),
+            }
+            for item in response.items
+        ],
+        "limitations": list(response.limitations),
+        "mart_build_id": response.mart_build_id,
+        "private_label_scope": response.private_label_scope.value,
     }
 
 
@@ -338,6 +419,36 @@ def _coerce_contribution_payload(
         limit=int(payload.get("limit", 40)),
         parent_metric_definition_id=_optional_text(payload.get("parent_metric_definition_id")),
         child_metric_definition_id=_optional_text(payload.get("child_metric_definition_id")),
+    )
+
+
+def _coerce_portfolio_market_payload(
+    payload: DashboardUiPortfolioMarketPayload | dict[str, Any],
+) -> DashboardUiPortfolioMarketPayload:
+    if isinstance(payload, DashboardUiPortfolioMarketPayload):
+        return payload
+    raw_filters = payload.get("entity_filters")
+    filters = (
+        {str(key): tuple(str(item) for item in values) for key, values in raw_filters.items()}
+        if isinstance(raw_filters, dict)
+        else None
+    )
+    return DashboardUiPortfolioMarketPayload(
+        retailer_id=str(payload["retailer_id"]),
+        source_id=str(payload["source_id"]),
+        date_from=payload.get("date_from"),
+        date_to=payload.get("date_to"),
+        period_mode=payload.get("period_mode", PeriodMode.SINGLE_PERIOD),
+        period_grain=str(payload.get("period_grain", "month")),
+        grain_id=str(payload.get("grain_id", "network")),
+        concept_ids=tuple(str(item) for item in payload.get("concept_ids", ())),
+        entity_ids=tuple(str(item) for item in payload.get("entity_ids", ())),
+        entity_filters=filters,
+        comparison_mode=str(payload.get("comparison_mode", "NONE")),
+        private_label_scope=payload.get("private_label_scope", PrivateLabelScope.INCLUDE),
+        mart_build_id=payload.get("mart_build_id"),
+        quality_policy=payload.get("quality_policy", QualityPolicy.INCLUDE_ALL),
+        include_lineage=bool(payload.get("include_lineage", True)),
     )
 
 

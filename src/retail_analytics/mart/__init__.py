@@ -71,6 +71,13 @@ from retail_analytics.mart.portfolio import (
     calculate_category_share,
     compare_brand_to_category,
 )
+from retail_analytics.mart.portfolio_market import (
+    PortfolioConceptStatus,
+    PortfolioMarketItem,
+    PortfolioMarketQueryRequest,
+    PortfolioMarketResponse,
+    PortfolioMarketService,
+)
 from retail_analytics.mart.query import (
     ComparisonMode,
     ComparisonResult,
@@ -137,6 +144,11 @@ __all__ = [
     "MetricQueryResult",
     "PeriodMode",
     "PeriodValue",
+    "PortfolioConceptStatus",
+    "PortfolioMarketItem",
+    "PortfolioMarketQueryRequest",
+    "PortfolioMarketResponse",
+    "PortfolioMarketService",
     "PrivateLabelScope",
     "PrivateLabelScopeResult",
     "PrivateMetricCatalogOverride",

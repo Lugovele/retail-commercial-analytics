@@ -18,10 +18,12 @@ from retail_analytics.dashboard.runtime import (
 from retail_analytics.dashboard.schemas import (
     build_backend_query_request,
     build_contribution_request,
+    build_portfolio_market_request,
     serialize_contribution_response,
     serialize_dashboard_query_response,
+    serialize_portfolio_market_response,
 )
-from retail_analytics.mart import AdditiveContributionService
+from retail_analytics.mart import AdditiveContributionService, PortfolioMarketService
 
 
 def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIApplication:
@@ -32,6 +34,7 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
         resolved_runtime.query_service.metric_facts_path,
         mart_builds=resolved_runtime.query_service.mart_builds,
     )
+    portfolio_market_service = PortfolioMarketService(resolved_runtime.query_service)
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
         method = str(environ.get("REQUEST_METHOD", "GET")).upper()
@@ -83,6 +86,11 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 contribution_request = build_contribution_request(payload)
                 contribution_response = contribution_service.contribution(contribution_request)
                 return _json_response(start_response, serialize_contribution_response(contribution_response))
+            if method == "POST" and path == "/api/dashboard/portfolio-market":
+                payload = _read_json(environ)
+                portfolio_request = build_portfolio_market_request(payload)
+                portfolio_response = portfolio_market_service.query(portfolio_request)
+                return _json_response(start_response, serialize_portfolio_market_response(portfolio_response))
             return _json_response(start_response, {"error": "not_found"}, status="404 Not Found")
         except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError) as exc:
             return _json_response(

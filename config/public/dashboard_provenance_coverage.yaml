@@ -528,9 +528,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Рейтинги
@@ -550,9 +549,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Рейтинги
@@ -572,9 +570,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Рейтинги
@@ -594,9 +591,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Структура
@@ -617,9 +613,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Структура
@@ -640,9 +635,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Структура
@@ -663,9 +657,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Структура
@@ -685,9 +678,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Структура
@@ -707,9 +699,8 @@ coverage:
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
-  UI_provenance_supported: false
+  UI_provenance_supported: true
   applicability:
     tab: Бизнес-оценки
     group: Структура

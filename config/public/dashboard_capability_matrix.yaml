@@ -678,7 +678,7 @@ capabilities:
   limitations:
   - category_scope_only
   - competition_rank_ties
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: false
   recommendation_eligible_future: true
 - concept_id: manufacturer_rank_units
@@ -708,7 +708,7 @@ capabilities:
   limitations:
   - category_scope_only
   - competition_rank_ties
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: false
   recommendation_eligible_future: true
 - concept_id: manufacturer_population_count
@@ -733,7 +733,7 @@ capabilities:
   availability_status: READY
   limitations:
   - category_scope_only
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: false
   recommendation_eligible_future: true
 - concept_id: active_sku_count
@@ -759,7 +759,7 @@ capabilities:
   availability_status: READY
   limitations:
   - sales_based_activity_not_listing
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: historical_peak_active_sku_count
@@ -785,7 +785,7 @@ capabilities:
   availability_status: READY
   limitations:
   - uses_available_periods_only
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: active_sku_change_pct
@@ -811,7 +811,7 @@ capabilities:
   availability_status: READY
   limitations:
   - undefined_when_peak_count_zero
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: brand_category_delta_gap_pp
@@ -841,7 +841,7 @@ capabilities:
   limitations:
   - requires_valid_reference_period
   - percent_delta_gap_not_status
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: brand_delta_pct
@@ -870,7 +870,7 @@ capabilities:
   availability_status: READY
   limitations:
   - not_growth_decline_status
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: category_delta_pct
@@ -899,7 +899,7 @@ capabilities:
   availability_status: READY
   limitations:
   - not_status
-  provenance_supported: false
+  provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: market_segment_delta_pct

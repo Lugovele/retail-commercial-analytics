@@ -186,6 +186,53 @@ def test_dashboard_contribution_route_returns_structured_rows(tmp_path: Path) ->
     assert unsupported["rows"] == []
 
 
+def test_dashboard_portfolio_market_route_returns_product_contract(tmp_path: Path) -> None:
+    app = create_dashboard_wsgi_app(build_synthetic_dashboard_runtime(tmp_path))
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/portfolio-market",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "brand",
+            "entity_ids": ["BRAND_A"],
+            "entity_filters": {"category": ["CATEGORY_STANDARD"], "brand": ["BRAND_A"]},
+            "concept_ids": [
+                "category_revenue_share",
+                "manufacturer_rank_revenue",
+                "brand_category_delta_gap_pp",
+                "broad_competitors",
+            ],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["mart_build_id"] == "build_dashboard_synthetic"
+    assert response["private_label_scope"] == "INCLUDE"
+    assert {item["concept_id"] for item in response["items"]} == {
+        "category_revenue_share",
+        "manufacturer_rank_revenue",
+        "brand_category_delta_gap_pp",
+        "broad_competitors",
+    }
+    rank = next(item for item in response["items"] if item["concept_id"] == "manufacturer_rank_revenue")
+    assert rank["status"] in {"READY", "PARTIAL"}
+    assert rank["provenance"]["projection"]["projection_semantics"] == "competition_rank_by_summed_additive_metric"
+    competitor = next(item for item in response["items"] if item["concept_id"] == "broad_competitors")
+    assert competitor["status"] == "NOT_AVAILABLE"
+    assert competitor["limitations"] == ["broad_competitor_projection_not_route_ready"]
+
+
 def _call(
     app: WSGIApplication,
     method: str,
