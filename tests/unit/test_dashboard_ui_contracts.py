@@ -794,7 +794,7 @@ def test_workflow_navigation_uses_wrapping_without_visible_horizontal_scrollbar(
     assert ".workflow-nav" in css
     assert "flex-wrap: wrap" in css
     assert "position: sticky;" in css
-    assert "top: 54px;" in css
+    assert "top: var(--app-header-height);" in css
     nav_body = css.split(".nav-item {", 1)[1].split(".nav-item.is-active", 1)[0]
     assert "background: transparent;" in nav_body
     assert "border: 0;" in nav_body
@@ -804,6 +804,34 @@ def test_workflow_navigation_uses_wrapping_without_visible_horizontal_scrollbar(
     assert ".nav-item.is-active::after" in css
     assert "height: 2px;" in css
     assert ".folder-tabs" not in css
+
+
+def test_workspace_spacing_remediation_uses_stable_sticky_geometry() -> None:
+    css = html_or_script("styles.css")
+    script = html_or_script("app.js")
+
+    assert "--app-header-height: 54px;" in css
+    assert "--workflow-nav-height: 36px;" in css
+    assert "--workflow-nav-current-height: var(--workflow-nav-height);" in css
+    assert "--report-scroll-margin-top: 168px;" in css
+    header_body = css.split(".app-header {", 1)[1].split(".app-title", 1)[0]
+    assert "margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;" in header_body
+    compact_header_body = css.split("@media (max-width: 1280px)", 1)[1].split(".workflow-nav", 1)[0]
+    assert "margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;" in compact_header_body
+    scope_body = css.split(".scope-panel {", 1)[1].split(".scope-toolbar", 1)[0]
+    assert "padding: 10px 0 16px;" in scope_body
+    assert "top: calc(var(--app-header-height) + var(--workflow-nav-current-height));" in scope_body
+    assert ".context-coverage-note:empty" in css
+    assert ".breadcrumb-row:empty" in css
+    assert "scroll-margin-top: var(--report-scroll-margin-top);" in css
+    assert "function stickyStackOffset()" in script
+    assert "function setupStickyGeometryTracking()" in script
+    assert "new ResizeObserver(scheduleStickyGeometryUpdate)" in script
+    assert 'document.documentElement.style.setProperty("--workflow-nav-current-height"' in script
+    assert 'document.documentElement.style.setProperty("--report-scroll-margin-top"' in script
+    assert "const stickyOffset = stickyStackOffset();" in script
+    assert "const stickyOffset = 148;" not in script
+    assert "boundingClientRect().top - 150" not in script
 
 
 def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:

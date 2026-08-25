@@ -39,6 +39,10 @@
   --control-height-primary: 46px;
   --control-height-secondary: 34px;
   --scope-control-height: 38px;
+  --app-header-height: 54px;
+  --workflow-nav-height: 36px;
+  --workflow-nav-current-height: var(--workflow-nav-height);
+  --report-scroll-margin-top: 168px;
   --shadow-soft: 0 10px 26px rgba(16, 40, 72, 0.12);
 }
 
@@ -113,11 +117,11 @@ h3 {
 
 .app-header {
   display: flex;
-  min-height: 54px;
+  min-height: var(--app-header-height);
   align-items: center;
   justify-content: space-between;
   gap: var(--space-6);
-  margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) var(--space-4);
+  margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;
   padding: 0 var(--space-6);
   background: #f6f8fc;
   border-bottom: 1px solid rgba(42, 125, 225, 0.14);
@@ -187,12 +191,12 @@ h3 {
   align-items: center;
   min-width: 0;
   margin: 0 calc(-1 * var(--space-6));
-  min-height: 36px;
+  min-height: var(--workflow-nav-height);
   padding: 0 var(--space-6);
   background: var(--bg-page);
   border-bottom: 1px solid rgba(42, 125, 225, 0.08);
   position: sticky;
-  top: 54px;
+  top: var(--app-header-height);
   z-index: 55;
 }
 
@@ -268,13 +272,13 @@ h3 {
 }
 
 .scope-panel {
-  padding: 6px 0 8px;
+  padding: 10px 0 16px;
   border: 0;
   border-bottom: 1px solid rgba(42, 125, 225, 0.1);
   background: transparent;
   border-radius: 0;
   position: sticky;
-  top: 90px;
+  top: calc(var(--app-header-height) + var(--workflow-nav-current-height));
   z-index: 50;
   background: var(--bg-page);
 }
@@ -686,7 +690,7 @@ input {
 
 .toggle-control {
   display: grid;
-  gap: 1px;
+  gap: 3px;
   min-width: 0;
   padding: 0;
   border: 0;
@@ -716,6 +720,10 @@ input {
   font-size: 12px;
 }
 
+.context-coverage-note:empty {
+  display: none;
+}
+
 .breadcrumb-row {
   display: flex;
   flex-wrap: wrap;
@@ -723,12 +731,13 @@ input {
   margin-bottom: var(--space-3);
 }
 
+.breadcrumb-row:empty,
 .breadcrumb-row.is-empty {
   display: none;
 }
 
 .report-section {
-  scroll-margin-top: 148px;
+  scroll-margin-top: var(--report-scroll-margin-top);
   margin-bottom: var(--space-6);
 }
 
@@ -1801,7 +1810,7 @@ th:first-child {
   }
 
   .app-header {
-    margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) var(--space-4);
+    margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;
     padding: 0 var(--space-4);
   }
 

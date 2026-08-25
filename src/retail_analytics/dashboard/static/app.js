@@ -283,9 +283,12 @@ const sectionIdByView = {
 const viewBySectionId = Object.fromEntries(Object.entries(sectionIdByView).map(([view, sectionId]) => [sectionId, view]));
 let sectionObserver = null;
 let scrollspyFrame = null;
+let stickyGeometryFrame = null;
+let stickyGeometryObserver = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindStaticControls();
+  setupStickyGeometryTracking();
   await initializeDashboard();
 });
 
@@ -465,13 +468,46 @@ function updateHash(view) {
 function scrollToView(view, { behavior = "smooth" } = {}) {
   const section = document.getElementById(sectionIdByView[view]);
   if (!section) return;
-  const stickyOffset = 148;
+  const stickyOffset = stickyStackOffset();
   const target = section.getBoundingClientRect().top + window.scrollY - stickyOffset;
   if (behavior === "auto") {
     window.scrollTo(0, Math.max(target, 0));
     return;
   }
   window.scrollTo({ top: Math.max(target, 0), behavior });
+}
+
+function stickyStackOffset() {
+  const header = document.querySelector(".app-header")?.getBoundingClientRect().height || 54;
+  const nav = document.querySelector(".workflow-nav")?.getBoundingClientRect().height || 36;
+  const scope = document.querySelector(".scope-panel")?.getBoundingClientRect().height || 78;
+  return Math.ceil(header + nav + scope);
+}
+
+function setupStickyGeometryTracking() {
+  updateStickyGeometryVars();
+  window.addEventListener("resize", scheduleStickyGeometryUpdate, { passive: true });
+  if (!("ResizeObserver" in window)) return;
+  stickyGeometryObserver?.disconnect();
+  stickyGeometryObserver = new ResizeObserver(scheduleStickyGeometryUpdate);
+  [".app-header", ".workflow-nav", ".scope-panel"].forEach((selector) => {
+    const element = document.querySelector(selector);
+    if (element) stickyGeometryObserver.observe(element);
+  });
+}
+
+function scheduleStickyGeometryUpdate() {
+  if (stickyGeometryFrame) return;
+  stickyGeometryFrame = window.requestAnimationFrame(() => {
+    stickyGeometryFrame = null;
+    updateStickyGeometryVars();
+  });
+}
+
+function updateStickyGeometryVars() {
+  const navHeight = document.querySelector(".workflow-nav")?.getBoundingClientRect().height || 36;
+  document.documentElement.style.setProperty("--workflow-nav-current-height", `${Math.ceil(navHeight)}px`);
+  document.documentElement.style.setProperty("--report-scroll-margin-top", `${stickyStackOffset()}px`);
 }
 
 async function applyScopeChange(work) {
@@ -497,6 +533,7 @@ function setupSectionObserver() {
   sectionObserver?.disconnect();
   const sections = Array.from(document.querySelectorAll(".report-section"));
   if (!sections.length || !("IntersectionObserver" in window)) return;
+  const stickyOffset = stickyStackOffset();
   sectionObserver = new IntersectionObserver((entries) => {
     if (Date.now() < state.suppressScrollspyUntil) return;
     if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
@@ -506,12 +543,12 @@ function setupSectionObserver() {
     }
     const visible = entries
       .filter((entry) => entry.isIntersecting)
-      .sort((left, right) => Math.abs(left.boundingClientRect.top - 150) - Math.abs(right.boundingClientRect.top - 150));
+      .sort((left, right) => Math.abs(left.boundingClientRect.top - stickyOffset) - Math.abs(right.boundingClientRect.top - stickyOffset));
     const active = visible[0]?.target;
     const view = active?.dataset.viewPanel;
     if (view && view !== state.activeView) setActiveView(view, { refresh: true, scroll: false });
   }, {
-    rootMargin: "-150px 0px -55% 0px",
+    rootMargin: `-${stickyOffset}px 0px -55% 0px`,
     threshold: [0.02, 0.18, 0.36]
   });
   sections.forEach((section) => sectionObserver.observe(section));
@@ -538,7 +575,7 @@ function updateActiveSectionFromScroll() {
     return;
   }
   const current = sections
-    .map((section) => ({ view: section.dataset.viewPanel, distance: Math.abs(section.getBoundingClientRect().top - 150) }))
+    .map((section) => ({ view: section.dataset.viewPanel, distance: Math.abs(section.getBoundingClientRect().top - stickyStackOffset()) }))
     .sort((left, right) => left.distance - right.distance)[0];
   if (current?.view && current.view !== state.activeView) setActiveView(current.view, { refresh: true, scroll: false });
 }
