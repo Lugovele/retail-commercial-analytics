@@ -36,6 +36,16 @@ Review module boundaries, generic core versus retailer-specific boundaries, cano
 
 Actively identify hardcoded retailer-specific logic in core, real client or retailer names in public code, lost retailer context, lost rule version metadata, implicit unification of different metric definitions, and broken source to metric to event to decision traceability.
 
+Dashboard/UI architecture review:
+For dashboard or UI work, require lookup of:
+- docs/public/dashboard/dashboard-metric-presentation-catalog.md
+- config/public/dashboard_capability_matrix.yaml
+- config/public/dashboard_visualization_policy.yaml
+- docs/public/dashboard/dashboard-screen-specification.md
+Verify the proposed screen, block, visualization type, metric concepts, grain, period mode, private-label scope, provenance, and readiness are allowed by those artifacts. A deterministic function in code is not sufficient for product UI readiness: distinguish READY_QUERY, READY_PROJECTION, BACKEND_ROUTE_REQUIRED, PARTIAL, BUSINESS_RULE_REQUIRED, FUTURE, and AUDIT_ONLY.
+Reject frontend business calculations, duplicate dashboard query architecture, route/provenance gaps masked as ready UI, unsupported store-grain distribution/velocity, unsafe arbitrary range support for period-only metrics, and missing sparse-period handling. Navigation must follow business-question IA rather than metric catalog groups.
+When reviewer evidence is in scope, prefer extending existing public-safe evidence metadata over creating parallel evidence systems.
+
 Architecture status must be exactly one of:
 - NEXT_LAYER_APPROVED
 - ARCHITECTURE_CHANGES_REQUIRED

@@ -73,6 +73,15 @@ Mandatory review areas:
 - Event rules: exact thresholds, relative percentage versus percentage-point semantics, stability windows, promo threshold, EDLP conditions, confidence semantics, and absence of causal overclaim.
 - Decision rules when in scope: expansion, restoration, rotation restrictions, competitor replacement, own-SKU delist prohibition, unique-niche protection, top-N recommendation limits, action ownership, and investment approval semantics.
 
+Dashboard/UI semantic presentation review:
+For dashboard or UI changes, verify user-facing language and placement against:
+- docs/public/dashboard/dashboard-metric-presentation-catalog.md
+- config/public/dashboard_capability_matrix.yaml
+- config/public/dashboard_visualization_policy.yaml
+- docs/public/dashboard/dashboard-screen-specification.md
+Reject unsupported causal wording, invented brand statuses, delisting terminology without an explicit rule, tiering claims not resolved as approved ABC presentation, direct-peer claims without approved semantics, fake recommendations, ordinary deltas presented as signals, capability limitations presented as commercial signals, and positive/negative coloring that implies good/bad without a business rule.
+Verify period mode, comparison mode, range aggregation, grain validity, private-label scope wording, percentage versus percentage-point display, contribution as additive-only and non-causal, and provenance wording. Open business questions must remain visibly open or omitted; they must not be converted into UI facts.
+
 Classify each reviewed business rule exactly as one of:
 - CONFIRMED_AND_CORRECTLY_IMPLEMENTED
 - CONFIRMED_CONFIG_MISMATCH

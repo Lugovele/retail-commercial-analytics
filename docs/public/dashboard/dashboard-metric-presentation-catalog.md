@@ -22,17 +22,27 @@ Sources checked for this catalog:
 - `src/retail_analytics/mart/geography.py`
 - public mart architecture docs
 
-## UI Navigation
+## UI Navigation and Screen IA
 
-Main dashboard tabs:
+The authoritative business screen IA is defined in:
+
+- `config/public/dashboard_visualization_policy.yaml`
+- `docs/public/dashboard/dashboard-screen-specification.md`
+
+Main dashboard screens:
 
 | Tab | Purpose |
 | --- | --- |
-| Данные | Source-like rows and audit access. |
-| Показатели | Core numeric metrics from the mart query layer. |
-| Бизнес-оценки | Deterministic derived analytics and scoped business projections. |
-| Сигналы | Confirmed deterministic signals and capability limitations. |
-| Рекомендации | Placeholder until deterministic recommendation backend exists. |
+| Обзор | What happened, how material it is, where to look, what changed together, what to check next. |
+| Продажи и драйверы | Result, volume, price, presence, sales speed, economics, and structure. |
+| Портфель и рынок | Category position, shares, rankings, assortment, brand-vs-category, market/private-label, competitors where ready. |
+| Точки продаж | Store-level sales, economics, assortment/mix, and physical place of result formation. |
+| Сигналы | Confirmed deterministic attention items and data-quality alerts. |
+| Данные | Source coverage, quality, source-like rows, and audit/provenance access. |
+
+Metric Catalog is the taxonomy of data. Dashboard IA is the taxonomy of business
+questions. Per-metric placement below must be interpreted through the Dashboard
+Visualization Policy and Capability Matrix before a metric is shown on a screen.
 
 Metric groups:
 

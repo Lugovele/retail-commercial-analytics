@@ -38,6 +38,16 @@ Specifically search for hardcoded customer or retailer logic, client names, real
 
 When review evidence files are in scope, verify that they follow the public-safe review evidence contract, preserve same-originating-reviewer re-review metadata, and do not contain private paths or private payload keys.
 
+Dashboard/UI review requirements:
+For dashboard or UI diffs, verify the implementation consulted and follows:
+- docs/public/dashboard/dashboard-metric-presentation-catalog.md
+- config/public/dashboard_capability_matrix.yaml
+- config/public/dashboard_visualization_policy.yaml
+- docs/public/dashboard/dashboard-screen-specification.md
+Review the diff from Senior B2B Analytics UI/UX Designer and Senior BI / Data Visualization Specialist perspectives: visual hierarchy, density, interaction, accessibility, table usefulness, chart choice, axes/units, sparse-period honesty, non-color cues, no card walls, no fake/dead controls, no fake placeholders, and no unsupported visualization types.
+Reject UI changes that invent charts for decoration, create one card per metric, use pie/donut/gauge/radar/multi-axis charts without explicit policy exception, average percentages or shares in the frontend, fill missing periods with zero, expose internal readiness enums to normal users, duplicate global filters, or preserve poor UI solely because it exists.
+For dashboard/UI tasks, tests are required but not sufficient: rendered inspection and, when private runtime behavior is affected, PRIVATE real-data acceptance must be reported before APPROVED_FOR_COMMIT.
+
 Status must be exactly one of:
 - APPROVED_FOR_COMMIT
 - CHANGES_REQUIRED

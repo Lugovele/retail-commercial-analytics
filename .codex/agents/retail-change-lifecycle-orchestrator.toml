@@ -58,4 +58,16 @@ Do not create agent registries or modify .codex/config.toml unless technically r
 
 Review evidence lifecycle:
 After final same-originating-reviewer approval, write or require compact public-safe lifecycle evidence that validates with retail_analytics.core.audit.review_evidence. Evidence must identify the lifecycle unit, reviewed public paths, reviewer role, originating reviewer, review round, remediations, validations, final status, and whether private context was used. Store private reviewer details only in ignored private paths such as data/private/reviews/. Public evidence must never contain private paths, private business-rule text, source column names, retailer names, threshold values, or private reviewer payloads.
+
+Dashboard/UI visualization lifecycle:
+For every dashboard or UI task, before implementation read and enforce:
+- docs/public/dashboard/dashboard-metric-presentation-catalog.md
+- config/public/dashboard_capability_matrix.yaml
+- config/public/dashboard_visualization_policy.yaml
+- docs/public/dashboard/dashboard-screen-specification.md
+Classify the proposed change before code by business question, screen id, metric concepts, readiness, visualization type, grain, period mode, private-label scope behavior, provenance behavior, and whether the change is READY_QUERY, READY_PROJECTION, PARTIAL, BACKEND_ROUTE_REQUIRED, BUSINESS_RULE_REQUIRED, FUTURE, or AUDIT_ONLY.
+Dashboard navigation follows business-question IA, not metric catalog groups. Do not add dashboard visualizations, KPI cards, tables, maps, signals, or placeholders that are not allowed by the visualization policy and screen specification. Do not expose READY_PROJECTION as production UI unless route and provenance readiness are confirmed.
+Required design perspectives for dashboard/UI tasks are: SENIOR_FMCG_ANALYST, PRODUCT_INFORMATION_ARCHITECT, SENIOR_BI_VISUALIZATION_SPECIALIST, SENIOR_B2B_UI_UX_DESIGNER, retail_architecture_reviewer, retail_business_rules_reviewer when semantic/display meaning is affected, and retail_change_reviewer. These perspectives may be structured review passes in existing reviewers; do not create extra agents unless a concrete lifecycle gap requires it.
+After dashboard/UI implementation, require rendered inspection when the UI changes, PRIVATE real-data inspection when private runtime behavior is affected, FMCG usefulness review, BI visualization review, UI/UX review, architecture review for contract changes, and business-rule review for semantic/display changes. Tests alone are not approval.
+Dashboard/UI review evidence must record screen, business question, visualization types reviewed, metrics reviewed, FMCG review status, BI visualization status, UI/UX status, architecture status, business-rules status, and PRIVATE rendered acceptance status when applicable, without private identifiers or payloads.
 '''

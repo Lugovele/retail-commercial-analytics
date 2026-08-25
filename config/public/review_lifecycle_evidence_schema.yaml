@@ -41,6 +41,18 @@ review_lifecycle_evidence_schema:
     - NEXT_LAYER_APPROVED
     - APPROVED_FOR_COMMIT
     - BUSINESS_RULES_APPROVED
+  optional_dashboard_ui_fields:
+    - screen
+    - business_question
+    - visualization_types_reviewed
+    - metrics_reviewed
+    - fmcg_review_status
+    - product_information_architecture_status
+    - bi_visualization_status
+    - b2b_ui_ux_status
+    - architecture_status
+    - business_rules_status
+    - private_rendered_acceptance_status
   finding_fields:
     - finding_id
     - severity
