@@ -268,12 +268,65 @@
           </section>
         </section>
 
-        <section class="dashboard-view section-shell is-hidden" data-view-panel="portfolio_market" aria-labelledby="portfolio-market-title">
-          <div class="section-shell-content">
-            <p class="eyebrow">позиция в категории</p>
+        <section class="dashboard-view portfolio-market-layout is-hidden" data-view-panel="portfolio_market" aria-labelledby="portfolio-market-title">
+          <div class="screen-heading">
+            <p class="eyebrow">портфель и рынок</p>
             <h2 id="portfolio-market-title">Портфель и рынок</h2>
-            <p>Раздел будет подключён после подготовки экранов для долей, места в категории, ассортимента и сравнения с рынком.</p>
+            <p id="portfolio-market-context">Позиция в категории, доля, ассортимент и сравнение бренда с категорией для выбранного среза.</p>
           </div>
+
+          <section class="surface portfolio-position-panel" aria-label="Позиция в категории">
+            <div class="panel-heading">
+              <div>
+                <h2>Позиция в категории</h2>
+                <p id="portfolio-position-context">Доли и место производителя показываются только для поддержанного среза.</p>
+              </div>
+            </div>
+            <div class="portfolio-strip" id="portfolio-share-strip"></div>
+            <div class="ranked-bar-list" id="portfolio-rank-list"></div>
+          </section>
+
+          <section class="surface portfolio-assortment-panel" aria-label="Ассортимент">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Ассортимент</h2>
+                <p id="portfolio-assortment-context">Активные SKU считаются по продажам в доступных периодах.</p>
+              </div>
+            </div>
+            <div class="portfolio-assortment" id="portfolio-assortment"></div>
+          </section>
+
+          <section class="surface portfolio-brand-category-panel" aria-label="Бренд относительно категории">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Бренд относительно категории</h2>
+                <p id="portfolio-brand-context">Сравнение темпа бренда и категории без статусных выводов.</p>
+              </div>
+            </div>
+            <div class="portfolio-dumbbell" id="portfolio-brand-category"></div>
+          </section>
+
+          <section class="surface portfolio-market-panel" aria-label="Рыночное сравнение">
+            <div class="panel-heading tight">
+              <div>
+                <h2 id="portfolio-market-private-label-title">Рынок и выбранный ассортимент</h2>
+                <p id="portfolio-market-private-label-context">Показывается только для явно подготовленных сравнительных вселенных.</p>
+              </div>
+            </div>
+            <div class="portfolio-market-status" id="portfolio-market-private-label"></div>
+          </section>
+
+          <section class="surface portfolio-competitors-panel" aria-label="Конкуренты">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Конкуренты</h2>
+                <p id="portfolio-competitors-context">Широкие конкурентные группы показываются только при готовой маршрутизации.</p>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table id="portfolio-competitors-table"></table>
+            </div>
+          </section>
         </section>
 
         <section class="dashboard-view section-shell is-hidden" data-view-panel="stores" aria-labelledby="stores-title">

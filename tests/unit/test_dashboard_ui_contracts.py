@@ -398,6 +398,90 @@ def test_sales_drivers_provenance_and_drilldown_keep_view_identity() -> None:
     assert "rows.findIndex((row) => row[0] === label)" not in script
 
 
+def test_portfolio_market_screen_uses_product_route_without_fake_semantics() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    portfolio_panel = html.split('data-view-panel="portfolio_market"', 1)[1].split('data-view-panel="stores"', 1)[0]
+    assert 'id="portfolio-share-strip"' in portfolio_panel
+    assert 'id="portfolio-rank-list"' in portfolio_panel
+    assert 'id="portfolio-assortment"' in portfolio_panel
+    assert 'id="portfolio-brand-category"' in portfolio_panel
+    assert 'id="portfolio-market-private-label"' in portfolio_panel
+    assert 'id="portfolio-competitors-table"' in portfolio_panel
+    assert "Раздел будет подключён" not in portfolio_panel
+    assert "Позиция в категории" in portfolio_panel
+    assert "Ассортимент" in portfolio_panel
+    assert "Бренд относительно категории" in portfolio_panel
+    assert "Конкуренты" in portfolio_panel
+
+    assert 'if (state.activeView === "portfolio_market")' in script
+    assert "async function runPortfolioMarketQuery()" in script
+    assert 'state.portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());' in script
+    assert "function buildPortfolioMarketPayload()" in script
+    assert "concept_ids: portfolioMarketConcepts" in script
+    assert "entity_filters: selectedFilterValuesForPortfolio()" in script
+    assert "private_label_scope: document.getElementById(\"private-label-scope\").value" in script
+    assert "const portfolioPresentationFallback = {" in script
+    assert 'category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" }' in script
+    assert "renderPortfolioPosition()" in script
+    assert "renderPortfolioAssortment()" in script
+    assert "renderPortfolioBrandCategory()" in script
+    assert "openPortfolioProvenance(item)" in script
+    assert "portfolioProvenanceSections(item.provenance || {}, item)" in script
+    assert "renderPortfolioContextStripForResponse(state.portfolioMarketResponse)" in script
+    assert "renderContextStripForResponse(state.portfolioMarketResponse)" not in script
+    assert "category_revenue_share" in script
+    assert "manufacturer_rank_revenue" in script
+    assert "active_sku_count" in script
+    assert "brand_category_delta_gap_pp" in script
+
+    portfolio_concepts = script.split("const portfolioMarketConcepts = [", 1)[1].split("];", 1)[0]
+    assert "direct_peers" not in portfolio_concepts
+    assert "recommendations" not in portfolio_concepts
+    assert "decline_speed_ratio" not in portfolio_concepts
+    assert '"abc"' not in portfolio_concepts
+    assert "прямые аналоги" not in portfolio_panel.lower()
+    assert "Growth" not in portfolio_panel
+    assert "Decline" not in portfolio_panel
+    assert "Critical" not in portfolio_panel
+    assert "Стабильно" not in portfolio_panel
+    assert "Критично" not in portfolio_panel
+    assert "Делистинг" not in portfolio_panel
+    assert "причина" not in portfolio_panel.lower()
+    assert "из-за" not in portfolio_panel.lower()
+
+
+def test_portfolio_market_visual_policy_and_private_label_guardrails() -> None:
+    html = html_or_script("index.html")
+    css = html_or_script("styles.css")
+    script = html_or_script("app.js")
+    surface = f"{html}\n{css}\n{script}"
+
+    assert ".ranked-bar-list" in css
+    assert ".ranked-bar-row" in css
+    assert ".bullet-metric" in css
+    assert ".dumbbell-comparison" in css
+    assert ".dumbbell-marker" in css
+    assert "PIE" not in script
+    assert "DONUT" not in script
+    assert "pie-chart" not in script.lower()
+    assert "donut-chart" not in script.lower()
+    assert "row.provenance || rank.provenance" in script
+    assert "value: row.rank" in script
+    assert "value: row.metric_value" not in script
+    assert "onSort: renderPortfolioCompetitors" in script
+    assert "return provenanceSections(provenance" in script
+    assert "`Рынок и ${privateLabelDisplayName()}`" in script
+    assert "function privateLabelDisplayName()" in script
+    assert "selectedRetailer().private_label_display_name" in script
+    assert "Рынок и СТМ" not in surface
+    assert "private_label_display_name || \"выбранный ассортимент\"" in script
+    assert "Активность SKU основана на продажах" in script
+    assert "не как листинг" not in surface
+    assert "не как скаляр за диапазон" in script
+
+
 def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> None:
     html = (
         resources.files("retail_analytics.dashboard.templates")
@@ -792,7 +876,7 @@ def test_provenance_drawer_uses_russian_presentation_labels() -> None:
 
 
 def html_or_script(name: str) -> str:
-    if name.endswith(".js"):
+    if name.endswith((".js", ".css")):
         return (
             resources.files("retail_analytics.dashboard.static")
             .joinpath(name)

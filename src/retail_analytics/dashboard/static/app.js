@@ -9,6 +9,7 @@ const state = {
   salesDriversResponse: null,
   salesDriversChartResponse: null,
   salesDriversTableResponse: null,
+  portfolioMarketResponse: null,
   activeView: "overview",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
@@ -107,6 +108,44 @@ const salesDriverGrainSupport = {
   sku_count: ["network", "category", "manufacturer", "brand", "store"],
   brand_count: ["network", "category", "manufacturer", "store"],
   category_count: ["network", "manufacturer", "store"]
+};
+const portfolioMarketConcepts = [
+  "category_revenue_share",
+  "category_units_share",
+  "category_margin_share",
+  "manufacturer_rank_revenue",
+  "manufacturer_rank_units",
+  "manufacturer_population_count",
+  "active_sku_count",
+  "historical_peak_active_sku_count",
+  "active_sku_change_pct",
+  "brand_delta_pct",
+  "category_delta_pct",
+  "brand_category_delta_gap_pp",
+  "market_segment_delta_pct",
+  "broad_competitors"
+];
+const portfolioShareConcepts = ["category_revenue_share", "category_units_share", "category_margin_share"];
+const portfolioRankConcepts = ["manufacturer_rank_revenue", "manufacturer_rank_units"];
+const portfolioActiveSkuConcepts = ["active_sku_count", "historical_peak_active_sku_count", "active_sku_change_pct"];
+const portfolioBrandCategoryConcepts = ["brand_delta_pct", "category_delta_pct", "brand_category_delta_gap_pp"];
+const portfolioMarketUniverseConcepts = ["market_segment_delta_pct"];
+const portfolioCompetitorConcepts = ["broad_competitors"];
+const portfolioPresentationFallback = {
+  category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" },
+  category_units_share: { display_label: "Доля в штуках категории", format: "percent" },
+  category_margin_share: { display_label: "Доля в марже категории", format: "percent" },
+  manufacturer_rank_revenue: { display_label: "Место производителя по обороту", format: "integer" },
+  manufacturer_rank_units: { display_label: "Место производителя по штукам", format: "integer" },
+  manufacturer_population_count: { display_label: "Производителей в рейтинге", format: "integer" },
+  active_sku_count: { display_label: "Активные SKU", format: "integer" },
+  historical_peak_active_sku_count: { display_label: "Пиковое число активных SKU", format: "integer" },
+  active_sku_change_pct: { display_label: "Изменение активных SKU от пика", format: "percent" },
+  brand_delta_pct: { display_label: "Изменение бренда", format: "percent" },
+  category_delta_pct: { display_label: "Изменение категории", format: "percent" },
+  brand_category_delta_gap_pp: { display_label: "Отклонение бренда от категории", format: "percentage_points" },
+  market_segment_delta_pct: { display_label: "Изменение сегмента рынка", format: "percent" },
+  broad_competitors: { display_label: "Конкуренты категории", format: "text" }
 };
 const previewColumns = {
   category: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count", "selling_store_count"],
@@ -393,6 +432,10 @@ async function runActiveViewQuery() {
     await runSalesDriversQuery();
     return;
   }
+  if (state.activeView === "portfolio_market") {
+    await runPortfolioMarketQuery();
+    return;
+  }
   if (state.activeView === "overview") {
     await runOverviewQuery();
   }
@@ -446,6 +489,19 @@ async function loadContributionRows() {
   const payload = buildContributionPayload();
   if (!payload) return null;
   return postJson("/api/dashboard/contribution", payload);
+}
+
+async function runPortfolioMarketQuery() {
+  setLoading(true, "Запрос к витрине");
+  renderPortfolioMarketSkeletons();
+  try {
+    state.portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());
+    renderPortfolioMarket();
+    setLoading(false, "Данные обновлены");
+  } catch (error) {
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
+  }
 }
 
 function buildQueryPayload(grain, entityIds, metricConcepts) {
@@ -518,6 +574,26 @@ function buildContributionPayload() {
     private_label_scope: document.getElementById("private-label-scope").value,
     mart_build_id: retailer.default_mart_build_id,
     limit: state.overviewPreviewRowLimit
+  };
+}
+
+function buildPortfolioMarketPayload() {
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: selectedDateFrom(),
+    date_to: selectedDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    grain_id: state.currentGrain,
+    entity_ids: entityIdsForSummary(),
+    entity_filters: selectedFilterValuesForPortfolio(),
+    concept_ids: portfolioMarketConcepts,
+    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    include_lineage: true,
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value
   };
 }
 
@@ -922,6 +998,202 @@ function renderSalesDriversUnavailable(message) {
   renderMessageRow(document.getElementById("sales-drivers-matrix"), message);
   replaceWithMessage(document.getElementById("sales-drivers-chart-box"), "empty-state", message);
   renderMessageRow(document.getElementById("sales-drivers-detail-table"), message);
+}
+
+function renderPortfolioMarket() {
+  renderPortfolioContextStripForResponse(state.portfolioMarketResponse);
+  renderBreadcrumb();
+  document.getElementById("portfolio-market-context").textContent = portfolioContextText();
+  document.getElementById("portfolio-market-private-label-title").textContent = `Рынок и ${privateLabelDisplayName()}`;
+  renderPortfolioPosition();
+  renderPortfolioAssortment();
+  renderPortfolioBrandCategory();
+  renderPortfolioMarketUniverse();
+  renderPortfolioCompetitors();
+}
+
+function renderPortfolioMarketSkeletons() {
+  replaceWithMessage(document.getElementById("portfolio-share-strip"), "loading-state compact", "Загрузка позиции...");
+  replaceWithMessage(document.getElementById("portfolio-rank-list"), "loading-state compact", "Загрузка рейтинга...");
+  replaceWithMessage(document.getElementById("portfolio-assortment"), "loading-state compact", "Загрузка ассортимента...");
+  replaceWithMessage(document.getElementById("portfolio-brand-category"), "loading-state compact", "Загрузка сравнения...");
+  replaceWithMessage(document.getElementById("portfolio-market-private-label"), "loading-state compact", "Загрузка рыночного сравнения...");
+  renderMessageRow(document.getElementById("portfolio-competitors-table"), "Загрузка конкурентного окружения...");
+}
+
+function renderPortfolioContextStripForResponse(response) {
+  if (!response) return;
+  updateFilterCount();
+  updateActiveFilterChips();
+  document.getElementById("context-strip").textContent = contextSummaryText(response);
+  document.getElementById("context-coverage-note").textContent = coverageNoteText(response);
+}
+
+function renderPortfolioPosition() {
+  const shareStrip = document.getElementById("portfolio-share-strip");
+  const rankList = document.getElementById("portfolio-rank-list");
+  const shareItems = portfolioItems(portfolioShareConcepts).filter(isDisplayablePortfolioItem);
+  const rank = portfolioItem("manufacturer_rank_revenue");
+  const rows = rank?.rows || [];
+  const selectedManufacturer = selectedFilterValues().manufacturer || (state.currentGrain === "manufacturer" ? entityIdsForSummary()[0] : "");
+
+  if (shareItems.length) {
+    shareStrip.replaceChildren(...shareItems.map((item) => portfolioMetricTile(item)));
+  } else {
+    replaceWithMessage(shareStrip, "empty-state compact", portfolioShareUnavailableText());
+  }
+
+  if (rows.length) {
+    const maxValue = Math.max(...rows.map((row) => Math.abs(Number(row.metric_value) || 0)), 1);
+    rankList.replaceChildren(...rows.slice(0, 10).map((row) => {
+      const node = document.createElement("article");
+      node.className = row.manufacturer === selectedManufacturer ? "ranked-bar-row is-selected" : "ranked-bar-row";
+      const label = entityDisplayLabel("manufacturer", row.manufacturer) || row.manufacturer;
+      appendText(node, "span", `${row.rank}. ${label}`);
+      const barWrap = document.createElement("div");
+      barWrap.className = "ranked-bar-track";
+      const bar = document.createElement("div");
+      bar.className = "ranked-bar-fill";
+      bar.style.width = `${Math.max(4, (Math.abs(Number(row.metric_value) || 0) / maxValue) * 100)}%`;
+      barWrap.appendChild(bar);
+      node.appendChild(barWrap);
+      appendText(node, "strong", `${formatValue(row.metric_value, catalogEntry("revenue")?.format || "decimal")} · ${row.rank} из ${row.population_count}`);
+      const provenanceButton = portfolioProvenanceButton({
+        ...rank,
+        value: row.rank,
+        entity_id: row.manufacturer,
+        provenance: row.provenance || rank.provenance
+      });
+      if (provenanceButton) node.appendChild(provenanceButton);
+      return node;
+    }));
+    document.getElementById("portfolio-position-context").textContent =
+      "Рейтинг производителей внутри выбранной категории; выделение показывает текущий выбранный производитель.";
+  } else {
+    replaceWithMessage(rankList, "empty-state compact", portfolioRankUnavailableText(rank));
+  }
+}
+
+function renderPortfolioAssortment() {
+  const target = document.getElementById("portfolio-assortment");
+  const active = portfolioItem("active_sku_count");
+  const peak = portfolioItem("historical_peak_active_sku_count");
+  const change = portfolioItem("active_sku_change_pct");
+  if (![active, peak, change].some(isDisplayablePortfolioItem)) {
+    replaceWithMessage(target, "empty-state compact", portfolioAssortmentUnavailableText(active || peak || change));
+    return;
+  }
+  const current = Number(active?.value) || 0;
+  const peakValue = Number(peak?.value) || 0;
+  const width = peakValue > 0 ? Math.max(3, Math.min(100, (current / peakValue) * 100)) : 0;
+  const bullet = document.createElement("div");
+  bullet.className = "bullet-metric";
+  const values = document.createElement("div");
+  values.className = "bullet-values";
+  appendText(values, "span", `${displayLabel("active_sku_count")}: ${formatValue(active?.value, "integer")}`);
+  appendText(values, "span", `${displayLabel("historical_peak_active_sku_count")}: ${formatValue(peak?.value, "integer")}`);
+  appendText(values, "strong", `${displayLabel("active_sku_change_pct")}: ${formatValue(change?.value, "percent")}`);
+  bullet.appendChild(values);
+  const track = document.createElement("div");
+  track.className = "bullet-track";
+  const fill = document.createElement("div");
+  fill.className = "bullet-fill";
+  fill.style.width = `${width}%`;
+  track.appendChild(fill);
+  bullet.appendChild(track);
+  const button = portfolioProvenanceButton(active || peak || change);
+  if (button) bullet.appendChild(button);
+  target.replaceChildren(bullet);
+  document.getElementById("portfolio-assortment-context").textContent =
+    "Активность SKU основана на продажах за выбранный период и сравнении с пиком доступной истории.";
+}
+
+function renderPortfolioBrandCategory() {
+  const target = document.getElementById("portfolio-brand-category");
+  const brand = portfolioItem("brand_delta_pct");
+  const category = portfolioItem("category_delta_pct");
+  const gap = portfolioItem("brand_category_delta_gap_pp");
+  if (![brand, category, gap].some(isDisplayablePortfolioItem)) {
+    replaceWithMessage(target, "empty-state compact", portfolioBrandUnavailableText(brand || category || gap));
+    return;
+  }
+  const node = document.createElement("div");
+  node.className = "dumbbell-comparison";
+  const values = [Number(brand?.value) || 0, Number(category?.value) || 0];
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 0);
+  const span = max - min || 1;
+  const markerPosition = (value) => ((Number(value) - min) / span) * 100;
+  const track = document.createElement("div");
+  track.className = "dumbbell-track";
+  [
+    { item: brand, className: "brand-marker", label: "Бренд" },
+    { item: category, className: "category-marker", label: "Категория" }
+  ].forEach(({ item, className, label }) => {
+    const marker = document.createElement("span");
+    marker.className = `dumbbell-marker ${className}`;
+    marker.style.left = `${markerPosition(item?.value)}%`;
+    marker.title = `${label}: ${formatValue(item?.value, "percent")}`;
+    track.appendChild(marker);
+  });
+  node.appendChild(track);
+  const rows = document.createElement("div");
+  rows.className = "comparison-strip";
+  [brand, category, gap].filter(Boolean).forEach((item) => rows.appendChild(portfolioMetricTile(item)));
+  node.appendChild(rows);
+  target.replaceChildren(node);
+  document.getElementById("portfolio-brand-context").textContent =
+    "Показан разрыв темпа бренда и категории; это не статус и не объяснение причины.";
+}
+
+function renderPortfolioMarketUniverse() {
+  const target = document.getElementById("portfolio-market-private-label");
+  const items = portfolioItems(portfolioMarketUniverseConcepts).filter(isDisplayablePortfolioItem);
+  if (!items.length) {
+    replaceWithMessage(target, "empty-state compact", portfolioGatedText(portfolioMarketUniverseConcepts));
+    document.getElementById("portfolio-market-private-label-context").textContent =
+      "Сравнительная вселенная показывается только после готовой маршрутизации и доказательства.";
+    return;
+  }
+  target.replaceChildren(...items.map((item) => portfolioMetricTile(item)));
+}
+
+function renderPortfolioCompetitors() {
+  const table = document.getElementById("portfolio-competitors-table");
+  const competitors = portfolioItems(portfolioCompetitorConcepts).filter(isDisplayablePortfolioItem);
+  if (!competitors.length || !competitors.some((item) => item.rows?.length)) {
+    renderMessageRow(table, portfolioGatedText(portfolioCompetitorConcepts));
+    document.getElementById("portfolio-competitors-context").textContent =
+      "Широкие конкурентные группы будут показаны, когда маршрут вернёт подтверждённые данные.";
+    return;
+  }
+  const rows = competitors.flatMap((item) => (item.rows || []).map((row) => ({
+    cells: [row.label || row.entity_id || "н/д", item.label || displayLabel(item.concept_id), item.status],
+    meta: { item }
+  })));
+  renderRows(table, ["Объект", "Показатель", "Статус"], rows, { rowLimit: state.tablePageSize, onSort: renderPortfolioCompetitors });
+}
+
+function portfolioMetricTile(item) {
+  const node = document.createElement("article");
+  node.className = "portfolio-metric";
+  appendText(node, "span", displayLabel(item.concept_id));
+  appendText(node, "strong", formatPortfolioItemValue(item));
+  const detail = portfolioItemDetailText(item);
+  if (detail) appendText(node, "small", detail);
+  const button = portfolioProvenanceButton(item);
+  if (button) node.appendChild(button);
+  return node;
+}
+
+function portfolioProvenanceButton(item) {
+  if (!item?.provenance) return null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "inline-link";
+  button.textContent = "Откуда?";
+  button.addEventListener("click", () => openPortfolioProvenance(item));
+  return button;
 }
 
 function renderAttention() {
@@ -1543,7 +1815,114 @@ function metricEntryForGrain(concept, grain) {
 }
 
 function displayLabel(concept) {
-  return catalogEntry(concept)?.display_label || concept;
+  return catalogEntry(concept)?.display_label || portfolioPresentationFallback[concept]?.display_label || concept;
+}
+
+function portfolioItems(concepts) {
+  return (state.portfolioMarketResponse?.items || []).filter((item) => concepts.includes(item.concept_id));
+}
+
+function portfolioItem(concept) {
+  return portfolioItems([concept])[0] || null;
+}
+
+function isDisplayablePortfolioItem(item) {
+  return item && ["READY", "PARTIAL"].includes(item.status) && (item.value !== null || item.rows?.length);
+}
+
+function formatPortfolioItemValue(item) {
+  const entry = catalogEntry(item.concept_id) || portfolioPresentationFallback[item.concept_id];
+  const format = entry?.format || (item.unit === "percentage_points" ? "percentage_points" : item.unit || "decimal");
+  return formatValue(item.value, format);
+}
+
+function portfolioItemDetailText(item) {
+  const entry = catalogEntry(item.concept_id) || portfolioPresentationFallback[item.concept_id];
+  const format = entry?.format || (item.unit === "percentage_points" ? "percentage_points" : item.unit || "decimal");
+  const pieces = [];
+  if (state.periodMode === "COMPARE" && item.current_value !== null && item.current_value !== undefined) {
+    pieces.push(`${formatValue(item.current_value, format)} сейчас`);
+  }
+  if (state.periodMode === "COMPARE" && item.reference_value !== null && item.reference_value !== undefined) {
+    pieces.push(`${formatValue(item.reference_value, format)} сравнение`);
+  }
+  if (state.periodMode === "COMPARE" && item.delta !== null && item.delta !== undefined) {
+    const deltaFormat = format === "percent" ? "percentage_points" : format;
+    pieces.push(`${formatDeltaValue(item.delta, deltaFormat)} изменение`);
+  }
+  if (item.limitations?.length) pieces.push(portfolioLimitationText(item.limitations[0]));
+  return pieces.join(" · ");
+}
+
+function selectedFilterValuesForPortfolio() {
+  const selected = selectedFilterValues();
+  return Object.fromEntries(
+    ["category", "manufacturer", "brand", "sku", "store"]
+      .filter((key) => selected[key])
+      .map((key) => [key, [selected[key]]])
+  );
+}
+
+function privateLabelDisplayName() {
+  return selectedRetailer().private_label_display_name || "выбранный ассортимент";
+}
+
+function portfolioContextText() {
+  if (state.periodMode === "COMPARE") return "Показывает долю, место, ассортимент и относительную динамику там, где это готово для выбранного сравнения.";
+  if (state.periodMode === "DATE_RANGE") return "Диапазон используется только для тех портфельных показателей, где маршрут явно поддерживает такой режим.";
+  return "Показывает позицию и состав портфеля за выбранный период.";
+}
+
+function portfolioShareUnavailableText() {
+  if (state.currentGrain === "network" || state.currentGrain === "category") {
+    return "Доля показывается для производителя, бренда или SKU внутри выбранной категории.";
+  }
+  return "Для выбранного среза долевые показатели не рассчитаны.";
+}
+
+function portfolioRankUnavailableText(item) {
+  if (!selectedFilterValues().category && state.currentGrain !== "category") {
+    return "Выберите категорию, чтобы увидеть рейтинг производителей.";
+  }
+  if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
+  return "Рейтинг производителей недоступен для выбранного среза.";
+}
+
+function portfolioAssortmentUnavailableText(item) {
+  if (state.periodMode === "DATE_RANGE") return "Активные SKU показываются по отдельному периоду, не как скаляр за диапазон.";
+  if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
+  return "Ассортиментный показатель недоступен для выбранного среза.";
+}
+
+function portfolioBrandUnavailableText(item) {
+  if (state.periodMode !== "COMPARE") return "Сравнение бренда с категорией доступно в режиме сравнения.";
+  if (state.currentGrain !== "brand" && !selectedFilterValues().brand) return "Выберите бренд внутри категории, чтобы увидеть сравнение с категорией.";
+  if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
+  return "Сравнение бренда с категорией недоступно для выбранного среза.";
+}
+
+function portfolioGatedText(concepts) {
+  const item = portfolioItems(concepts)[0];
+  if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
+  return "Для выбранного среза этот блок ещё не подключён как подтверждённая аналитика.";
+}
+
+function portfolioLimitationText(code) {
+  return {
+    category_share_requires_child_grain: "Доля применима только к объектам внутри категории.",
+    share_range_requires_recompute_share_scope: "Доля не показывается за диапазон без пересчёта числителя и знаменателя.",
+    manufacturer_rank_requires_category_scope: "Место производителя рассчитывается только внутри категории.",
+    manufacturer_population_requires_category_scope: "Размер рейтинга доступен только внутри категории.",
+    active_sku_scalar_not_defined_for_range: "Активные SKU показываются по отдельному периоду.",
+    active_sku_requires_current_period: "Выберите период для расчёта активных SKU.",
+    brand_vs_category_requires_compare_mode: "Сравнение бренда с категорией доступно только в режиме сравнения.",
+    brand_vs_category_requires_category_and_brand: "Нужны выбранные категория и бренд.",
+    market_universe_identity_not_materialized: "Сравнительная рыночная вселенная ещё не подготовлена для пользовательского экрана.",
+    broad_competitor_projection_not_route_ready: "Широкое конкурентное окружение ещё не подключено к пользовательскому маршруту.",
+    comparison_period_unavailable: "Нет подходящего периода сравнения.",
+    no_manufacturer_metric_facts: "Нет данных для рейтинга производителей.",
+    no_sku_units_metric_facts: "Нет данных для расчёта активных SKU."
+  }[code] || "Показатель недоступен для выбранного среза.";
 }
 
 function contributionMetricForOverview() {
@@ -1819,6 +2198,84 @@ function openContributionProvenance(row) {
   document.getElementById("provenance-drawer").classList.add("is-open");
   document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
   document.getElementById("scrim").classList.add("is-open");
+}
+
+function openPortfolioProvenance(item) {
+  const content = document.getElementById("provenance-content");
+  content.replaceChildren();
+  portfolioProvenanceSections(item.provenance || {}, item).forEach((section) => content.appendChild(section));
+  document.getElementById("provenance-drawer").classList.add("is-open");
+  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("is-open");
+}
+
+function portfolioProvenanceSections(provenance, item) {
+  if (provenance.metric || provenance.value) {
+    return provenanceSections(provenance, {
+      ...item,
+      metric_concept: item.concept_id
+    });
+  }
+  const scope = provenance.current_analytical_scope || {};
+  const projection = provenance.projection || {};
+  const inputFacts = provenance.input_metric_facts || {};
+  const run = provenance.run_lineage || {};
+  const source = provenance.source_evidence || {};
+  const quality = provenance.quality || {};
+  const sections = [
+    section("Что это за показатель", [
+      ["Показатель", displayLabel(item.concept_id)],
+      ["Значение", formatPortfolioItemValue(item)]
+    ]),
+    section("Срез", [
+      ["Сеть / источник", [selectedRetailer().display_label, selectedRetailer().source_label].filter(Boolean).join(" / ") || "н/д"],
+      ["Объект", [grainLabels[scope.grain_id] || scope.grain_id, entityDisplayLabel(scope.grain_id, item.entity_id || scope.entity_ids?.[0])].filter(Boolean).join(" / ") || "н/д"],
+      ["Сравнение", comparisonLabels[scope.comparison_mode] || scope.comparison_mode || "н/д"],
+      ["Учёт ассортимента", privateLabelScopeText(scope.private_label_scope)]
+    ]),
+    section("Расчёт", [
+      ["Семантика", projectionSemanticsText(projection.projection_semantics)],
+      ["Базовые показатели", compactList((projection.component_metric_concepts || []).map(displayLabel))],
+      ["Размер набора", inputFacts.fact_count ?? "н/д"]
+    ]),
+    section("Покрытие данных", [
+      ["Доступные периоды", compactList((projection.evaluated_periods || []).map(formatPeriod))],
+      ["Доказательство по источнику", source.status || "н/д"]
+    ]),
+    section("Бизнес-правило", [
+      ["Правило", projection.tie_policy ? `ранжирование: ${projection.tie_policy}` : "определено витриной"]
+    ]),
+    section("Качество", [
+      ["Статусы", compactList(quality.quality_statuses)],
+      ["Ограничения", compactList((quality.limitations || []).map(portfolioLimitationText))]
+    ])
+  ];
+  const technical = document.createElement("details");
+  technical.className = "provenance-technical";
+  const summary = document.createElement("summary");
+  summary.textContent = "Технические детали";
+  technical.appendChild(summary);
+  technical.appendChild(section(null, [
+    ["Концепт", item.concept_id],
+    ["Технический срез", [scope.retailer_id, scope.source_id, scope.grain_id, scope.private_label_scope].filter(Boolean).join(" / ") || "н/д"],
+    ["Определения показателей", compactList(inputFacts.metric_definition_ids)],
+    ["Запуск анализа", compactList(run.analysis_run_ids)],
+    ["Версия аналитической витрины", run.mart_build_id || "н/д"],
+    ["Ревизия источника", compactList(run.source_revision_ids)],
+    ["Недостающие поля", compactList(provenance.missing_fields)]
+  ]));
+  sections.push(technical);
+  return sections;
+}
+
+function projectionSemanticsText(value) {
+  return {
+    competition_rank_by_summed_additive_metric: "место в категории по суммарному показателю",
+    manufacturer_population_count_in_category_rank_universe: "число производителей в рейтинге категории",
+    sales_based_active_sku_count_against_available_period_peak: "активные SKU по продажам и пик доступной истории",
+    brand_percentage_delta_minus_category_percentage_delta: "разница темпа бренда и категории",
+    not_applicable: "не применимо для выбранного среза"
+  }[value] || "определено аналитической витриной";
 }
 
 function contributionProvenanceSections(provenance, row) {
@@ -2129,7 +2586,9 @@ function setLoading(isLoading, message) {
 function showPageError(error) {
   const target = state.activeView === "sales_drivers"
     ? document.getElementById("sales-drivers-chart-box")
-    : document.getElementById("chart-box");
+    : state.activeView === "portfolio_market"
+      ? document.getElementById("portfolio-share-strip")
+      : document.getElementById("chart-box");
   replaceWithMessage(target, "error-state", "Не удалось загрузить данные. Повторите попытку.");
   showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
 }
