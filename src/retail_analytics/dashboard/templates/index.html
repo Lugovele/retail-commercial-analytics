@@ -329,12 +329,58 @@
           </section>
         </section>
 
-        <section class="dashboard-view section-shell is-hidden" data-view-panel="stores" aria-labelledby="stores-title">
-          <div class="section-shell-content">
+        <section class="dashboard-view stores-layout is-hidden" data-view-panel="stores" aria-labelledby="stores-title">
+          <div class="screen-heading">
             <p class="eyebrow">торговые точки</p>
             <h2 id="stores-title">Точки продаж</h2>
-            <p>Раздел будет подключён для анализа продаж, экономики и ассортимента по торговым точкам.</p>
+            <p id="stores-context">Где физически формируется результат: оборот, продажи, маржа и ассортимент по ТТ.</p>
           </div>
+
+          <section class="surface stores-ranking-panel" aria-label="Рейтинг торговых точек">
+            <div class="panel-heading">
+              <div>
+                <h2>Рейтинг ТТ</h2>
+                <p id="stores-ranking-context">Торговые точки ранжируются по выбранному показателю.</p>
+              </div>
+              <label class="control compact-control">
+                <span>Показатель</span>
+                <select id="stores-metric"></select>
+              </label>
+            </div>
+            <div class="store-ranking-bar" id="stores-ranking"></div>
+          </section>
+
+          <section class="surface stores-selected-panel" aria-label="Выбранная торговая точка">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Выбранная ТТ</h2>
+                <p id="stores-selected-context">Выберите ТТ в рейтинге или фильтре, чтобы увидеть компактный срез.</p>
+              </div>
+            </div>
+            <div class="store-kpi-strip" id="stores-selected-kpi"></div>
+          </section>
+
+          <section class="surface stores-table-panel" aria-label="Таблица торговых точек">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Таблица ТТ</h2>
+                <p id="stores-table-context">Сравнение по магазинам в выбранном аналитическом срезе.</p>
+              </div>
+            </div>
+            <div class="table-wrap stores-table-wrap">
+              <table id="stores-table"></table>
+            </div>
+          </section>
+
+          <section class="surface stores-detail-panel" aria-label="Детализация выбранной торговой точки">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Детализация ТТ</h2>
+                <p id="stores-detail-context">Разбор выбранной ТТ по категориям, брендам и SKU будет подключён отдельным подтверждённым маршрутом.</p>
+              </div>
+            </div>
+            <div class="empty-state compact" id="stores-detail">Сейчас экран использует подтверждённые store-level показатели без неподтверждённого разреза внутри ТТ.</div>
+          </section>
         </section>
 
         <section class="dashboard-view section-shell is-hidden" data-view-panel="signals" aria-labelledby="signals-title">

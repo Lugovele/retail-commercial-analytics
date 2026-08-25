@@ -638,9 +638,8 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     assert "label.startsWith(query)" in script
     assert "haystack.includes(query)" in script
     assert "Показано ${visibleValues.length} из ${totalCount}" in script
-    assert 'querySupported: false' in script
-    assert "Фильтр ТТ будет подключён отдельно" in script
-    assert "renderComboboxUnavailable(id, config.unavailableText)" in script
+    assert '"store": {' not in script
+    assert "Фильтр ТТ будет подключён отдельно" not in script
     assert "select.replaceChildren(option(\"\", filterConfig[id].label), option(item.value, item.label));" in script
     assert "handleComboboxKeydown(event, id)" in script
     assert "handleComboboxOptionKeydown(event, id, index, item)" in script
@@ -789,7 +788,8 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert "updatePreviewGrain();" in reset_body
     assert "resetChildFilters(id)" in script
     assert 'if (filterId === "store")' in script
-    assert 'if (select.value) state.currentGrain = filterId;' in script
+    assert 'if (select.value) state.currentGrain = "store";' in script
+    assert 'if (!select.value && state.currentGrain === "store") state.currentGrain = nearestSelectedGrain();' in script
     assert "await refreshRuntimeOptions();" in script
     assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
     assert 'manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] }' in script
@@ -800,6 +800,82 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert "Все категории · ${state.grain}" not in script
     assert "const syntheticPeriods" not in script
     assert "const filters = {" not in script
+
+
+def test_stores_screen_uses_store_ranking_without_fake_contribution() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    stores_panel = html.split('data-view-panel="stores"', 1)[1].split('data-view-panel="signals"', 1)[0]
+    assert 'id="stores-title">Точки продаж</h2>' in stores_panel
+    assert 'id="stores-ranking"' in stores_panel
+    assert 'id="stores-metric"' in stores_panel
+    assert 'id="stores-selected-kpi"' in stores_panel
+    assert 'id="stores-table"' in stores_panel
+    assert 'id="stores-detail"' in stores_panel
+    assert "Раздел будет подключён для анализа продаж" not in stores_panel
+    assert "Сейчас экран использует подтверждённые store-level показатели" in stores_panel
+
+    stores_query_body = script.split("async function runStoresQuery()", 1)[1].split("function buildQueryPayload", 1)[0]
+    assert 'postJson("/api/dashboard/query", buildStoresPayload())' in stores_query_body
+    assert 'postJson("/api/dashboard/contribution"' not in stores_query_body
+    assert 'buildQueryPayload("store", entityIdsForStores(), storeConcepts())' in script
+    assert 'const storeRankingMetrics = ["revenue", "units", "retailer_margin_abs"]' in script
+    assert 'const storeKpiConcepts = ["revenue", "units", "retailer_margin_abs", "sku_count"]' in script
+    assert 'const storeTableConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count"]' in script
+    store_constants = script.split("const storeRankingMetrics", 1)[1].split("const portfolioPresentationFallback", 1)[0]
+    assert "distribution" not in store_constants
+    assert "velocity" not in store_constants
+    assert "revenue_velocity" not in store_constants
+    assert "margin_velocity" not in store_constants
+    assert "Это не вклад в изменение" in script
+    assert "вклад по ТТ не рассчитывается" in script
+    assert "storesHasProductFilters()" in script
+    assert "renderStoresProductFilterUnsupported()" in script
+    assert "Разрез ТТ внутри выбранной категории, производителя, бренда или SKU пока не рассчитан." in script
+    assert "Store-level витрина не содержит подтверждённого разреза" in script
+    assert 'state.storesScopeStatus = "no_supported_metrics";' in script
+    assert "renderStoresNoSupportedMetrics()" in script
+    assert "buildStoresPayload()" not in script.split("async function runStoresQuery()", 1)[1].split("if (!storeConcepts().length)", 1)[0]
+    assert "state.sortColumn = storeSortColumn();" in script
+    assert "function storeSortColumn()" in script
+    store_metric_options_body = script.split("function renderStoreMetricOptions()", 1)[1].split("function renderStoreRanking", 1)[0]
+    assert "state.sortColumn = storeSortColumn();" in store_metric_options_body
+    assert 'state.sortDirection = "desc";' in store_metric_options_body
+    assert "renderStoresContextStripWithoutResponse()" in script
+    assert "updateActiveFilterChips();" in script.split("function renderStoresContextStripWithoutResponse()", 1)[1].split("function renderStoreMetricOptions", 1)[0]
+    assert 'document.getElementById("context-coverage-note").textContent = coverageNote;' in script
+    assert "Разрез ТТ по продуктным фильтрам пока не рассчитан" in script
+
+
+def test_store_filter_promotes_selected_store_to_current_grain_and_scope() -> None:
+    script = html_or_script("app.js")
+
+    store_filter_body = script.split('if (filterId === "store") {', 1)[1].split("renderBreadcrumb();", 1)[0]
+    assert 'if (select.value) state.currentGrain = "store";' in store_filter_body
+    assert 'nearestSelectedGrain()' in store_filter_body
+    assert "async function selectStore(entityId)" in script
+    select_store_body = script.split("async function selectStore(entityId)", 1)[1].split("function selectedRetailer", 1)[0]
+    assert 'document.getElementById("store-filter")' in select_store_body
+    assert 'state.currentGrain = "store";' in select_store_body
+    assert "await refreshRuntimeOptions();" in select_store_body
+    assert "await runStoresQuery();" in select_store_body
+    assert "function entityIdsForStores()" in script
+    assert "const selected = selectedStoreId();" in script
+    assert 'return firstEntityIds("store", state.tablePageSize);' in script
+
+
+def test_stores_screen_provenance_and_period_guardrails() -> None:
+    script = html_or_script("app.js")
+
+    assert "function openStoreProvenance(result)" in script
+    assert "function storeProvenanceButton(result)" in script
+    assert "provenanceSections(result.provenance || {}, result)" in script
+    assert 'if (state.activeView === "stores")' in script
+    assert "storeResultFor(concept, storeId)" in script
+    assert "range_aggregation_period_only" in script
+    assert "только по периодам" in script
+    assert "Детализация выбранной ТТ по категориям, брендам и SKU будет подключена" in script
 
 
 def test_browser_provenance_drawer_renders_backend_provenance_object() -> None:

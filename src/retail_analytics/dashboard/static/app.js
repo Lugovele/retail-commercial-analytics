@@ -10,12 +10,15 @@ const state = {
   salesDriversChartResponse: null,
   salesDriversTableResponse: null,
   portfolioMarketResponse: null,
+  storesResponse: null,
+  storesScopeStatus: "ready",
   activeView: "overview",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
   chartMetric: "revenue",
   salesDriverMetric: "revenue",
+  storesMetric: "revenue",
   previewGrain: "category",
   tablePageSize: 40,
   overviewPreviewRowLimit: 8,
@@ -131,6 +134,9 @@ const portfolioActiveSkuConcepts = ["active_sku_count", "historical_peak_active_
 const portfolioBrandCategoryConcepts = ["brand_delta_pct", "category_delta_pct", "brand_category_delta_gap_pp"];
 const portfolioMarketUniverseConcepts = ["market_segment_delta_pct"];
 const portfolioCompetitorConcepts = ["broad_competitors"];
+const storeRankingMetrics = ["revenue", "units", "retailer_margin_abs"];
+const storeKpiConcepts = ["revenue", "units", "retailer_margin_abs", "sku_count"];
+const storeTableConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count"];
 const portfolioPresentationFallback = {
   category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" },
   category_units_share: { display_label: "Доля в штуках категории", format: "percent" },
@@ -182,13 +188,11 @@ const filterConfig = {
   sku: { label: "Все SKU", childFilters: [] },
   store: {
     label: "Все ТТ",
-    childFilters: [],
-    querySupported: false,
-    unavailableText: "Фильтр ТТ будет подключён отдельно"
+    childFilters: []
   }
 };
 const searchFilterIds = ["manufacturer", "brand", "sku", "store"];
-const drilldownOrder = ["network", "category", "manufacturer", "brand", "sku"];
+const drilldownOrder = ["network", "category", "manufacturer", "brand", "sku", "store"];
 const maxComboboxOptions = 20;
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -332,6 +336,12 @@ function bindDynamicControls() {
     state.previewGrain = event.target.value;
     await runOverviewQuery();
   });
+  document.getElementById("stores-metric").addEventListener("change", () => {
+    state.storesMetric = document.getElementById("stores-metric").value;
+    state.sortColumn = storeSortColumn();
+    state.sortDirection = "desc";
+    renderStores();
+  });
 
   for (const id of Object.keys(filterConfig)) {
     const select = document.getElementById(`${id}-filter`);
@@ -436,6 +446,10 @@ async function runActiveViewQuery() {
     await runPortfolioMarketQuery();
     return;
   }
+  if (state.activeView === "stores") {
+    await runStoresQuery();
+    return;
+  }
   if (state.activeView === "overview") {
     await runOverviewQuery();
   }
@@ -497,6 +511,34 @@ async function runPortfolioMarketQuery() {
   try {
     state.portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());
     renderPortfolioMarket();
+    setLoading(false, "Данные обновлены");
+  } catch (error) {
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
+  }
+}
+
+async function runStoresQuery() {
+  setLoading(true, "Запрос к витрине");
+  renderStoresSkeletons();
+  if (!storeConcepts().length) {
+    state.storesResponse = null;
+    state.storesScopeStatus = "no_supported_metrics";
+    renderStores();
+    setLoading(false, "Показатели ТТ недоступны");
+    return;
+  }
+  if (storesHasProductFilters()) {
+    state.storesResponse = null;
+    state.storesScopeStatus = "product_filter_unsupported";
+    renderStores();
+    setLoading(false, "Есть ограничение среза");
+    return;
+  }
+  state.storesScopeStatus = "ready";
+  try {
+    state.storesResponse = await postJson("/api/dashboard/query", buildStoresPayload());
+    renderStores();
     setLoading(false, "Данные обновлены");
   } catch (error) {
     setLoading(false, "Не удалось загрузить данные.");
@@ -597,6 +639,10 @@ function buildPortfolioMarketPayload() {
   };
 }
 
+function buildStoresPayload() {
+  return buildQueryPayload("store", entityIdsForStores(), storeConcepts());
+}
+
 function backendPeriodMode() {
   return state.periodMode === "DATE_RANGE" ? "DATE_RANGE" : "SINGLE_PERIOD";
 }
@@ -614,6 +660,11 @@ function overviewConcepts() {
 function salesDriverConcepts() {
   return [...new Set(salesDriverBuckets.flatMap((group) => group.concepts))]
     .filter((concept) => salesDriverMetricEntry(concept));
+}
+
+function storeConcepts() {
+  return [...new Set([...storeRankingMetrics, ...storeKpiConcepts, ...storeTableConcepts])]
+    .filter((concept) => metricEntryForGrain(concept, "store"));
 }
 
 function tableConcepts() {
@@ -1019,6 +1070,296 @@ function renderPortfolioMarketSkeletons() {
   replaceWithMessage(document.getElementById("portfolio-brand-category"), "loading-state compact", "Загрузка сравнения...");
   replaceWithMessage(document.getElementById("portfolio-market-private-label"), "loading-state compact", "Загрузка рыночного сравнения...");
   renderMessageRow(document.getElementById("portfolio-competitors-table"), "Загрузка конкурентного окружения...");
+}
+
+function renderStores() {
+  if (state.storesResponse) {
+    renderContextStripForResponse(state.storesResponse);
+  } else {
+    renderStoresContextStripWithoutResponse();
+  }
+  renderBreadcrumb();
+  renderStoreMetricOptions();
+  if (state.storesScopeStatus === "no_supported_metrics") {
+    renderStoresNoSupportedMetrics();
+    return;
+  }
+  if (state.storesScopeStatus === "product_filter_unsupported") {
+    renderStoresProductFilterUnsupported();
+    return;
+  }
+  renderStoreRanking();
+  renderSelectedStoreKpi();
+  renderStoresTable();
+  renderStoreDetailState();
+}
+
+function renderStoresSkeletons() {
+  replaceWithMessage(document.getElementById("stores-ranking"), "loading-state compact", "Загрузка рейтинга ТТ...");
+  replaceWithMessage(document.getElementById("stores-selected-kpi"), "loading-state compact", "Загрузка выбранной ТТ...");
+  renderMessageRow(document.getElementById("stores-table"), "Загрузка таблицы ТТ...");
+}
+
+function renderStoresProductFilterUnsupported() {
+  document.getElementById("stores-ranking-context").textContent =
+    "Текущая витрина поддерживает рейтинг ТТ по сети, без продуктных фильтров.";
+  replaceWithMessage(
+    document.getElementById("stores-ranking"),
+    "empty-state compact",
+    "Разрез ТТ внутри выбранной категории, производителя, бренда или SKU пока не рассчитан."
+  );
+  document.getElementById("stores-selected-context").textContent =
+    "Снимите продуктные фильтры, чтобы увидеть подтверждённые store-level показатели.";
+  replaceWithMessage(
+    document.getElementById("stores-selected-kpi"),
+    "empty-state compact",
+    "Показатели выбранной ТТ в продуктном срезе недоступны."
+  );
+  document.getElementById("stores-table-context").textContent =
+    "Чтобы не показывать неподтверждённую аналитику, таблица ТТ скрыта для этого среза.";
+  renderMessageRow(
+    document.getElementById("stores-table"),
+    "Store-level витрина не содержит подтверждённого разреза по выбранным продуктным фильтрам."
+  );
+  document.getElementById("stores-detail").textContent =
+    "Детализация ТТ по категориям, брендам и SKU требует отдельного подтверждённого маршрута данных.";
+}
+
+function renderStoresNoSupportedMetrics() {
+  document.getElementById("stores-ranking-context").textContent =
+    "Для выбранной сети нет подтверждённых store-level показателей этого экрана.";
+  replaceWithMessage(
+    document.getElementById("stores-ranking"),
+    "empty-state compact",
+    "Показатели ТТ недоступны для выбранного среза."
+  );
+  document.getElementById("stores-selected-context").textContent =
+    "Выбранная ТТ появится после доступности store-level показателей.";
+  replaceWithMessage(
+    document.getElementById("stores-selected-kpi"),
+    "empty-state compact",
+    "Компактный срез ТТ недоступен."
+  );
+  document.getElementById("stores-table-context").textContent =
+    "Таблица ТТ скрыта, чтобы не показывать неподтверждённые показатели.";
+  renderMessageRow(document.getElementById("stores-table"), "Нет подтверждённых показателей для таблицы ТТ.");
+  document.getElementById("stores-detail").textContent =
+    "Детализация ТТ недоступна без подтверждённых store-level показателей.";
+}
+
+function renderStoresContextStripWithoutResponse() {
+  updateFilterCount();
+  updateActiveFilterChips();
+  const parts = [
+    periodContextText(),
+    contextFilterText(),
+    privateLabelScopeText(document.getElementById("private-label-scope").value)
+  ].filter(Boolean);
+  let coverageNote = "";
+  if (state.storesScopeStatus === "product_filter_unsupported") {
+    parts.push("Разрез ТТ по продуктным фильтрам пока не рассчитан");
+    coverageNote = "Разрез ТТ по выбранным продуктным фильтрам требует отдельного подтверждённого маршрута данных.";
+  }
+  if (state.storesScopeStatus === "no_supported_metrics") {
+    coverageNote = "Для выбранной сети нет подтверждённых store-level показателей этого экрана.";
+  }
+  document.getElementById("context-strip").textContent = parts.join(" · ");
+  document.getElementById("context-coverage-note").textContent = coverageNote;
+}
+
+function renderStoreMetricOptions() {
+  const select = document.getElementById("stores-metric");
+  const metrics = storeRankingMetrics.filter((concept) => metricEntryForGrain(concept, "store"));
+  select.replaceChildren(...metrics.map((concept) => option(concept, displayLabel(concept))));
+  if (!metrics.includes(state.storesMetric)) {
+    state.storesMetric = metrics[0] || "revenue";
+    state.sortColumn = storeSortColumn();
+    state.sortDirection = "desc";
+  }
+  select.value = state.storesMetric;
+}
+
+function renderStoreRanking() {
+  const target = document.getElementById("stores-ranking");
+  const rows = storeRowsByMetric(state.storesMetric);
+  if (!rows.length) {
+    replaceWithMessage(target, "empty-state compact", "За выбранный период данных по ТТ нет.");
+    document.getElementById("stores-ranking-context").textContent = "Рейтинг строится только по подтверждённым store-level показателям.";
+    return;
+  }
+  const maxValue = Math.max(...rows.map((row) => Math.abs(Number(row.result.value) || 0)), 1);
+  target.replaceChildren(...rows.map((row, index) => {
+    const node = document.createElement("article");
+    node.className = row.entityId === selectedStoreId() ? "store-ranking-row is-selected" : "store-ranking-row";
+    const labelButton = document.createElement("button");
+    labelButton.type = "button";
+    labelButton.className = "table-link store-rank-label";
+    labelButton.textContent = `${index + 1}. ${entityDisplayLabel("store", row.entityId)}`;
+    labelButton.addEventListener("click", () => {
+      void selectStore(row.entityId);
+    });
+    node.appendChild(labelButton);
+    const barWrap = document.createElement("div");
+    barWrap.className = "ranked-bar-track";
+    const bar = document.createElement("div");
+    bar.className = "ranked-bar-fill";
+    bar.style.width = `${Math.max(3, (Math.abs(Number(row.result.value) || 0) / maxValue) * 100)}%`;
+    barWrap.appendChild(bar);
+    node.appendChild(barWrap);
+    appendText(node, "strong", storeMetricWithDelta(row.result, catalogEntry(state.storesMetric), state.storesResponse));
+    return node;
+  }));
+  document.getElementById("stores-ranking-context").textContent = state.periodMode === "COMPARE"
+    ? "Показан текущий уровень и изменение к периоду сравнения. Это не вклад в изменение."
+    : "Показан текущий уровень по выбранному показателю.";
+}
+
+function renderSelectedStoreKpi() {
+  const target = document.getElementById("stores-selected-kpi");
+  const storeId = selectedStoreId();
+  if (!storeId) {
+    replaceWithMessage(target, "empty-state compact", "Выберите ТТ в рейтинге или фильтре.");
+    document.getElementById("stores-selected-context").textContent = "Компактный срез появляется только для выбранной торговой точки.";
+    return;
+  }
+  const cards = storeKpiConcepts
+    .map((concept) => storeResultFor(concept, storeId))
+    .filter(Boolean)
+    .map((result) => storeKpiCard(result));
+  if (!cards.length) {
+    replaceWithMessage(target, "empty-state compact", "Показатели выбранной ТТ недоступны для этого среза.");
+    return;
+  }
+  target.replaceChildren(...cards);
+  document.getElementById("stores-selected-context").textContent =
+    `${entityDisplayLabel("store", storeId)} · подтверждённые store-level показатели.`;
+}
+
+function renderStoresTable() {
+  const table = document.getElementById("stores-table");
+  const rows = storeRowsByMetric(state.storesMetric);
+  if (!rows.length) {
+    renderMessageRow(table, "За выбранный период данных по ТТ нет.");
+    document.getElementById("stores-table-context").textContent = "Таблица использует только подтверждённые store-level показатели.";
+    return;
+  }
+  const headers = ["Точка продаж", "Оборот", "Δ", "Продажи, шт.", "Δ", "Абсолютная маржа", "Маржинальность", "SKU"];
+  if (!headers.includes(state.sortColumn)) {
+    state.sortColumn = storeSortColumn();
+    state.sortDirection = "desc";
+  }
+  const tableRows = rows.map((row) => ({
+    cells: [
+      entityDisplayLabel("store", row.entityId),
+      storeTableValue("revenue", row.entityId),
+      storeTableDelta("revenue", row.entityId),
+      storeTableValue("units", row.entityId),
+      storeTableDelta("units", row.entityId),
+      storeTableValue("retailer_margin_abs", row.entityId),
+      storeTableValue("retailer_margin_pct", row.entityId),
+      storeTableValue("sku_count", row.entityId)
+    ],
+    meta: { entityId: row.entityId }
+  }));
+  renderRows(table, headers, tableRows, {
+    rowLimit: state.tablePageSize,
+    onFirstCellClick: (_label, meta) => {
+      if (meta?.entityId) void selectStore(meta.entityId);
+    },
+    onSort: renderStoresTable
+  });
+  const caption = table.createCaption();
+  caption.textContent = `Показаны ${Math.min(tableRows.length, state.tablePageSize)} из ${tableRows.length} ТТ · сортировка по выбранному показателю`;
+  document.getElementById("stores-table-context").textContent = state.periodMode === "COMPARE"
+    ? "Δ показывает изменение к периоду сравнения; вклад по ТТ не рассчитывается в этом разделе."
+    : "Таблица ранжирована по выбранному показателю.";
+}
+
+function renderStoreDetailState() {
+  const target = document.getElementById("stores-detail");
+  const storeId = selectedStoreId();
+  target.textContent = storeId
+    ? "Детализация выбранной ТТ по категориям, брендам и SKU будет подключена после подтверждения отдельного разреза данных."
+    : "Выберите ТТ, чтобы зафиксировать магазин в глобальном срезе.";
+}
+
+function storeKpiCard(result) {
+  const entry = catalogEntry(result.metric_concept);
+  const node = document.createElement("article");
+  node.className = "store-kpi";
+  appendText(node, "span", displayLabel(result.metric_concept));
+  appendText(node, "strong", storeMetricWithDelta(result, entry, state.storesResponse));
+  const limitation = limitationText(result);
+  if (limitation) appendText(node, "small", limitation);
+  const button = storeProvenanceButton(result);
+  if (button) node.appendChild(button);
+  return node;
+}
+
+function storeRowsByMetric(metricConcept) {
+  return storeEntityIds()
+    .map((entityId) => ({ entityId, result: storeResultFor(metricConcept, entityId) }))
+    .filter((row) => row.result && row.result.value !== null && row.result.value !== undefined)
+    .sort((left, right) => Number(right.result.value || 0) - Number(left.result.value || 0));
+}
+
+function storeEntityIds() {
+  return [...new Set((state.storesResponse?.metric_results || []).map((result) => result.entity_id))];
+}
+
+function storeResultFor(concept, entityId) {
+  return state.storesResponse?.metric_results.find((result) => result.metric_concept === concept && result.entity_id === entityId);
+}
+
+function storeTableValue(concept, entityId) {
+  const result = storeResultFor(concept, entityId);
+  const entry = catalogEntry(concept);
+  if (!result || !entry) return "Недоступно";
+  if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
+  return formatValue(result.value, entry.format);
+}
+
+function storeTableDelta(concept, entityId) {
+  if (state.periodMode !== "COMPARE") return "—";
+  const result = storeResultFor(concept, entityId);
+  const entry = catalogEntry(concept);
+  const comparison = comparisonFor(state.storesResponse, result);
+  if (!result || !entry || !comparison) return "н/д";
+  return formatDeltaValue(comparison.delta, entry.format);
+}
+
+function storeMetricWithDelta(result, entry, response) {
+  if (!result || !entry) return "Недоступно";
+  const value = formatValue(result.value, entry.format);
+  const comparison = comparisonFor(response, result);
+  if (state.periodMode === "COMPARE" && comparison) {
+    return `${value} · ${formatDeltaValue(comparison.delta, entry.format)}`;
+  }
+  if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
+  return value;
+}
+
+function storeSortColumn() {
+  return displayLabel(state.storesMetric);
+}
+
+function storeProvenanceButton(result) {
+  if (!result?.provenance) return null;
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "inline-link";
+  button.textContent = "Откуда?";
+  button.addEventListener("click", () => openStoreProvenance(result));
+  return button;
+}
+
+function openStoreProvenance(result) {
+  const content = document.getElementById("provenance-content");
+  content.replaceChildren();
+  provenanceSections(result.provenance || {}, result).forEach((section) => content.appendChild(section));
+  document.getElementById("provenance-drawer").classList.add("is-open");
+  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("is-open");
 }
 
 function renderPortfolioContextStripForResponse(response) {
@@ -1687,6 +2028,8 @@ function resetAllEntityFilters() {
 function applyFilterDrilldown(filterId) {
   const select = document.getElementById(`${filterId}-filter`);
   if (filterId === "store") {
+    if (select.value) state.currentGrain = "store";
+    if (!select.value && state.currentGrain === "store") state.currentGrain = nearestSelectedGrain();
     renderBreadcrumb();
     updateFilterCount();
     return;
@@ -1714,6 +2057,23 @@ async function drillIntoEntity(entityId) {
   updatePreviewGrain();
   await refreshRuntimeOptions();
   await runActiveViewQuery();
+}
+
+async function selectStore(entityId) {
+  const select = document.getElementById("store-filter");
+  if (!select) return;
+  const item = (state.options.entities?.store || []).find((optionItem) => optionItem.value === entityId);
+  if (item) {
+    select.replaceChildren(option("", filterConfig.store.label), option(item.value, item.label));
+    const search = document.getElementById("store-search");
+    if (search) search.value = item.label;
+  }
+  select.value = entityId;
+  state.currentGrain = "store";
+  renderBreadcrumb();
+  updateFilterCount();
+  await refreshRuntimeOptions();
+  await runStoresQuery();
 }
 
 function selectedRetailer() {
@@ -1788,6 +2148,21 @@ function entityIdsForPreview() {
 
 function entityIdsForSalesDriverDetail() {
   return firstEntityIds(salesDriverDetailGrain(), state.tablePageSize);
+}
+
+function entityIdsForStores() {
+  const selected = selectedStoreId();
+  if (selected) return [selected];
+  return firstEntityIds("store", state.tablePageSize);
+}
+
+function selectedStoreId() {
+  return document.getElementById("store-filter")?.value || "";
+}
+
+function storesHasProductFilters() {
+  const selected = selectedFilterValues();
+  return ["category", "manufacturer", "brand", "sku"].some((key) => Boolean(selected[key]));
 }
 
 function firstEntityIds(grain, limit) {
@@ -1981,6 +2356,10 @@ function metricCellTextForResponse(result, entry, response) {
 }
 
 function resultForProvenance(concept) {
+  if (state.activeView === "stores") {
+    const storeId = selectedStoreId() || storeEntityIds()[0];
+    return storeResultFor(concept, storeId) || state.storesResponse?.metric_results[0];
+  }
   if (state.activeView === "sales_drivers") {
     return salesDriverResultFor(concept) || state.salesDriversResponse?.metric_results[0] || state.salesDriversTableResponse?.metric_results[0];
   }
@@ -2588,7 +2967,9 @@ function showPageError(error) {
     ? document.getElementById("sales-drivers-chart-box")
     : state.activeView === "portfolio_market"
       ? document.getElementById("portfolio-share-strip")
-      : document.getElementById("chart-box");
+      : state.activeView === "stores"
+        ? document.getElementById("stores-ranking")
+        : document.getElementById("chart-box");
   replaceWithMessage(target, "error-state", "Не удалось загрузить данные. Повторите попытку.");
   showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
 }
