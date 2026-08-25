@@ -19,7 +19,7 @@ from retail_analytics.dashboard import (
     load_dashboard_runtime_config,
     serialize_dashboard_query_response,
 )
-from retail_analytics.dashboard.app import _parent_filters
+from retail_analytics.dashboard.app import _asset_version, _parent_filters, _template_text
 from retail_analytics.history import write_source_ledger
 from retail_analytics.mart import (
     ComparisonMode,
@@ -58,6 +58,18 @@ def test_ui_payload_builds_exact_backend_query_request() -> None:
     assert request.comparison_mode == ComparisonMode.YOY
     assert request.private_label_scope == PrivateLabelScope.EXCLUDE
     assert request.mart_build_id == "build_dashboard_synthetic"
+
+
+def test_dashboard_static_assets_are_content_versioned() -> None:
+    raw_html = html_or_script("index.html")
+    rendered_html = _template_text("index.html")
+    version = _asset_version()
+
+    assert "__DASHBOARD_ASSET_VERSION__" in raw_html
+    assert "workspace-spacing-v1" not in raw_html
+    assert f"/static/app.js?v={version}" in rendered_html
+    assert f"/static/styles.css?v={version}" in rendered_html
+    assert "__DASHBOARD_ASSET_VERSION__" not in rendered_html
 
 
 def test_runtime_resolves_cascading_product_filters_to_sku_universe(tmp_path: Path) -> None:
@@ -1359,8 +1371,10 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
 
     assert "min-height: 104px" in css
     assert "padding: 13px 14px 12px" in css
+    assert "border: 1px solid var(--border-default)" in css
     assert "font-size: 23px" in css
     assert "padding: 7px 10px" in css
+    assert "border: 1px solid rgba(219, 227, 238, 0.78)" in css
     assert "min-height: 132px" not in css
 
 
@@ -1606,6 +1620,7 @@ def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
     assert "--delta-neutral-up" in styles
     assert "--delta-neutral-down" in styles
     assert "--delta-rank-improved" in styles
+    assert "--delta-rank-declined" in styles
 
 
 def test_provenance_drawer_uses_russian_presentation_labels() -> None:

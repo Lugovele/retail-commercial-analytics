@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import io
 import json
+import os
 from collections.abc import Iterable
 from dataclasses import replace
 from datetime import date
@@ -12,7 +14,48 @@ from wsgiref.types import WSGIApplication
 import polars as pl
 
 from retail_analytics.dashboard import build_synthetic_dashboard_runtime, create_dashboard_wsgi_app
+from retail_analytics.dashboard.app import _asset_version
 from retail_analytics.mart import DashboardMartQueryService
+
+
+def test_dashboard_filter_apply_updates_rendered_kpi_when_browser_url_is_provided() -> None:
+    dashboard_url = os.environ.get("DASHBOARD_E2E_URL")
+    if not dashboard_url:
+        return
+    try:
+        sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+    except ImportError:
+        return
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.goto(dashboard_url, wait_until="networkidle")
+            page.wait_for_selector(".kpi-card")
+            before = [card.inner_text() for card in page.locator(".kpi-card").all()[:4]]
+
+            page.locator("#category-filter-trigger").click()
+            page.locator("#category-options .filter-option").first.click()
+            page.locator('[data-apply-filter="category"]').click()
+            page.wait_for_function(
+                """(beforeValues) => {
+                    const cards = Array.from(document.querySelectorAll(".kpi-card")).slice(0, 4);
+                    if (cards.length < 4) return false;
+                    return JSON.stringify(cards.map((card) => card.innerText)) !== JSON.stringify(beforeValues);
+                }""",
+                before,
+                timeout=15000,
+            )
+
+            after = [card.inner_text() for card in page.locator(".kpi-card").all()[:4]]
+            selected = page.locator("#category-filter-trigger").inner_text()
+
+            assert selected != "Все"
+            assert before != after
+            assert "Недоступно" not in "\n".join(after)
+        finally:
+            browser.close()
 
 
 def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> None:
@@ -20,7 +63,16 @@ def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> No
 
     status, _, body = _call(app, "GET", "/")
     assert status.startswith("200")
-    assert "Аналитика продаж" in body.decode("utf-8")
+    html = body.decode("utf-8")
+    asset_version = _asset_version()
+    assert "Аналитика продаж" in html
+    assert f"/static/app.js?v={asset_version}" in html
+    assert f"/static/styles.css?v={asset_version}" in html
+
+    status, headers, body = _call(app, "GET", "/static/app.js")
+    assert status.startswith("200")
+    assert body
+    assert ("Cache-Control", "no-cache") in headers
 
     status, _, body = _call(app, "GET", "/api/dashboard/runtime")
     runtime = json.loads(body)

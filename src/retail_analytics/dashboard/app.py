@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import mimetypes
 from datetime import date
+from hashlib import sha256
 from importlib import resources
 from typing import Any
 from urllib.parse import parse_qs
@@ -66,7 +67,12 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 return _response(start_response, _template_text("index.html"), content_type="text/html; charset=utf-8")
             if method == "GET" and path.startswith("/static/"):
                 name = path.removeprefix("/static/")
-                return _response(start_response, _static_bytes(name), content_type=_content_type(name))
+                return _response(
+                    start_response,
+                    _static_bytes(name),
+                    content_type=_content_type(name),
+                    headers=[("Cache-Control", "no-cache")],
+                )
             if method == "GET" and path == "/healthz":
                 return _json_response(start_response, {"status": "ok"})
             if method == "GET" and path == "/api/dashboard/runtime":
@@ -180,7 +186,10 @@ def _resolve_query_entity_filters(payload: dict[str, Any], runtime: DashboardRun
 
 
 def _template_text(name: str) -> str:
-    return (resources.files("retail_analytics.dashboard.templates") / name).read_text(encoding="utf-8")
+    text = (resources.files("retail_analytics.dashboard.templates") / name).read_text(encoding="utf-8")
+    if name == "index.html":
+        text = text.replace("__DASHBOARD_ASSET_VERSION__", _asset_version())
+    return text
 
 
 def _static_bytes(name: str) -> bytes:
@@ -189,15 +198,26 @@ def _static_bytes(name: str) -> bytes:
     return (resources.files("retail_analytics.dashboard.static") / name).read_bytes()
 
 
+def _asset_version() -> str:
+    digest = sha256()
+    for name in ("app.js", "styles.css"):
+        digest.update(_static_bytes(name))
+    return digest.hexdigest()[:12]
+
+
 def _response(
     start_response: StartResponse,
     body: str | bytes,
     *,
     status: str = "200 OK",
     content_type: str,
+    headers: list[tuple[str, str]] | None = None,
 ) -> list[bytes]:
     raw = body.encode("utf-8") if isinstance(body, str) else body
-    start_response(status, [("Content-Type", content_type), ("Content-Length", str(len(raw)))])
+    response_headers = [("Content-Type", content_type), ("Content-Length", str(len(raw)))]
+    if headers:
+        response_headers.extend(headers)
+    start_response(status, response_headers)
     return [raw]
 
 
