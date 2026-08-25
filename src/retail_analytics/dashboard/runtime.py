@@ -63,6 +63,14 @@ ENTITY_PARENT_FILTERS = {
     "sku": ("category", "manufacturer", "brand"),
     "store": ("category", "manufacturer", "brand", "sku"),
 }
+PRODUCT_FILTERS = ("category", "manufacturer", "brand", "sku")
+MART_PARENT_FILTER_SUPPORT = {
+    "category": frozenset({"category"}),
+    "manufacturer": frozenset({"category", "manufacturer"}),
+    "brand": frozenset({"category", "brand"}),
+    "sku": frozenset({"category", "sku"}),
+}
+NO_MATCHING_PRODUCT_FILTER = "__NO_MATCHING_PRODUCT_FILTER__"
 
 
 class DashboardRuntimeMode(StrEnum):
@@ -214,6 +222,114 @@ class DashboardRuntime:
                 ),
             ),
         }
+
+    def query_entity_filters(
+        self,
+        *,
+        retailer_id: str,
+        source_id: str,
+        private_label_scope: str | PrivateLabelScope,
+        date_from: date | None,
+        date_to: date | None,
+        comparison_mode: str = "NONE",
+        entity_filters: dict[str, tuple[str, ...]] | None,
+    ) -> dict[str, tuple[str, ...]] | None:
+        """Resolve UI entity filters to a mart-query-safe filter universe."""
+
+        if not entity_filters:
+            return entity_filters
+        product_filters = {
+            key: tuple(value for value in entity_filters.get(key, ()) if value)
+            for key in PRODUCT_FILTERS
+            if entity_filters.get(key)
+        }
+        if not product_filters or not _product_filters_need_sku_resolution(product_filters):
+            return entity_filters
+        resolved_skus = self._resolve_product_filter_skus(
+            retailer_id=retailer_id,
+            source_id=source_id,
+            private_label_scope=private_label_scope,
+            date_from=_source_like_resolution_start(
+                self.query_service.metric_facts_path,
+                retailer_id=retailer_id,
+                source_id=source_id,
+                private_label_scope=private_label_scope,
+                date_from=date_from,
+                comparison_mode=comparison_mode,
+            ),
+            date_to=date_to,
+            product_filters=product_filters,
+        )
+        if resolved_skus is None:
+            return entity_filters
+        resolved = {
+            key: values
+            for key, values in entity_filters.items()
+            if key not in PRODUCT_FILTERS and values
+        }
+        resolved["sku"] = resolved_skus or (NO_MATCHING_PRODUCT_FILTER,)
+        return resolved
+
+    def _resolve_product_filter_skus(
+        self,
+        *,
+        retailer_id: str,
+        source_id: str,
+        private_label_scope: str | PrivateLabelScope,
+        date_from: date | None,
+        date_to: date | None,
+        product_filters: dict[str, tuple[str, ...]],
+    ) -> tuple[str, ...] | None:
+        if self.source_like_rows_path is None or not self.source_like_rows_path.exists():
+            return None
+        available_columns = _source_columns(self.source_like_rows_path)
+        if "canonical_product_id" not in available_columns:
+            return None
+        clauses = [
+            "retailer_id = ?",
+            "source_id = ?",
+            "canonical_product_id IS NOT NULL",
+            "canonical_product_id <> ''",
+        ]
+        params: list[Any] = [retailer_id, source_id]
+        runtime_retailer = _runtime_retailer_for_scope(self.retailers, retailer_id, source_id)
+        source_revision_ids = _source_revision_ids_for_options(
+            self.query_service.mart_builds,
+            retailer_id,
+            source_id,
+            runtime_retailer.default_mart_build_id if runtime_retailer else None,
+        )
+        if "source_revision_id" in available_columns and source_revision_ids:
+            placeholders = ", ".join("?" for _ in source_revision_ids)
+            clauses.append(f"source_revision_id IN ({placeholders})")
+            params.extend(source_revision_ids)
+        scope = PrivateLabelScope(private_label_scope)
+        if "private_label_flag" in available_columns and scope != PrivateLabelScope.INCLUDE:
+            clauses.append("private_label_flag = ?")
+            params.append(scope == PrivateLabelScope.ONLY)
+        if date_from is not None and "period" in available_columns:
+            clauses.append("CAST(period AS DATE) >= CAST(? AS DATE)")
+            params.append(date_from.isoformat())
+        if date_to is not None and "period" in available_columns:
+            clauses.append("CAST(period AS DATE) <= CAST(? AS DATE)")
+            params.append(date_to.isoformat())
+        for key, values in product_filters.items():
+            column = SOURCE_LIKE_ENTITY_COLUMNS[key]
+            if column not in available_columns:
+                return None
+            placeholders = ", ".join("?" for _ in values)
+            clauses.append(f"{column} IN ({placeholders})")
+            params.extend(values)
+        rows = duckdb.sql(
+            f"""
+                SELECT DISTINCT canonical_product_id
+                FROM read_parquet(?)
+                WHERE {" AND ".join(clauses)}
+                ORDER BY canonical_product_id
+            """,
+            params=[_duckdb_path(self.source_like_rows_path), *params],
+        ).fetchall()
+        return tuple(str(row[0]) for row in rows)
 
 
 def build_dashboard_runtime(
@@ -638,6 +754,61 @@ def _source_like_label_column(grain: str, entity_column: str, available_columns:
         if candidate in available_columns:
             return candidate
     return entity_column
+
+
+def _product_filters_need_sku_resolution(product_filters: dict[str, tuple[str, ...]]) -> bool:
+    selected = set(product_filters)
+    if not selected:
+        return False
+    effective = max(selected, key=PRODUCT_FILTERS.index)
+    supported = MART_PARENT_FILTER_SUPPORT.get(effective, frozenset())
+    return not selected.issubset(supported)
+
+
+def _source_like_resolution_start(
+    metric_facts_path: Path,
+    *,
+    retailer_id: str,
+    source_id: str,
+    private_label_scope: str | PrivateLabelScope,
+    date_from: date | None,
+    comparison_mode: str,
+) -> date | None:
+    if date_from is None or comparison_mode == "NONE":
+        return date_from
+    periods = [
+        row[0]
+        for row in duckdb.sql(
+            """
+                SELECT DISTINCT period_start
+                FROM read_parquet(?)
+                WHERE retailer_id = ?
+                  AND source_id = ?
+                  AND private_label_scope = ?
+                  AND period_start <= CAST(? AS DATE)
+                ORDER BY period_start
+            """,
+            params=[
+                _duckdb_path(metric_facts_path),
+                retailer_id,
+                source_id,
+                PrivateLabelScope(private_label_scope).value,
+                date_from.isoformat(),
+            ],
+        ).fetchall()
+    ]
+    if comparison_mode == "YOY":
+        candidate = date(date_from.year - 1, date_from.month, date_from.day)
+        return candidate if candidate in periods else date_from
+    if comparison_mode == "MOM":
+        previous_month = date_from.replace(year=date_from.year - 1, month=12) if date_from.month == 1 else date(
+            date_from.year,
+            date_from.month - 1,
+            date_from.day,
+        )
+        return previous_month if previous_month in periods else date_from
+    earlier = [period for period in periods if period < date_from]
+    return earlier[-1] if earlier else date_from
 
 
 def _source_revision_ids_for_options(

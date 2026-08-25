@@ -100,9 +100,21 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 )
             if method == "POST" and path == "/api/dashboard/query":
                 payload = _read_json(environ)
+                original_entity_filters = _resolve_query_entity_filters(payload, resolved_runtime)
                 request = build_backend_query_request(payload)
                 response = resolved_runtime.query_service.query(request)
-                return _json_response(start_response, serialize_dashboard_query_response(response))
+                data = serialize_dashboard_query_response(response)
+                if original_entity_filters is not None:
+                    data["request_scope"]["user_entity_filters"] = original_entity_filters
+                    for result in data["metric_results"]:
+                        if result.get("provenance"):
+                            result["provenance"]["current_analytical_scope"][
+                                "user_entity_filters"
+                            ] = original_entity_filters
+                            result["provenance"]["current_analytical_scope"][
+                                "execution_entity_filters"
+                            ] = data["request_scope"]["entity_filters"]
+                return _json_response(start_response, data)
             if method == "POST" and path == "/api/dashboard/contribution":
                 payload = _read_json(environ)
                 contribution_request = build_contribution_request(payload)
@@ -141,6 +153,30 @@ def _read_json(environ: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise TypeError("JSON body must be an object")
     return payload
+
+
+def _resolve_query_entity_filters(payload: dict[str, Any], runtime: DashboardRuntime) -> dict[str, list[str]] | None:
+    raw_filters = payload.get("entity_filters")
+    if not isinstance(raw_filters, dict):
+        return None
+    filters = {
+        str(key): tuple(str(item) for item in values)
+        for key, values in raw_filters.items()
+        if isinstance(values, (list, tuple))
+    }
+    original_filters = {key: list(values) for key, values in filters.items()}
+    resolved = runtime.query_entity_filters(
+        retailer_id=str(payload["retailer_id"]),
+        source_id=str(payload["source_id"]),
+        private_label_scope=payload.get("private_label_scope", "INCLUDE"),
+        date_from=_optional_date(payload.get("date_from")),
+        date_to=_optional_date(payload.get("date_to")),
+        comparison_mode=payload.get("comparison_mode", "NONE"),
+        entity_filters=filters,
+    )
+    if resolved is not raw_filters:
+        payload["entity_filters"] = {key: list(values) for key, values in (resolved or {}).items()}
+    return original_filters
 
 
 def _template_text(name: str) -> str:

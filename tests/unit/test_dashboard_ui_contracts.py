@@ -60,6 +60,94 @@ def test_ui_payload_builds_exact_backend_query_request() -> None:
     assert request.mart_build_id == "build_dashboard_synthetic"
 
 
+def test_runtime_resolves_cascading_product_filters_to_sku_universe(tmp_path: Path) -> None:
+    source_like_path = tmp_path / "source_like.parquet"
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a"],
+            "source_revision_id": ["revision_dashboard_synthetic", "revision_dashboard_synthetic"],
+            "period": ["2026-06-01", "2026-06-01"],
+            "category": ["CATEGORY_A", "CATEGORY_A"],
+            "manufacturer": ["MANUFACTURER_A", "MANUFACTURER_B"],
+            "brand": ["BRAND_A", "BRAND_A"],
+            "canonical_product_id": ["SKU_A", "SKU_B"],
+            "private_label_flag": [False, False],
+        }
+    ).write_parquet(source_like_path)
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path), source_like_rows_path=source_like_path)
+
+    filters = runtime.query_entity_filters(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        entity_filters={
+            "category": ("CATEGORY_A",),
+            "manufacturer": ("MANUFACTURER_A",),
+            "brand": ("BRAND_A",),
+        },
+    )
+
+    assert filters == {"sku": ("SKU_A",)}
+
+
+def test_runtime_resolves_compare_filters_across_current_and_reference_periods(tmp_path: Path) -> None:
+    source_like_path = tmp_path / "source_like.parquet"
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a"],
+            "source_revision_id": ["revision_dashboard_synthetic", "revision_dashboard_synthetic"],
+            "period": ["2026-06-01", "2025-06-01"],
+            "category": ["CATEGORY_A", "CATEGORY_A"],
+            "manufacturer": ["MANUFACTURER_A", "MANUFACTURER_A"],
+            "brand": ["BRAND_A", "BRAND_A"],
+            "canonical_product_id": ["SKU_CURRENT", "SKU_REFERENCE"],
+            "private_label_flag": [False, False],
+        }
+    ).write_parquet(source_like_path)
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path), source_like_rows_path=source_like_path)
+
+    filters = runtime.query_entity_filters(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        comparison_mode="YOY",
+        entity_filters={
+            "category": ("CATEGORY_A",),
+            "manufacturer": ("MANUFACTURER_A",),
+            "brand": ("BRAND_A",),
+        },
+    )
+
+    assert filters == {"sku": ("SKU_CURRENT", "SKU_REFERENCE")}
+
+
+def test_runtime_preserves_filters_when_source_like_resolution_is_unavailable(tmp_path: Path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    original_filters = {
+        "category": ("CATEGORY_A",),
+        "manufacturer": ("MANUFACTURER_A",),
+        "brand": ("BRAND_A",),
+    }
+
+    filters = runtime.query_entity_filters(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        comparison_mode="YOY",
+        entity_filters=original_filters,
+    )
+
+    assert filters == original_filters
+
+
 def test_invalid_private_label_scope_is_rejected_at_contract_boundary() -> None:
     with pytest.raises(ValueError, match="UNKNOWN"):
         build_backend_query_request(

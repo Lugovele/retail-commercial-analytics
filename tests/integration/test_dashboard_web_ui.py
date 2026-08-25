@@ -161,7 +161,7 @@ def test_dashboard_query_route_rolls_up_canonical_multi_select_filters(tmp_path:
             "entity_ids": [network_id],
             "entity_filters": {"category": category_ids},
             "metric_concepts": ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
-            "comparison_mode": "PREVIOUS_AVAILABLE",
+            "comparison_mode": "YOY",
             "private_label_scope": "INCLUDE",
             "mart_build_id": "build_dashboard_synthetic",
         },
@@ -176,10 +176,68 @@ def test_dashboard_query_route_rolls_up_canonical_multi_select_filters(tmp_path:
         "retailer_margin_pct",
     }
     assert response["request_scope"]["entity_filters"] == {"category": category_ids}
+    assert {item["metric_definition_id"] for item in response["comparisons"]} == {
+        item["lineage"]["metric_definition_id"] for item in response["metric_results"]
+    }
     assert response["scope_identity_hash"]
     provenance = response["metric_results"][0]["provenance"]
     assert provenance["current_analytical_scope"]["entity_filters"] == {"category": category_ids}
     assert provenance["scoped_rollup"]["status"] == "DERIVED_FROM_FILTERED_FACTS"
+
+
+def test_dashboard_query_route_resolves_cascading_source_like_filters(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/query",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": ["ALL"],
+            "entity_filters": {
+                "category": ["CATEGORY_STANDARD"],
+                "manufacturer": ["Manufacturer A"],
+                "brand": ["Brand A"],
+            },
+            "metric_concepts": ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert {item["metric_concept"] for item in response["metric_results"]} == {
+        "revenue",
+        "units",
+        "retailer_margin_abs",
+        "retailer_margin_pct",
+    }
+    assert response["request_scope"]["entity_filters"] == {"sku": ["SKU_A_001"]}
+    assert response["request_scope"]["user_entity_filters"] == {
+        "category": ["CATEGORY_STANDARD"],
+        "manufacturer": ["Manufacturer A"],
+        "brand": ["Brand A"],
+    }
+    assert response["comparisons"]
+    provenance = response["metric_results"][0]["provenance"]
+    assert provenance["current_analytical_scope"]["user_entity_filters"] == {
+        "category": ["CATEGORY_STANDARD"],
+        "manufacturer": ["Manufacturer A"],
+        "brand": ["Brand A"],
+    }
+    assert provenance["current_analytical_scope"]["execution_entity_filters"] == {"sku": ["SKU_A_001"]}
+    assert provenance["scoped_rollup"]["source_fact_grain"] == "sku"
 
 
 def test_dashboard_contribution_route_returns_structured_rows(tmp_path: Path) -> None:
