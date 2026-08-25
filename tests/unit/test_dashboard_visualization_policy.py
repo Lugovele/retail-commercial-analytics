@@ -41,7 +41,7 @@ def test_visualization_policy_defines_approved_screens_and_vocabularies() -> Non
 
     assert screen_ids == EXPECTED_SCREENS
     assert len(screen_ids) == len(set(screen_ids))
-    assert policy["policy_version"] == "dashboard_visualization_policy.v1.0.0"
+    assert policy["policy_version"] == "dashboard_visualization_policy.v1.1.0"
 
     visualizations = set(policy["enums"]["visualization_types"])
     assert {

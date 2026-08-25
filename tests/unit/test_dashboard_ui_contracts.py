@@ -298,6 +298,13 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     positions = [nav_body.index(label) for label in nav_labels]
     assert positions == sorted(positions)
     assert nav_body.count('class="nav-item') == 6
+    assert nav_body.count("href=\"#") == 6
+    assert 'href="#overview"' in nav_body
+    assert 'href="#sales-drivers"' in nav_body
+    assert 'href="#portfolio-market"' in nav_body
+    assert 'href="#stores"' in nav_body
+    assert 'href="#signals"' in nav_body
+    assert 'href="#data"' in nav_body
     assert "data-view=\"overview\"" in nav_body
     assert "data-view=\"sales_drivers\"" in nav_body
     assert "data-view=\"portfolio_market\"" in nav_body
@@ -334,15 +341,21 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     html = html_or_script("index.html")
     script = html_or_script("app.js")
 
-    expected_panels = (
-        'data-view-panel="overview"',
-        'data-view-panel="sales_drivers"',
-        'data-view-panel="portfolio_market"',
-        'data-view-panel="stores"',
-        'data-view-panel="signals"',
-        'data-view-panel="data"',
+    expected_sections = (
+        ('id="overview"', 'data-view-panel="overview"'),
+        ('id="sales-drivers"', 'data-view-panel="sales_drivers"'),
+        ('id="portfolio-market"', 'data-view-panel="portfolio_market"'),
+        ('id="stores"', 'data-view-panel="stores"'),
+        ('id="signals"', 'data-view-panel="signals"'),
+        ('id="data"', 'data-view-panel="data"'),
     )
-    assert all(panel in html for panel in expected_panels)
+    assert all(section_id in html and panel in html for section_id, panel in expected_sections)
+    assert html.count("report-section") == 6
+    assert 'dashboard-view sales-drivers-layout is-hidden' not in html
+    assert 'dashboard-view portfolio-market-layout is-hidden' not in html
+    assert 'dashboard-view stores-layout is-hidden' not in html
+    assert 'dashboard-view signals-layout is-hidden' not in html
+    assert 'dashboard-view data-layout is-hidden' not in html
     assert "Раздел будет подключён" not in html
     assert "Текущий аналитический набор данных, покрытие, качество и проверка расчёта." in html
     shell_text = html.split('<nav class="workflow-nav"', 1)[1].split("</nav>", 1)[0]
@@ -360,17 +373,24 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     )
     assert not any(term in shell_text for term in forbidden_shell_terms)
     assert 'activeView: "overview"' in script
-    assert "function setActiveView(view, { refresh = true } = {})" in script
-    assert 'setActiveView(state.activeView, { refresh: false });' in script
-    assert "if (refresh) void runActiveViewQuery();" in script
+    assert "function setActiveView(view, { refresh = true, scroll = false } = {})" in script
+    assert "function setupSectionObserver()" in script
+    assert "new IntersectionObserver" in script
+    assert "scrollIntoView" in script
+    assert "history.pushState" in script
+    assert "function ensureActiveViewData" in script
+    assert "loadedViews" in script
+    assert 'setActiveView(hashView || state.activeView, { refresh: false, scroll: false });' in script
+    assert "if (refresh) void ensureActiveViewData();" in script
     assert 'button.setAttribute("aria-current", "page");' in script
     assert 'button.removeAttribute("aria-current");' in script
-    assert 'panel.dataset.viewPanel === target' in script
+    assert 'panel.classList.toggle("is-hidden"' not in script
     assert "showToast(\"Раздел будет раскрыт" not in script
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-header-action]")', 1)[0]
     assert "runOverviewQuery" not in nav_handler
     assert "resetAllEntityFilters" not in nav_handler
     assert "private-label-scope" not in nav_handler
+    assert "preventDefault()" in nav_handler
 
 
 def test_signals_screen_uses_product_signal_feed_not_placeholder_or_fake_recommendations() -> None:
@@ -510,7 +530,9 @@ def test_data_screen_implements_current_dataset_coverage_quality_rows_and_audit(
     assert "state.dataPageOffset = 0;" in script
     assert "resetDataPagination();" in script.split("async function selectComboboxValue", 1)[1].split("function handleComboboxKeydown", 1)[0]
     assert "resetDataPagination();" in script.split("async function activateBreadcrumbGrain", 1)[1].split("function breadcrumbLabel", 1)[0]
-    assert "resetDataPagination();" in script.split("function updateActiveFilterChips", 1)[1].split("function entityDisplayLabel", 1)[0]
+    reset_handler = script.split('document.getElementById("reset-filters").addEventListener("click"', 1)[1].split("});", 1)[0]
+    assert "resetDataPagination();" in reset_handler
+    assert "invalidateLoadedViews();" in reset_handler
     assert 'table.querySelector("thead") || document.createElement("thead")' in script
     assert "table.replaceChildren(thead, tbody);" in script
     assert "source_like_rows" in script
@@ -759,9 +781,12 @@ def test_workflow_navigation_uses_wrapping_without_visible_horizontal_scrollbar(
     assert '<div class="system-state visually-hidden" id="system-state" role="status">' in html
     assert ".workflow-nav" in css
     assert "flex-wrap: wrap" in css
+    assert "position: sticky;" in css
+    assert "top: 64px;" in css
     nav_body = css.split(".nav-item {", 1)[1].split(".nav-item.is-active", 1)[0]
     assert "background: transparent;" in nav_body
     assert "border: 0;" in nav_body
+    assert "text-decoration: none;" in nav_body
     active_body = css.split(".nav-item.is-active {", 1)[1].split(".nav-item.is-active::after", 1)[0]
     assert "color: var(--brand-menu-blue);" in active_body
     assert ".nav-item.is-active::after" in css
@@ -786,15 +811,20 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
         .read_text(encoding="utf-8")
     )
 
-    assert "filter-count" in html
-    assert "filter-chevron" in html
-    assert "filter-active-chips" in html
+    assert "scope-toolbar" in html
+    assert "filter-drawer" not in html
+    assert "filter-count" not in html
+    assert "filter-chevron" not in html
+    assert "filter-active-chips" not in html
     assert "reset-filters" in html
     assert "context-coverage-note" in html
     assert "retailer-identity" in html
     assert "retailer-select-control" in html
-    assert 'type="hidden" id="private-label-scope" value="INCLUDE"' in html
-    assert html.count('id="private-label-toggle"') == 1
+    assert html.count('id="private-label-scope"') == 1
+    assert html.count('id="private-label-toggle"') == 0
+    assert "Весь ассортимент" in html
+    assert "Без выбранного ассортимента" in html
+    assert "Только выбранный ассортимент" in html
     assert 'id="breadcrumb-row"' in html
     assert 'data-drill-grain="category"' not in html
     assert 'document.getElementById("context-coverage-note").textContent = coverageNoteText(response);' in script
@@ -802,17 +832,24 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert "runtime.display_label" not in context_body
     assert "contextSummaryText(response)" in context_body
     assert "`${available} из ${requested} периодов доступны`" not in context_body
-    assert 'INCLUDE: `${scopeName} включена`' in script
-    assert 'EXCLUDE: `${scopeName} исключена`' in script
+    assert 'INCLUDE: "Весь ассортимент"' in script
+    assert 'EXCLUDE: `Без ${scopeName}`' in script
+    assert 'ONLY: `Только ${scopeName}`' in script
     assert "function renderRetailerIdentity()" in script
     assert "hasMultipleRetailers" in script
-    assert "function updateActiveFilterChips()" in script
-    assert "Очистить фильтр ${grainLabels[key]}" in script
+    assert 'data-clear-filter="category"' in html
+    assert 'document.querySelector(`[data-clear-filter="${id}"]`)?.classList.toggle("is-hidden", !hasValue);' in script
     assert "function breadcrumbLabel(grain, value)" in script
     assert "Все данные › Категория" not in html
+    assert "row.classList.add(\"is-empty\")" in script
     period_body = css.split(".period-control {", 1)[1].split(".period-mode", 1)[0]
     assert "background: transparent;" in period_body
     assert "border-radius: 0;" in period_body
+    assert "position: relative;" in period_body
+    assert ".period-popover" in css
+    assert 'id="period-popover-button"' in html
+    assert 'aria-haspopup="dialog"' in html
+    assert 'id="period-summary"' in html
     active_mode_body = css.split(".mode-button.is-active {", 1)[1].split(".period-fields", 1)[0]
     assert "var(--brand-secondary)" not in active_mode_body
     assert "rgba(42, 125, 225, 0.1)" in active_mode_body
@@ -872,6 +909,26 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     assert "values.slice(0, 250)" not in script
 
 
+def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:
+    script = html_or_script("app.js")
+
+    period_handler = script.split('["period-single", "period-a", "date-from", "date-to"].forEach((id) => {', 1)[1].split('document.getElementById("sales-drivers-provenance")', 1)[0]
+    assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("chart-metric")', 1)[0]
+    nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-signal-kind]")', 1)[0]
+
+    assert "await refreshRuntimeOptions();" in period_handler
+    assert "resetEntities: true" not in period_handler
+    assert "await refreshRuntimeOptions();" in assortment_handler
+    assert "resetEntities: true" not in assortment_handler
+    assert "await navigateToView(link.dataset.view);" in nav_handler
+    assert "resetAllEntityFilters" not in nav_handler
+    navigate_body = script.split("async function navigateToView(view)", 1)[1].split("function viewFromHash", 1)[0]
+    assert "scrollToView(target);" in navigate_body
+    assert "void ensureActiveViewData();" in navigate_body
+    assert "ensureReportDataThroughView" not in script
+    assert "window.addEventListener(\"scroll\"" in script
+
+
 def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")
@@ -908,6 +965,8 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert 'if (state.currentGrain === "network") return firstEntityIds("network", 1);' in script
     assert 'return ["network"]' not in script
     assert "selectedParentFiltersForGrain" in script
+    assert "state.drilldownPath" in script
+    assert "hasNonDrilldownFilters()" in script
     assert "Показаны первые" in script
     assert "CATEGORY_STANDARD" not in script
     assert "MANUFACTURER_A" not in script
@@ -923,7 +982,7 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert 'document.getElementById("period-b-derived")' in script
     assert "innerHTML" not in script
     assert "ONLY: `${scopeName}: только`" not in script
-    assert "ONLY: `только ${scopeName}`" in script
+    assert "ONLY: `Только ${scopeName}`" in script
     assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "п.п." in script
     assert "retailer_margin_pct" in script
@@ -999,12 +1058,15 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert refresh_body.index("if (resetEntities) resetAllEntityFilters();") < refresh_body.index("await loadOptions();")
     reset_body = script.split("function resetAllEntityFilters", 1)[1].split("function applyFilterDrilldown", 1)[0]
     assert 'state.currentGrain = "network";' in reset_body
+    assert "state.drilldownPath = [];" in reset_body
     assert "renderBreadcrumb();" in reset_body
     assert "updatePreviewGrain();" in reset_body
     assert "resetChildFilters(id)" in script
-    assert 'if (filterId === "store")' in script
-    assert 'if (select.value) state.currentGrain = "store";' in script
-    assert 'if (!select.value && state.currentGrain === "store") state.currentGrain = nearestSelectedGrain();' in script
+    filter_body = script.split("function applyFilterDrilldown(filterId)", 1)[1].split("async function drillIntoEntity", 1)[0]
+    assert "trimDrilldownFrom(filterId);" in filter_body
+    assert "state.currentGrain = nearestDrilldownGrain();" in filter_body
+    assert 'state.currentGrain = "store";' not in filter_body
+    assert "nearestSelectedGrain" not in script
     assert "await refreshRuntimeOptions();" in script
     assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
     assert 'manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] }' in script
@@ -1058,21 +1120,23 @@ def test_stores_screen_uses_store_ranking_without_fake_contribution() -> None:
     assert "state.sortColumn = storeSortColumn();" in store_metric_options_body
     assert 'state.sortDirection = "desc";' in store_metric_options_body
     assert "renderStoresContextStripWithoutResponse()" in script
-    assert "updateActiveFilterChips();" in script.split("function renderStoresContextStripWithoutResponse()", 1)[1].split("function renderStoreMetricOptions", 1)[0]
+    assert "updateActiveFilterChips();" not in script.split("function renderStoresContextStripWithoutResponse()", 1)[1].split("function renderStoreMetricOptions", 1)[0]
     assert 'document.getElementById("context-coverage-note").textContent = coverageNote;' in script
     assert "Разрез ТТ по продуктным фильтрам пока не рассчитан" in script
 
 
-def test_store_filter_promotes_selected_store_to_current_grain_and_scope() -> None:
+def test_store_filter_remains_filter_while_store_click_sets_drilldown() -> None:
     script = html_or_script("app.js")
 
-    store_filter_body = script.split('if (filterId === "store") {', 1)[1].split("renderBreadcrumb();", 1)[0]
-    assert 'if (select.value) state.currentGrain = "store";' in store_filter_body
-    assert 'nearestSelectedGrain()' in store_filter_body
+    filter_body = script.split("function applyFilterDrilldown(filterId)", 1)[1].split("async function drillIntoEntity", 1)[0]
+    assert 'state.currentGrain = "store";' not in filter_body
+    assert "setExplicitDrilldown(" not in filter_body
+    assert "trimDrilldownFrom(filterId);" in filter_body
     assert "async function selectStore(entityId)" in script
     select_store_body = script.split("async function selectStore(entityId)", 1)[1].split("function selectedRetailer", 1)[0]
     assert 'document.getElementById("store-filter")' in select_store_body
     assert 'state.currentGrain = "store";' in select_store_body
+    assert 'setExplicitDrilldown("store", entityId);' in select_store_body
     assert "await refreshRuntimeOptions();" in select_store_body
     assert "await runStoresQuery();" in select_store_body
     assert "function entityIdsForStores()" in script

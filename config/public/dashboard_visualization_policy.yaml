@@ -1,4 +1,4 @@
-policy_version: dashboard_visualization_policy.v1.0.0
+policy_version: dashboard_visualization_policy.v1.1.0
 purpose: Public-safe authority for dashboard screen design and visualization choices.
 semantic_boundary:
   metric_catalog_role: taxonomy_of_data
@@ -101,6 +101,46 @@ enums:
     - SECONDARY
     - DETAIL
     - AUDIT
+
+interaction_model:
+  report_structure: continuous_vertical_report
+  section_navigation:
+    behavior: sticky_in_page_anchors
+    scrollspy_required: true
+    exactly_one_active_section: true
+    section_ids:
+      overview: overview
+      sales_drivers: sales-drivers
+      portfolio_market: portfolio-market
+      stores: stores
+      signals: signals
+      data: data
+    hidden_tab_panels_allowed: false
+  analytical_scope:
+    layout: single_compact_row
+    duplicated_scope_controls_allowed: false
+    controls_order:
+      - retailer
+      - period
+      - category
+      - manufacturer
+      - brand
+      - sku
+      - store
+      - private_label_scope
+    period_configuration: collapsed_control_with_popover
+    selected_filter_chips_allowed: false
+    current_scope_sentence_allowed: coverage_note_only_when_meaningful
+  filter_behavior:
+    browse_without_typing_required_for: [manufacturer, brand, sku, store]
+    typeahead_required_for: [manufacturer, brand, sku, store]
+    typeahead_must_not_reload_analytics_before_selection: true
+    bounded_option_rendering_required: true
+    cascade: category_to_manufacturer_to_brand_to_sku
+    store_filter: orthogonal
+  drilldown:
+    breadcrumb_represents: selected_analytical_entity_path_only
+    breadcrumb_hidden_without_drilldown: true
 
 screens:
   - id: overview

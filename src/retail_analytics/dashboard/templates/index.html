@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Аналитика продаж</title>
-    <link rel="stylesheet" href="/static/styles.css" />
+    <link rel="stylesheet" href="/static/styles.css?v=interaction-model-v1" />
   </head>
   <body>
     <div class="app-shell">
@@ -16,21 +16,20 @@
           <button type="button" class="header-icon" data-header-action="help" aria-label="Помощь" title="Помощь будет подключена позже" disabled>?</button>
         </div>
       </header>
-      <nav class="workflow-nav" aria-label="Разделы аналитики">
-        <button type="button" class="nav-item is-active" data-view="overview" aria-current="page">Обзор</button>
-        <button type="button" class="nav-item" data-view="sales_drivers">Продажи и драйверы</button>
-        <button type="button" class="nav-item" data-view="portfolio_market">Портфель и рынок</button>
-        <button type="button" class="nav-item" data-view="stores">Точки продаж</button>
-        <button type="button" class="nav-item" data-view="signals">Сигналы</button>
-        <button type="button" class="nav-item" data-view="data">Данные</button>
+      <nav class="workflow-nav" aria-label="Разделы аналитического отчёта">
+        <a class="nav-item is-active" href="#overview" data-view="overview" aria-current="page">Обзор</a>
+        <a class="nav-item" href="#sales-drivers" data-view="sales_drivers">Продажи и драйверы</a>
+        <a class="nav-item" href="#portfolio-market" data-view="portfolio_market">Портфель и рынок</a>
+        <a class="nav-item" href="#stores" data-view="stores">Точки продаж</a>
+        <a class="nav-item" href="#signals" data-view="signals">Сигналы</a>
+        <a class="nav-item" href="#data" data-view="data">Данные</a>
       </nav>
       <div class="system-state visually-hidden" id="system-state" role="status">Загрузка данных</div>
 
       <main>
         <section class="scope-panel" aria-label="Аналитический срез">
-          <div class="scope-primary">
+          <div class="scope-toolbar">
             <div class="report-control" id="retailer-control">
-              <span class="control-title">Сеть</span>
               <div class="report-identity" id="retailer-identity" aria-live="polite">
                 <strong>Загрузка отчёта</strong>
                 <span>Источник определяется</span>
@@ -42,66 +41,66 @@
             </div>
 
             <div class="period-control" aria-label="Период">
-              <div class="control-title">Период</div>
-              <div class="period-mode" role="group" aria-label="Режим периода">
-                <button type="button" class="mode-button" data-period-mode="SINGLE_PERIOD">Один период</button>
-                <button type="button" class="mode-button is-active" data-period-mode="COMPARE">Сравнение</button>
-                <button type="button" class="mode-button" data-period-mode="DATE_RANGE">Весь диапазон</button>
-              </div>
-              <div class="period-fields is-hidden" id="single-fields">
-                <label>
-                  <span>Период</span>
-                  <select id="period-single"></select>
-                </label>
-              </div>
-              <div class="period-fields" id="compare-fields">
-                <label>
-                  <span>Период A</span>
-                  <select id="period-a"></select>
-                </label>
-                <div class="derived-field">
-                  <span>Период B</span>
-                  <strong id="period-b-derived">Определяется витриной</strong>
+              <button type="button" class="scope-trigger period-trigger" id="period-popover-button" aria-haspopup="dialog" aria-expanded="false" aria-controls="period-popover">
+                <span class="scope-trigger-label">Период</span>
+                <strong id="period-summary">Загрузка</strong>
+                <span class="period-summary-detail" id="period-summary-detail">Сравнение</span>
+              </button>
+              <div class="period-popover is-hidden" id="period-popover" role="dialog" aria-label="Настройка периода">
+                <div class="period-mode" role="group" aria-label="Режим периода">
+                  <button type="button" class="mode-button" data-period-mode="SINGLE_PERIOD">Один период</button>
+                  <button type="button" class="mode-button is-active" data-period-mode="COMPARE">Сравнение</button>
+                  <button type="button" class="mode-button" data-period-mode="DATE_RANGE">Весь диапазон</button>
                 </div>
-                <label>
-                  <span>Сравнение</span>
-                  <select id="comparison-mode">
-                    <option value="YOY">Год к году</option>
-                    <option value="PREVIOUS_AVAILABLE">Предыдущий доступный период</option>
-                    <option value="MOM">Месяц к месяцу</option>
-                  </select>
-                </label>
-              </div>
-              <div class="period-fields is-hidden" id="range-fields">
-                <label>
-                  <span>С</span>
-                  <select id="date-from"></select>
-                </label>
-                <label>
-                  <span>По</span>
-                  <select id="date-to"></select>
-                </label>
+                <div class="period-fields is-hidden" id="single-fields">
+                  <label>
+                    <span>Период</span>
+                    <select id="period-single"></select>
+                  </label>
+                </div>
+                <div class="period-fields" id="compare-fields">
+                  <label>
+                    <span>Период A</span>
+                    <select id="period-a"></select>
+                  </label>
+                  <div class="derived-field">
+                    <span>Период B</span>
+                    <strong id="period-b-derived">Определяется витриной</strong>
+                  </div>
+                  <label>
+                    <span>Сравнение</span>
+                    <select id="comparison-mode">
+                      <option value="YOY">Год к году</option>
+                      <option value="PREVIOUS_AVAILABLE">Предыдущий доступный период</option>
+                      <option value="MOM">Месяц к месяцу</option>
+                    </select>
+                  </label>
+                </div>
+                <div class="period-fields is-hidden" id="range-fields">
+                  <label>
+                    <span>С</span>
+                    <select id="date-from"></select>
+                  </label>
+                  <label>
+                    <span>По</span>
+                    <select id="date-to"></select>
+                  </label>
+                </div>
               </div>
             </div>
-          </div>
 
-          <details class="filter-drawer">
-            <summary>
-              <span>Фильтры</span>
-              <span class="filter-count" id="filter-count">0 выбрано</span>
-              <span class="filter-chevron" aria-hidden="true">⌄</span>
-            </summary>
-            <div class="filter-active-chips" id="filter-active-chips" aria-label="Активные фильтры"></div>
-            <button type="button" class="filter-reset is-hidden" id="reset-filters">Сбросить фильтры</button>
-            <div class="filter-grid">
-              <label class="control">
+            <div class="filter-grid" aria-label="Фильтры аналитического среза">
+              <label class="control category-control">
                 <span>Категория</span>
-                <select id="category-filter"></select>
+                <div class="select-box">
+                  <select id="category-filter"></select>
+                  <button type="button" class="combo-clear" data-clear-filter="category" aria-label="Очистить категорию">×</button>
+                </div>
               </label>
               <label class="control combo-control" data-combobox="manufacturer">
                 <span>Производитель</span>
                 <div class="combo-box">
-                  <input class="entity-search" id="manufacturer-search" type="search" placeholder="Поиск производителя" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="manufacturer-options" />
+                  <input class="entity-search" id="manufacturer-search" type="search" placeholder="Поиск производителя" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="manufacturer-options" />
                   <button type="button" class="combo-clear" data-clear-filter="manufacturer" aria-label="Очистить производителя">×</button>
                 </div>
                 <select id="manufacturer-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
@@ -110,7 +109,7 @@
               <label class="control combo-control" data-combobox="brand">
                 <span>Бренд</span>
                 <div class="combo-box">
-                  <input class="entity-search" id="brand-search" type="search" placeholder="Поиск бренда" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="brand-options" />
+                  <input class="entity-search" id="brand-search" type="search" placeholder="Поиск бренда" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="brand-options" />
                   <button type="button" class="combo-clear" data-clear-filter="brand" aria-label="Очистить бренд">×</button>
                 </div>
                 <select id="brand-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
@@ -119,7 +118,7 @@
               <label class="control combo-control" data-combobox="sku">
                 <span>SKU</span>
                 <div class="combo-box">
-                  <input class="entity-search" id="sku-search" type="search" placeholder="Поиск SKU" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sku-options" />
+                  <input class="entity-search" id="sku-search" type="search" placeholder="Поиск SKU" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sku-options" />
                   <button type="button" class="combo-clear" data-clear-filter="sku" aria-label="Очистить SKU">×</button>
                 </div>
                 <select id="sku-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
@@ -128,27 +127,31 @@
               <label class="control combo-control" data-combobox="store">
                 <span>ТТ</span>
                 <div class="combo-box">
-                  <input class="entity-search" id="store-search" type="search" placeholder="Поиск ТТ" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="store-options" />
+                  <input class="entity-search" id="store-search" type="search" placeholder="Поиск ТТ" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="store-options" />
                   <button type="button" class="combo-clear" data-clear-filter="store" aria-label="Очистить ТТ">×</button>
                 </div>
                 <select id="store-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
                 <div class="combo-options" id="store-options" role="listbox"></div>
               </label>
               <label class="toggle-control">
-                <input type="checkbox" id="private-label-toggle" checked />
-                <span id="private-label-label">Учёт выбранного ассортимента</span>
+                <span class="scope-trigger-label" id="private-label-label">Ассортимент</span>
+                <select id="private-label-scope">
+                  <option value="INCLUDE">Весь ассортимент</option>
+                  <option value="EXCLUDE">Без выбранного ассортимента</option>
+                  <option value="ONLY">Только выбранный ассортимент</option>
+                </select>
               </label>
-              <input type="hidden" id="private-label-scope" value="INCLUDE" />
+              <button type="button" class="filter-reset is-hidden" id="reset-filters">Сбросить</button>
             </div>
-          </details>
+          </div>
         </section>
 
-        <p class="context-strip" id="context-strip"></p>
+        <p class="context-strip visually-hidden" id="context-strip"></p>
         <p class="context-coverage-note" id="context-coverage-note"></p>
 
         <nav class="breadcrumb-row" id="breadcrumb-row" aria-label="Путь разбора"></nav>
 
-        <section class="overview-layout dashboard-view" id="overview-view" data-view-panel="overview" aria-labelledby="overview-title">
+        <section class="overview-layout dashboard-view report-section" id="overview" data-view-panel="overview" aria-labelledby="overview-title">
           <div class="screen-heading visually-hidden">
             <h2 id="overview-title">Обзор</h2>
           </div>
@@ -225,7 +228,7 @@
           </section>
         </section>
 
-        <section class="dashboard-view sales-drivers-layout is-hidden" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
+        <section class="dashboard-view sales-drivers-layout report-section" id="sales-drivers" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
           <div class="screen-heading">
             <p class="eyebrow">диагностика продаж</p>
             <h2 id="sales-drivers-title">Продажи и драйверы</h2>
@@ -268,7 +271,7 @@
           </section>
         </section>
 
-        <section class="dashboard-view portfolio-market-layout is-hidden" data-view-panel="portfolio_market" aria-labelledby="portfolio-market-title">
+        <section class="dashboard-view portfolio-market-layout report-section" id="portfolio-market" data-view-panel="portfolio_market" aria-labelledby="portfolio-market-title">
           <div class="screen-heading">
             <p class="eyebrow">портфель и рынок</p>
             <h2 id="portfolio-market-title">Портфель и рынок</h2>
@@ -329,7 +332,7 @@
           </section>
         </section>
 
-        <section class="dashboard-view stores-layout is-hidden" data-view-panel="stores" aria-labelledby="stores-title">
+        <section class="dashboard-view stores-layout report-section" id="stores" data-view-panel="stores" aria-labelledby="stores-title">
           <div class="screen-heading">
             <p class="eyebrow">торговые точки</p>
             <h2 id="stores-title">Точки продаж</h2>
@@ -383,7 +386,7 @@
           </section>
         </section>
 
-        <section class="dashboard-view signals-layout is-hidden" data-view-panel="signals" aria-labelledby="signals-title">
+        <section class="dashboard-view signals-layout report-section" id="signals" data-view-panel="signals" aria-labelledby="signals-title">
           <div class="screen-heading">
             <p class="eyebrow">что требует внимания</p>
             <h2 id="signals-title">Сигналы</h2>
@@ -425,7 +428,7 @@
           </section>
         </section>
 
-        <section class="dashboard-view data-layout is-hidden" data-view-panel="data" aria-labelledby="data-title">
+        <section class="dashboard-view data-layout report-section" id="data" data-view-panel="data" aria-labelledby="data-title">
           <div class="screen-heading">
             <div>
               <p class="eyebrow">данные и аудит</p>
@@ -506,6 +509,6 @@
     <div class="scrim" id="scrim"></div>
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-    <script src="/static/app.js" defer></script>
+    <script src="/static/app.js?v=interaction-model-v1" defer></script>
   </body>
 </html>

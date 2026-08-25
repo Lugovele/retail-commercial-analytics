@@ -1,6 +1,6 @@
 # Dashboard Screen Specification
 
-Version: `dashboard_screen_specification.v1.0.0`
+Version: `dashboard_screen_specification.v1.1.0`
 
 This document defines the approved screen-level product structure for
 `Аналитика продаж`. It is public-safe and contains no private retailer data.
@@ -11,6 +11,22 @@ does not define business formulas.
 
 ## Global Shell
 
+The six business areas form one continuous analytical report, not mutually
+exclusive hidden pages. Navigation is an in-page section navigator over stable
+report anchors:
+
+- `#overview`
+- `#sales-drivers`
+- `#portfolio-market`
+- `#stores`
+- `#signals`
+- `#data`
+
+Manual scrolling and navigation clicks must keep exactly one active section in
+the business navigation. Native anchors plus `IntersectionObserver` scrollspy
+are the preferred implementation. Sections use scroll margins so headings are
+not hidden behind the sticky workspace.
+
 Top-level navigation order:
 
 1. `overview` — Обзор
@@ -20,7 +36,7 @@ Top-level navigation order:
 5. `signals` — Сигналы
 6. `data` — Данные
 
-Global analytical scope persists across screens:
+Global analytical scope persists across report sections:
 
 - retailer;
 - period mode and selected periods;
@@ -32,7 +48,34 @@ Global analytical scope persists across screens:
 - store;
 - private-label scope.
 
-Global scope controls must not be duplicated per screen.
+Global scope controls must not be duplicated per section. The report shell uses
+one compact analytical scope row in this order:
+
+```text
+Сеть | Период | Категория | Производитель | Бренд | SKU | Точка продаж | Ассортимент
+```
+
+The period control is collapsed in the row and opens a popover for:
+
+- `Один период`;
+- `Сравнение`;
+- `Весь диапазон`.
+
+Network/report identity must use runtime display metadata in the primary UI,
+never internal ids such as `retailer_a` or `source_001`. Secondary filters show
+their selected value in the control itself; selected values must not be repeated
+in a second chip row or long scope sentence. `Сбросить` appears only for active
+optional filters and must not reset network or primary period accidentally.
+
+Breadcrumbs represent drilldown only:
+
+```text
+Категория -> Производитель -> Бренд -> SKU -> ТТ
+```
+
+They are not a filter toolbar and should be hidden when no drilldown exists.
+Changing scope while the user is reading a lower section must refresh affected
+data without jumping back to Overview.
 
 ## Обзор
 
@@ -55,9 +98,9 @@ Wireframe:
 
 ```text
 ┌ Global application header ───────────────────────────────────────────────┐
-├ Business navigation ────────────────────────────────────────────────────┤
-├ Global analytical scope toolbar ────────────────────────────────────────┤
-│ Compact current slice summary and coverage note when meaningful          │
+├ Sticky business navigation ─────────────────────────────────────────────┤
+├ Sticky one-row analytical scope toolbar ────────────────────────────────┤
+│ Coverage note only when meaningful                                       │
 ├─────────────────────────────────────────────────────────────────────────┤
 │ KPI: Оборот │ KPI: Продажи, шт. │ KPI: Абсолютная маржа │ KPI: Маржинальность │
 ├─────────────────────────────────────────────────────────────────────────┤

@@ -1,6 +1,6 @@
 # Dashboard Visualization and Screen Design Policy
 
-Version: `dashboard_visualization_policy.v1.0.0`
+Version: `dashboard_visualization_policy.v1.1.0`
 
 This document is the authoritative public-safe design policy for the
 `Аналитика продаж` dashboard. It governs dashboard information architecture,
@@ -389,15 +389,26 @@ Depth is achieved through progressive disclosure, not duplicate dashboards.
 
 ## Filter and Interaction Policy
 
-Global analytical scope persists across screens.
+The dashboard is one continuous analytical report. Business navigation items are
+sticky in-page section links, not mutually exclusive hidden tabs. Manual scroll
+and navigation clicks must keep exactly one active section through scrollspy.
 
-Primary controls:
+Required section anchors:
+
+- `#overview`
+- `#sales-drivers`
+- `#portfolio-market`
+- `#stores`
+- `#signals`
+- `#data`
+
+Global analytical scope persists across report sections and scope changes must
+not jump the user back to Overview.
+
+All analytical controls belong to one compact row:
 
 - retailer;
 - period.
-
-Secondary controls:
-
 - category;
 - manufacturer;
 - brand;
@@ -405,10 +416,14 @@ Secondary controls:
 - store;
 - STM/private-label scope.
 
-Large lists require searchable combobox/typeahead. Filter hierarchy is category
-to manufacturer to brand to SKU. Store is orthogonal. Do not duplicate filter
-bars per screen. Breadcrumbs represent analytical drilldown, not the full
-technical query state.
+The period control is collapsed in the row and opens a popover for single,
+comparison, and full-range modes. Network/report identity must use display
+metadata, never internal ids. Large lists require both browse and searchable
+combobox/typeahead; typing filters options locally and must not trigger a full
+analytics reload before selection. Filter hierarchy is category to manufacturer
+to brand to SKU. Store is orthogonal. Do not duplicate filter bars, selected
+filter chips, or long current-scope sentences per section. Breadcrumbs represent
+analytical drilldown, not filters or the full technical query state.
 
 ## Readiness Gating
 
@@ -478,7 +493,7 @@ Tests are required evidence, not a substitute for review.
 
 ## Versioning
 
-The current policy version is `dashboard_visualization_policy.v1.0.0`.
+The current policy version is `dashboard_visualization_policy.v1.1.0`.
 
 Semantic design changes require a version bump. CSS-only implementation changes
 do not require a policy version bump unless they alter screen hierarchy,
