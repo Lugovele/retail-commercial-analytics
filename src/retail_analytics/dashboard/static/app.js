@@ -2977,10 +2977,10 @@ function openSignalEvidence(row) {
 
 function signalEvidenceSections(provenance, row) {
   const signal = provenance.signal || {};
-  const scope = provenance.scope || {};
+  const scope = provenance.current_analytical_scope || {};
   const rule = provenance.business_rule || {};
   const quality = provenance.quality || {};
-  const run = provenance.run_lineage || {};
+  const run = provenance.lineage || {};
   const source = provenance.source_evidence || {};
   const sections = [
     section("Что это за сигнал", [
@@ -3005,13 +3005,15 @@ function signalEvidenceSections(provenance, row) {
       ["Качество", signalQualityText(row.comparison_quality || quality.comparison_quality || "н/д")]
     ]),
     section("Основание", [
-      ["Правило", "подтверждённое правило ленты сигналов"],
-      ["Порог / контекст", signalTriggerText(signal.thresholds || rule.thresholds, signal.trigger_values || rule.trigger_values)]
+      ["Проверка", "событие прошло подтверждённое правило ленты сигналов"],
+      ["Порог / контекст", signalTriggerText(rule.thresholds, rule.trigger_values)],
+      ["Наблюдаемые факторы", compactList(rule.observed_drivers)],
+      ["Недостающие доказательства", compactList(rule.missing_evidence)]
     ]),
     section("Качество", [
       ["Статус", signalQualityText(row.status || quality.evidence_status || "н/д")],
       ["Доверие", row.confidence ? signalQualityText(row.confidence) : "н/д"],
-      ["Недостающие доказательства", compactList(signal.missing_evidence || quality.missing_evidence)]
+      ["Ограничения", compactList(quality.limitations)]
     ])
   ];
   const technical = document.createElement("details");
@@ -3023,10 +3025,14 @@ function signalEvidenceSections(provenance, row) {
     ["Событие", row.signal_id || signal.signal_id || "н/д"],
     ["Тип события", row.event_type || signal.event_type || "н/д"],
     ["Семейство события", row.event_family || signal.event_family || "н/д"],
-    ["Версия правила", row.rule_version || signal.event_rule_version || "н/д"],
-    ["Запуск анализа", signal.analysis_run_id || compactList(run.analysis_run_ids)],
+    ["Правило", rule.event_rule_id || row.rule_id || "н/д"],
+    ["Версия правила", rule.event_rule_version || row.rule_version || "н/д"],
+    ["Хэш конфигурации правила", rule.event_config_hash || row.event_config_hash || "н/д"],
+    ["Запуск анализа", run.analysis_run_id || "н/д"],
     ["Версия аналитической витрины", run.mart_build_id || state.signalsResponse?.mart_build_id || "н/д"],
     ["Ревизия источника", compactList(run.source_revision_ids || state.signalsResponse?.source_revision_ids)],
+    ["Линия показателя", compactList(run.metric_lineage)],
+    ["Линия сравнения", compactList(run.benchmark_lineage)],
     ["Доказательство по источнику", source.status || "н/д"]
   ]));
   sections.push(technical);

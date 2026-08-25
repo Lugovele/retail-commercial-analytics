@@ -422,6 +422,20 @@ def test_signals_screen_keeps_feed_categories_and_limitations_separate() -> None
     assert "Основание" in evidence_function
     assert "Качество" in evidence_function
     assert "Технические детали" in evidence_function
+    assert "provenance.current_analytical_scope" in evidence_function
+    assert "provenance.lineage" in evidence_function
+    assert "provenance.business_rule" in evidence_function
+    assert "provenance.scope" not in evidence_function
+    assert "provenance.run_lineage" not in evidence_function
+    assert "rule.event_rule_id" in evidence_function
+    assert "rule.event_rule_version" in evidence_function
+    assert "rule.event_config_hash" in evidence_function
+    assert "rule.thresholds" in evidence_function
+    assert "rule.trigger_values" in evidence_function
+    assert "rule.missing_evidence" in evidence_function
+    assert "run.analysis_run_id" in evidence_function
+    assert "run.metric_lineage" in evidence_function
+    assert "run.benchmark_lineage" in evidence_function
     assert "подтверждённое правило ленты сигналов" in evidence_function
     assert "причина" not in evidence_function.lower()
     assert "из-за" not in evidence_function.lower()
