@@ -409,16 +409,28 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
 
     assert "filter-count" in html
     assert "filter-chevron" in html
+    assert "filter-active-chips" in html
     assert "reset-filters" in html
     assert "context-coverage-note" in html
+    assert "retailer-identity" in html
+    assert "retailer-select-control" in html
+    assert 'type="hidden" id="private-label-scope" value="INCLUDE"' in html
+    assert html.count('id="private-label-toggle"') == 1
+    assert 'id="breadcrumb-row"' in html
+    assert 'data-drill-grain="category"' not in html
     assert 'document.getElementById("context-coverage-note").textContent = coverageNoteText(response);' in script
     context_body = script.split("function renderContextStrip", 1)[1].split("function renderBreadcrumb", 1)[0]
     assert "runtime.display_label" not in context_body
-    assert "periodContextText()" not in context_body
-    assert "privateLabelScopeText(response.private_label_scope)" not in context_body
+    assert "contextSummaryText(response)" in context_body
     assert "`${available} из ${requested} периодов доступны`" not in context_body
     assert 'INCLUDE: `${scopeName} включена`' in script
     assert 'EXCLUDE: `${scopeName} исключена`' in script
+    assert "function renderRetailerIdentity()" in script
+    assert "hasMultipleRetailers" in script
+    assert "function updateActiveFilterChips()" in script
+    assert "Очистить фильтр ${grainLabels[key]}" in script
+    assert "function breadcrumbLabel(grain, value)" in script
+    assert "Все данные › Категория" not in html
     period_body = css.split(".period-control {", 1)[1].split(".period-mode", 1)[0]
     assert "background: transparent;" in period_body
     assert "border-radius: 0;" in period_body
@@ -455,8 +467,16 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
         assert f'id="{filter_id}-options" role="listbox"' in html
         assert f'data-clear-filter="{filter_id}"' in html
 
-    assert "renderComboboxOptions(id, values)" in script
-    assert "values.slice(0, 20)" in script
+    assert "renderComboboxOptions(id, values, allValues.length)" in script
+    assert "values.slice(0, maxComboboxOptions)" in script
+    assert "rankedEntityOptions(allValues, query)" in script
+    assert "function searchRank(item, query)" in script
+    assert "label.startsWith(query)" in script
+    assert "haystack.includes(query)" in script
+    assert "Показано ${visibleValues.length} из ${totalCount}" in script
+    assert 'querySupported: false' in script
+    assert "Фильтр ТТ будет подключён отдельно" in script
+    assert "renderComboboxUnavailable(id, config.unavailableText)" in script
     assert "select.replaceChildren(option(\"\", filterConfig[id].label), option(item.value, item.label));" in script
     assert "handleComboboxKeydown(event, id)" in script
     assert "handleComboboxOptionKeydown(event, id, index, item)" in script
@@ -483,7 +503,9 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
 
     assert "private_label_scope" in script
     assert "comparison_mode" in script
+    assert 'comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE"' in script
     assert "period_mode" in script
+    assert 'return state.periodMode === "DATE_RANGE" ? "DATE_RANGE" : "SINGLE_PERIOD";' in script
     assert "grain_id" in script
     assert "metric_concepts" in script
     assert "entity_ids: entityIds" in script
@@ -502,7 +524,8 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "overviewPreviewRowLimit: 8" in script
     assert "entityIdsForSummary" in script
     assert "entityIdsForPreview" in script
-    assert "canActivateSummaryGrain(targetGrain)" in script
+    assert "function activateBreadcrumbGrain(grain)" in script
+    assert "canActivateSummaryGrain(grain)" in script
     assert 'state.currentGrain = "network";' in script
     assert 'if (state.currentGrain === "network") return firstEntityIds("network", 1);' in script
     assert 'return ["network"]' not in script
@@ -521,7 +544,7 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "comparison?.comparison_period_start" in script
     assert 'document.getElementById("period-b-derived")' in script
     assert "innerHTML" not in script
-    assert "ONLY: `${scopeName}: только`" in script
+    assert "ONLY: `${scopeName}: только`" not in script
     assert "ONLY: `только ${scopeName}`" in script
     assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "п.п." in script
@@ -598,9 +621,11 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert refresh_body.index("if (resetEntities) resetAllEntityFilters();") < refresh_body.index("await loadOptions();")
     reset_body = script.split("function resetAllEntityFilters", 1)[1].split("function applyFilterDrilldown", 1)[0]
     assert 'state.currentGrain = "network";' in reset_body
-    assert "updateBreadcrumb();" in reset_body
+    assert "renderBreadcrumb();" in reset_body
     assert "updatePreviewGrain();" in reset_body
     assert "resetChildFilters(id)" in script
+    assert 'if (filterId === "store")' in script
+    assert 'if (select.value) state.currentGrain = filterId;' in script
     assert "await refreshRuntimeOptions();" in script
     assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
     assert 'manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] }' in script

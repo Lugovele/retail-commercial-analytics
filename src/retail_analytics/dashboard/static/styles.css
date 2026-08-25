@@ -263,7 +263,8 @@ h3 {
 }
 
 .control,
-.period-control {
+.period-control,
+.report-control {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -274,6 +275,36 @@ h3 {
 .period-fields span {
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.report-identity {
+  display: grid;
+  min-height: 42px;
+  align-content: center;
+  gap: 1px;
+  padding: 5px 11px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
+.report-identity strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.18;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-identity span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .control-retailer select {
@@ -401,6 +432,35 @@ input {
   font-weight: 600;
 }
 
+.filter-active-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.filter-active-chips:empty {
+  display: none;
+}
+
+.filter-chip {
+  max-width: 260px;
+  min-height: 28px;
+  padding: 0 9px;
+  overflow: hidden;
+  border-color: rgba(42, 125, 225, 0.24);
+  background: rgba(42, 125, 225, 0.07);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-chip:hover {
+  border-color: rgba(42, 125, 225, 0.42);
+  color: var(--brand-menu-blue);
+}
+
 .filter-grid {
   display: grid;
   grid-template-columns: 1.05fr 1.15fr 1.15fr 1.3fr 1fr auto minmax(160px, 0.8fr);
@@ -417,6 +477,10 @@ input {
 
 .combo-control {
   position: relative;
+}
+
+.combo-control.is-disabled {
+  opacity: 0.78;
 }
 
 .combo-box {
@@ -483,6 +547,13 @@ input {
   gap: 2px;
 }
 
+.combo-control.is-disabled .combo-options {
+  position: static;
+  margin-top: 6px;
+  border-style: dashed;
+  box-shadow: none;
+}
+
 .combo-option {
   min-height: 30px;
   padding: 5px 8px;
@@ -507,6 +578,12 @@ input {
   padding: 8px;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.combo-count {
+  padding: 6px 8px 3px;
+  color: var(--text-muted);
+  font-size: 11px;
 }
 
 .toggle-control {

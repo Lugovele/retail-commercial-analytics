@@ -113,9 +113,16 @@ const filterConfig = {
   manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] },
   brand: { label: "Все бренды", childFilters: ["sku"] },
   sku: { label: "Все SKU", childFilters: [] },
-  store: { label: "Все ТТ", childFilters: [] }
+  store: {
+    label: "Все ТТ",
+    childFilters: [],
+    querySupported: false,
+    unavailableText: "Фильтр ТТ будет подключён отдельно"
+  }
 };
 const searchFilterIds = ["manufacturer", "brand", "sku", "store"];
+const drilldownOrder = ["network", "category", "manufacturer", "brand", "sku"];
+const maxComboboxOptions = 20;
 
 document.addEventListener("DOMContentLoaded", async () => {
   bindStaticControls();
@@ -143,20 +150,6 @@ function bindStaticControls() {
     if (button.disabled) return;
     button.addEventListener("click", () => {
       if (button.dataset.headerAction === "reports") openReportsPanel();
-    });
-  });
-
-  document.querySelectorAll("[data-drill-grain]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const targetGrain = button.dataset.drillGrain;
-      if (!canActivateSummaryGrain(targetGrain)) {
-        showToast(`Сначала выберите объект уровня «${grainLabels[targetGrain]}».`);
-        return;
-      }
-      state.currentGrain = targetGrain;
-      updateBreadcrumb();
-      updatePreviewGrain();
-      await runOverviewQuery();
     });
   });
 
@@ -224,14 +217,32 @@ function setupRetailerControl() {
     ...state.runtime.retailers.map((retailer) => option(retailer.retailer_id, retailer.display_label))
   );
   retailerSelect.value = state.runtime.default_retailer_id;
+  renderRetailerIdentity();
   retailerSelect.addEventListener("change", async () => {
     resetAllEntityFilters();
+    renderRetailerIdentity();
     await loadCatalog();
     await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
     updatePrivateLabelTerminology();
     updatePreviewGrain();
     await runOverviewQuery();
   });
+}
+
+function renderRetailerIdentity() {
+  const control = document.getElementById("retailer-control");
+  const identity = document.getElementById("retailer-identity");
+  const selectControl = document.getElementById("retailer-select-control");
+  const retailer = selectedRetailer();
+  const hasMultipleRetailers = (state.runtime?.retailers || []).length > 1;
+
+  selectControl?.classList.toggle("is-hidden", !hasMultipleRetailers);
+  identity?.classList.toggle("is-hidden", hasMultipleRetailers);
+  control?.classList.toggle("has-multiple-retailers", hasMultipleRetailers);
+  if (!identity || hasMultipleRetailers) return;
+  identity.replaceChildren();
+  appendText(identity, "strong", retailer.display_label || "Текущий отчёт");
+  appendText(identity, "span", retailer.source_label || "Источник отчёта");
 }
 
 function bindDynamicControls() {
@@ -241,11 +252,6 @@ function bindDynamicControls() {
   });
   document.getElementById("private-label-toggle").addEventListener("change", async (event) => {
     document.getElementById("private-label-scope").value = event.target.checked ? "INCLUDE" : "EXCLUDE";
-    await refreshRuntimeOptions({ resetEntities: true });
-    await runOverviewQuery();
-  });
-  document.getElementById("private-label-scope").addEventListener("change", async (event) => {
-    document.getElementById("private-label-toggle").checked = event.target.value === "INCLUDE";
     await refreshRuntimeOptions({ resetEntities: true });
     await runOverviewQuery();
   });
@@ -273,7 +279,10 @@ function bindDynamicControls() {
   searchFilterIds.forEach((id) => {
     const input = document.getElementById(`${id}-search`);
     input.addEventListener("input", () => populateEntityFilter(id));
-    input.addEventListener("focus", () => populateEntityFilter(id));
+    input.addEventListener("focus", () => {
+      populateEntityFilter(id);
+      openCombobox(id);
+    });
     input.addEventListener("keydown", (event) => handleComboboxKeydown(event, id));
     document.querySelector(`[data-combobox="${id}"]`)?.addEventListener("focusout", () => {
       setTimeout(() => {
@@ -388,7 +397,7 @@ function buildQueryPayload(grain, entityIds, metricConcepts) {
     entity_ids: entityIds,
     entity_filters: selectedParentFiltersForGrain(grain),
     metric_concepts: metricConcepts,
-    comparison_mode: periodMode === "SINGLE_PERIOD" ? selectedComparisonMode() : "NONE",
+    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value
@@ -679,7 +688,9 @@ function renderOverviewTable() {
     return [entityId, ...cells];
   });
   renderRows(table, headers, rows, {
-    onFirstCellClick: (entityId) => drillIntoEntity(String(entityId)),
+    onFirstCellClick: (entityId) => {
+      void drillIntoEntity(String(entityId));
+    },
     rowLimit: state.overviewPreviewRowLimit
   });
   const caption = table.createCaption();
@@ -721,7 +732,9 @@ function renderContributionTable(table) {
     entityButton.type = "button";
     entityButton.className = "table-link";
     entityButton.textContent = entityDisplayLabel(state.previewGrain, row.child_entity_id);
-    entityButton.addEventListener("click", () => drillIntoEntity(String(row.child_entity_id)));
+    entityButton.addEventListener("click", () => {
+      void drillIntoEntity(String(row.child_entity_id));
+    });
     entityCell.appendChild(entityButton);
     tr.appendChild(entityCell);
     [
@@ -759,14 +772,53 @@ function renderContextStrip() {
   if (!response) return;
   updateComparisonPeriodDisplay(response);
   updateFilterCount();
-  document.getElementById("context-strip").textContent = contextFilterText();
+  updateActiveFilterChips();
+  document.getElementById("context-strip").textContent = contextSummaryText(response);
   document.getElementById("context-coverage-note").textContent = coverageNoteText(response);
 }
 
 function renderBreadcrumb() {
-  document.querySelectorAll("[data-drill-grain]").forEach((button) => {
-    updateBreadcrumbButton(button);
+  const row = document.getElementById("breadcrumb-row");
+  if (!row) return;
+  const selected = selectedFilterValues();
+  const activePath = drilldownOrder.filter((grain) => grain === "network" || selected[grain]);
+  row.replaceChildren(...activePath.map((grain, index) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "crumb";
+    button.dataset.drillGrain = grain;
+    const isActive = grain === state.currentGrain || index === activePath.length - 1 && !activePath.includes(state.currentGrain);
+    button.classList.toggle("is-active", isActive);
+    if (isActive) button.setAttribute("aria-current", "page");
+    button.textContent = breadcrumbLabel(grain, selected[grain]);
+    button.addEventListener("click", async () => {
+      await activateBreadcrumbGrain(grain);
+    });
+    return button;
+  }));
+}
+
+function canActivateSummaryGrain(grain) {
+  if (grain === "network") return true;
+  return Boolean(document.getElementById(`${grain}-filter`)?.value);
+}
+
+async function activateBreadcrumbGrain(grain) {
+  if (!canActivateSummaryGrain(grain)) return;
+  const index = drilldownOrder.indexOf(grain);
+  drilldownOrder.slice(index + 1).forEach((child) => {
+    if (child !== "network") clearEntityFilter(child, { resetChildren: false, preserveCurrentGrain: true });
   });
+  state.currentGrain = grain;
+  renderBreadcrumb();
+  updatePreviewGrain();
+  await refreshRuntimeOptions();
+  await runOverviewQuery();
+}
+
+function breadcrumbLabel(grain, value) {
+  if (grain === "network") return "Все данные";
+  return `${grainLabels[grain]}: ${entityDisplayLabel(grain, value)}`;
 }
 
 function renderChartMetricOptions() {
@@ -813,25 +865,6 @@ function updatePeriodPanels() {
   document.getElementById("range-fields").classList.toggle("is-hidden", state.periodMode !== "DATE_RANGE");
 }
 
-function updateBreadcrumb() {
-  document.querySelectorAll("[data-drill-grain]").forEach((button) => {
-    updateBreadcrumbButton(button);
-  });
-}
-
-function updateBreadcrumbButton(button) {
-  const grain = button.dataset.drillGrain;
-  const canActivate = canActivateSummaryGrain(grain);
-  button.classList.toggle("is-active", grain === state.currentGrain);
-  button.disabled = !canActivate;
-  button.title = canActivate ? "Перейти к выбранному уровню" : `Сначала выберите объект уровня «${grainLabels[grain]}».`;
-}
-
-function canActivateSummaryGrain(grain) {
-  if (grain === "network") return true;
-  return Boolean(document.getElementById(`${grain}-filter`)?.value);
-}
-
 function updateComparisonPeriodDisplay(response) {
   const target = document.getElementById("period-b-derived");
   if (!target) return;
@@ -861,12 +894,25 @@ function populateEntityFilter(id) {
   const select = document.getElementById(`${id}-filter`);
   const previous = select.value;
   const input = document.getElementById(`${id}-search`);
-  const query = input?.value?.toLocaleLowerCase("ru-RU") || "";
+  const query = input?.value || "";
   const allValues = state.options.entities?.[id] || [];
-  const values = allValues.filter((item) => {
-    if (!query) return true;
-    return `${item.label} ${item.value}`.toLocaleLowerCase("ru-RU").includes(query);
-  });
+  if (config.querySupported === false) {
+    select.replaceChildren(option("", config.label));
+    select.value = "";
+    if (input) {
+      input.value = "";
+      input.placeholder = config.unavailableText;
+      input.disabled = true;
+      input.title = config.unavailableText;
+      input.setAttribute("aria-disabled", "true");
+      document.querySelector(`[data-clear-filter="${id}"]`)?.setAttribute("disabled", "disabled");
+      document.querySelector(`[data-combobox="${id}"]`)?.classList.add("is-disabled");
+      renderComboboxUnavailable(id, config.unavailableText);
+    }
+    updateFilterCount();
+    return;
+  }
+  const values = rankedEntityOptions(allValues, query);
   if (!input) {
     select.replaceChildren(option("", config.label), ...values.map((item) => option(item.value, item.label)));
     select.value = values.some((item) => item.value === previous) ? previous : "";
@@ -877,16 +923,50 @@ function populateEntityFilter(id) {
   select.replaceChildren(option("", config.label), ...(selected ? [option(selected.value, selected.label)] : []));
   select.value = selected ? selected.value : "";
   if (input && selected && document.activeElement !== input) input.value = selected.label;
-  renderComboboxOptions(id, values);
-  select.title = values.length > 20 ? "Уточните поиск, чтобы быстрее найти нужное значение." : "Выбор меняет аналитический срез.";
+  renderComboboxOptions(id, values, allValues.length);
+  select.title = allValues.length > maxComboboxOptions ? "Можно открыть список или начать вводить название." : "Выбор меняет аналитический срез.";
   updateFilterCount();
 }
 
-function renderComboboxOptions(id, values) {
+function renderComboboxUnavailable(id, message) {
+  const list = document.getElementById(`${id}-options`);
+  if (!list) return;
+  const item = document.createElement("div");
+  item.className = "combo-empty";
+  item.textContent = message;
+  list.replaceChildren(item);
+  list.classList.add("is-open");
+}
+
+function rankedEntityOptions(values, rawQuery) {
+  const query = rawQuery.trim().toLocaleLowerCase("ru-RU");
+  if (!query) return [...values].sort(compareEntityLabels);
+  return values
+    .map((item) => ({ item, rank: searchRank(item, query) }))
+    .filter((candidate) => candidate.rank < 4)
+    .sort((left, right) => left.rank - right.rank || compareEntityLabels(left.item, right.item))
+    .map((candidate) => candidate.item);
+}
+
+function searchRank(item, query) {
+  const haystack = `${item.label} ${item.value}`.toLocaleLowerCase("ru-RU");
+  const label = String(item.label || "").toLocaleLowerCase("ru-RU");
+  if (label === query || String(item.value || "").toLocaleLowerCase("ru-RU") === query) return 0;
+  if (label.startsWith(query)) return 1;
+  if (label.split(/\s+/).some((word) => word.startsWith(query))) return 2;
+  if (haystack.includes(query)) return 3;
+  return 4;
+}
+
+function compareEntityLabels(left, right) {
+  return String(left.label).localeCompare(String(right.label), "ru-RU", { numeric: true, sensitivity: "base" });
+}
+
+function renderComboboxOptions(id, values, totalCount) {
   const input = document.getElementById(`${id}-search`);
   const list = document.getElementById(`${id}-options`);
   if (!input || !list) return;
-  const visibleValues = values.slice(0, 20);
+  const visibleValues = values.slice(0, maxComboboxOptions);
   list.replaceChildren();
   if (!visibleValues.length) {
     const empty = document.createElement("div");
@@ -912,6 +992,10 @@ function renderComboboxOptions(id, values) {
       button.addEventListener("focus", () => setActiveComboboxOption(id, button));
       list.appendChild(button);
     });
+    const count = document.createElement("div");
+    count.className = "combo-count";
+    count.textContent = `Показано ${visibleValues.length} из ${totalCount}`;
+    list.appendChild(count);
   }
   const shouldOpen = document.activeElement === input || list.contains(document.activeElement);
   list.classList.toggle("is-open", shouldOpen);
@@ -938,15 +1022,15 @@ function handleComboboxKeydown(event, id) {
     closeCombobox(id);
     return;
   }
-  if (!options.length) return;
   if (event.key === "ArrowDown") {
     event.preventDefault();
     openCombobox(id);
-    options[0].focus();
+    options[0]?.focus();
   }
   if (event.key === "Enter") {
     event.preventDefault();
-    options[0].click();
+    openCombobox(id);
+    options[0]?.click();
   }
 }
 
@@ -1006,12 +1090,13 @@ function closeCombobox(id) {
   input.removeAttribute("aria-activedescendant");
 }
 
-function clearEntityFilter(id) {
+function clearEntityFilter(id, { resetChildren = true, preserveCurrentGrain = false } = {}) {
   document.getElementById(`${id}-filter`).value = "";
-  document.getElementById(`${id}-search`).value = "";
-  resetChildFilters(id);
-  if (state.currentGrain === id) state.currentGrain = "network";
-  updateBreadcrumb();
+  const search = document.getElementById(`${id}-search`);
+  if (search) search.value = "";
+  if (resetChildren) resetChildFilters(id);
+  if (!preserveCurrentGrain && state.currentGrain === id) state.currentGrain = nearestSelectedGrain();
+  renderBreadcrumb();
 }
 
 function resetChildFilters(filterId) {
@@ -1032,28 +1117,41 @@ function resetAllEntityFilters() {
     closeCombobox(id);
   });
   state.currentGrain = "network";
-  updateBreadcrumb();
+  renderBreadcrumb();
   updatePreviewGrain();
   updateFilterCount();
 }
 
 function applyFilterDrilldown(filterId) {
   const select = document.getElementById(`${filterId}-filter`);
+  if (filterId === "store") {
+    renderBreadcrumb();
+    updateFilterCount();
+    return;
+  }
   if (select.value) state.currentGrain = filterId;
-  updateBreadcrumb();
+  if (!select.value && state.currentGrain === filterId) state.currentGrain = nearestSelectedGrain();
+  renderBreadcrumb();
   updateFilterCount();
 }
 
-function drillIntoEntity(entityId) {
+async function drillIntoEntity(entityId) {
   const targetGrain = state.previewGrain;
   const select = document.getElementById(`${targetGrain}-filter`);
   if (!select) return;
+  const item = (state.options.entities?.[targetGrain] || []).find((optionItem) => optionItem.value === entityId);
+  if (item && searchFilterIds.includes(targetGrain)) {
+    select.replaceChildren(option("", filterConfig[targetGrain].label), option(item.value, item.label));
+    const search = document.getElementById(`${targetGrain}-search`);
+    if (search) search.value = item.label;
+  }
   select.value = entityId;
   state.currentGrain = targetGrain;
   resetChildFilters(targetGrain);
-  updateBreadcrumb();
+  renderBreadcrumb();
   updatePreviewGrain();
-  runOverviewQuery();
+  await refreshRuntimeOptions();
+  await runOverviewQuery();
 }
 
 function selectedRetailer() {
@@ -1085,6 +1183,12 @@ function selectedFilterValues() {
   );
 }
 
+function nearestSelectedGrain() {
+  const selected = selectedFilterValues();
+  const active = drilldownOrder.filter((grain) => grain === "network" || selected[grain]);
+  return active[active.length - 1] || "network";
+}
+
 function selectedParentFiltersForGrain(grain) {
   const selected = selectedFilterValues();
   const parentMap = {
@@ -1107,7 +1211,7 @@ function entityIdsForSummary() {
   const selected = document.getElementById(`${state.currentGrain}-filter`)?.value;
   if (selected) return [selected];
   state.currentGrain = "network";
-  updateBreadcrumb();
+  renderBreadcrumb();
   updatePreviewGrain();
   return firstEntityIds("network", 1);
 }
@@ -1235,6 +1339,17 @@ function contextFilterText() {
   return parts.length ? parts.join(" · ") : "";
 }
 
+function contextSummaryText(response) {
+  const selected = selectedFilterValues();
+  const count = Object.keys(selected).length;
+  const filterText = count ? `${count} ${pluralRu(count, "фильтр", "фильтра", "фильтров")}` : "Все категории";
+  return [
+    periodContextText(),
+    filterText,
+    privateLabelScopeText(response.private_label_scope)
+  ].filter(Boolean).join(" · ");
+}
+
 function privateLabelScopeText(scope) {
   const scopeName = selectedRetailer().private_label_display_name;
   return {
@@ -1255,8 +1370,28 @@ function updateFilterCount() {
   const count = Object.keys(selectedFilterValues()).length;
   const target = document.getElementById("filter-count");
   if (!target) return;
-  target.textContent = count ? `${count} выбрано` : "0 выбрано";
+  target.textContent = count ? `${count} выбрано` : "не выбраны";
   document.getElementById("reset-filters")?.classList.toggle("is-hidden", count === 0);
+}
+
+function updateActiveFilterChips() {
+  const container = document.getElementById("filter-active-chips");
+  if (!container) return;
+  const selected = selectedFilterValues();
+  container.replaceChildren(...Object.entries(selected).map(([key, value]) => {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "filter-chip";
+    chip.textContent = `${grainLabels[key]}: ${entityDisplayLabel(key, value)} ×`;
+    chip.setAttribute("aria-label", `Очистить фильтр ${grainLabels[key]}`);
+    chip.addEventListener("click", async () => {
+      clearEntityFilter(key);
+      await refreshRuntimeOptions();
+      updatePreviewGrain();
+      await runOverviewQuery();
+    });
+    return chip;
+  }));
 }
 
 function entityDisplayLabel(grain, entityId) {
@@ -1297,14 +1432,14 @@ function contributionMixedSignNote() {
 function updatePrivateLabelTerminology() {
   const scopeName = selectedRetailer().private_label_display_name;
   document.getElementById("private-label-label").textContent = `Учёт ${scopeName}`;
-  const options = {
-    INCLUDE: `${scopeName}: включить`,
-    EXCLUDE: `${scopeName}: исключить`,
-    ONLY: `${scopeName}: только`
-  };
-  Array.from(document.getElementById("private-label-scope").options).forEach((item) => {
-    item.textContent = options[item.value] || item.value;
-  });
+}
+
+function pluralRu(count, one, few, many) {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
 }
 
 function openProvenance(concept) {

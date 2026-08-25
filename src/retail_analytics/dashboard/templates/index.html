@@ -29,10 +29,17 @@
       <main>
         <section class="scope-panel" aria-label="Аналитический срез">
           <div class="scope-primary">
-            <label class="control control-retailer">
-              <span>Сеть</span>
-              <select id="retailer-select"></select>
-            </label>
+            <div class="report-control" id="retailer-control">
+              <span class="control-title">Сеть</span>
+              <div class="report-identity" id="retailer-identity" aria-live="polite">
+                <strong>Загрузка отчёта</strong>
+                <span>Источник определяется</span>
+              </div>
+              <label class="control control-retailer is-hidden" id="retailer-select-control">
+                <span>Сеть</span>
+                <select id="retailer-select"></select>
+              </label>
+            </div>
 
             <div class="period-control" aria-label="Период">
               <div class="control-title">Период</div>
@@ -84,6 +91,7 @@
               <span class="filter-count" id="filter-count">0 выбрано</span>
               <span class="filter-chevron" aria-hidden="true">⌄</span>
             </summary>
+            <div class="filter-active-chips" id="filter-active-chips" aria-label="Активные фильтры"></div>
             <button type="button" class="filter-reset is-hidden" id="reset-filters">Сбросить фильтры</button>
             <div class="filter-grid">
               <label class="control">
@@ -130,14 +138,7 @@
                 <input type="checkbox" id="private-label-toggle" checked />
                 <span id="private-label-label">Учёт выбранного ассортимента</span>
               </label>
-              <label class="control scope-select">
-                <span>Режим учёта</span>
-                <select id="private-label-scope">
-                  <option value="INCLUDE">Включить</option>
-                  <option value="EXCLUDE">Исключить</option>
-                  <option value="ONLY">Только выбранный ассортимент</option>
-                </select>
-              </label>
+              <input type="hidden" id="private-label-scope" value="INCLUDE" />
             </div>
           </details>
         </section>
@@ -145,13 +146,7 @@
         <p class="context-strip" id="context-strip"></p>
         <p class="context-coverage-note" id="context-coverage-note"></p>
 
-        <section class="breadcrumb-row" aria-label="Иерархия среза">
-          <button type="button" class="crumb is-active" data-drill-grain="network">Все данные</button>
-          <button type="button" class="crumb" data-drill-grain="category">Категория</button>
-          <button type="button" class="crumb" data-drill-grain="manufacturer">Производитель</button>
-          <button type="button" class="crumb" data-drill-grain="brand">Бренд</button>
-          <button type="button" class="crumb" data-drill-grain="sku">SKU</button>
-        </section>
+        <nav class="breadcrumb-row" id="breadcrumb-row" aria-label="Путь разбора"></nav>
 
         <section class="overview-layout dashboard-view" id="overview-view" data-view-panel="overview" aria-labelledby="overview-title">
           <div class="screen-heading visually-hidden">
