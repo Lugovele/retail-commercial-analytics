@@ -12,6 +12,10 @@ const state = {
   portfolioMarketResponse: null,
   storesResponse: null,
   storesScopeStatus: "ready",
+  signalsResponse: null,
+  signalsLoadStatus: "idle",
+  signalKindFilter: "all",
+  signalGrainFilter: "all",
   activeView: "overview",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
@@ -137,6 +141,40 @@ const portfolioCompetitorConcepts = ["broad_competitors"];
 const storeRankingMetrics = ["revenue", "units", "retailer_margin_abs"];
 const storeKpiConcepts = ["revenue", "units", "retailer_margin_abs", "sku_count"];
 const storeTableConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count"];
+const signalKindLabels = {
+  all: "Все",
+  commercial: "Коммерческие",
+  pattern: "Паттерны",
+  quality: "Качество данных"
+};
+const signalTypeLabels = {
+  COMMERCIAL_SIGNAL: "Коммерческий",
+  DETERMINISTIC_PATTERN: "Паттерн",
+  DATA_QUALITY_ALERT: "Качество данных",
+  CAPABILITY_LIMITATION: "Ограничение"
+};
+const signalEventLabels = {
+  MATERIAL_REVENUE_DECLINE: "Оборот снизился по подтверждённому правилу",
+  MATERIAL_REVENUE_GROWTH: "Оборот вырос по подтверждённому правилу",
+  MATERIAL_UNITS_DECLINE: "Продажи, шт. снизились по подтверждённому правилу",
+  MATERIAL_UNITS_GROWTH: "Продажи, шт. выросли по подтверждённому правилу",
+  MATERIAL_MARGIN_DECLINE: "Абсолютная маржа снизилась по подтверждённому правилу",
+  MATERIAL_MARGIN_GROWTH: "Абсолютная маржа выросла по подтверждённому правилу",
+  DISTRIBUTION_LOSS: "Снижение присутствия по подтверждённому правилу",
+  DISTRIBUTION_GAIN: "Рост присутствия по подтверждённому правилу",
+  VELOCITY_LOSS: "Снижение продаж на ТТ по подтверждённому правилу",
+  VELOCITY_GAIN: "Рост продаж на ТТ по подтверждённому правилу",
+  PRICE_INCREASE: "Изменение цены по подтверждённому правилу",
+  PRICE_PRESSURE_PATTERN: "Ценовой паттерн требует проверки",
+  DATA_QUALITY_ALERT: "Вопрос к качеству данных"
+};
+const signalSeverityLabels = {
+  CRITICAL: "Критический",
+  HIGH: "Высокий",
+  MEDIUM: "Средний",
+  LOW: "Низкий",
+  INFO: "Информационный"
+};
 const portfolioPresentationFallback = {
   category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" },
   category_units_share: { display_label: "Доля в штуках категории", format: "percent" },
@@ -217,6 +255,20 @@ function bindStaticControls() {
       setActiveView(button.dataset.view);
     });
   });
+  document.querySelectorAll("[data-signal-kind]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.signalKindFilter = button.dataset.signalKind || "all";
+      updatePressedGroup("[data-signal-kind]", "signalKind", state.signalKindFilter);
+      renderSignals();
+    });
+  });
+  document.querySelectorAll("[data-signal-grain]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.signalGrainFilter = button.dataset.signalGrain || "all";
+      updatePressedGroup("[data-signal-grain]", "signalGrain", state.signalGrainFilter);
+      renderSignals();
+    });
+  });
   document.querySelectorAll("[data-header-action]").forEach((button) => {
     if (button.disabled) return;
     button.addEventListener("click", () => {
@@ -281,6 +333,14 @@ function setActiveView(view, { refresh = true } = {}) {
     panel.classList.toggle("is-hidden", !isActive);
   });
   if (refresh) void runActiveViewQuery();
+}
+
+function updatePressedGroup(selector, datasetKey, activeValue) {
+  document.querySelectorAll(selector).forEach((button) => {
+    const isActive = button.dataset[datasetKey] === activeValue;
+    button.classList.toggle("is-active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
 }
 
 function setupRetailerControl() {
@@ -450,6 +510,10 @@ async function runActiveViewQuery() {
     await runStoresQuery();
     return;
   }
+  if (state.activeView === "signals") {
+    await runSignalsQuery();
+    return;
+  }
   if (state.activeView === "overview") {
     await runOverviewQuery();
   }
@@ -541,6 +605,24 @@ async function runStoresQuery() {
     renderStores();
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
+  }
+}
+
+async function runSignalsQuery() {
+  setLoading(true, "Запрос к ленте сигналов");
+  state.signalsResponse = null;
+  state.signalsLoadStatus = "loading";
+  renderSignalsSkeletons();
+  try {
+    state.signalsResponse = await postJson("/api/dashboard/signals", buildSignalsPayload());
+    state.signalsLoadStatus = "loaded";
+    renderSignals();
+    setLoading(false, "Данные обновлены");
+  } catch (error) {
+    state.signalsResponse = null;
+    state.signalsLoadStatus = "error";
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
@@ -641,6 +723,27 @@ function buildPortfolioMarketPayload() {
 
 function buildStoresPayload() {
   return buildQueryPayload("store", entityIdsForStores(), storeConcepts());
+}
+
+function buildSignalsPayload() {
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: selectedDateFrom(),
+    date_to: selectedDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    grain_id: state.currentGrain,
+    entity_ids: entityIdsForSummary(),
+    entity_filters: selectedFilterValuesForPortfolio(),
+    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    include_lineage: true,
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value,
+    signal_types: ["COMMERCIAL_SIGNAL", "DETERMINISTIC_PATTERN", "DATA_QUALITY_ALERT"],
+    limit: 50
+  };
 }
 
 function backendPeriodMode() {
@@ -1145,6 +1248,281 @@ function renderStoresNoSupportedMetrics() {
   renderMessageRow(document.getElementById("stores-table"), "Нет подтверждённых показателей для таблицы ТТ.");
   document.getElementById("stores-detail").textContent =
     "Детализация ТТ недоступна без подтверждённых store-level показателей.";
+}
+
+function renderSignals() {
+  if (state.signalsLoadStatus === "error") {
+    renderSignalsErrorState();
+    return;
+  }
+  renderSignalsContextStrip();
+  renderBreadcrumb();
+  updateSignalsFilterCounts();
+  renderSignalList();
+  renderSignalLimitations();
+}
+
+function renderSignalsErrorState() {
+  updateFilterCount();
+  updateActiveFilterChips();
+  renderBreadcrumb();
+  updateSignalsFilterCounts();
+  const context = [signalPeriodContextText(), contextFilterText()].filter(Boolean).join(" · ");
+  document.getElementById("context-strip").textContent = context;
+  document.getElementById("context-coverage-note").textContent = "";
+  document.getElementById("signals-context").textContent = "Не удалось загрузить ленту сигналов.";
+  document.getElementById("signals-feed-context").textContent = "Повторите попытку после обновления данных.";
+  replaceWithMessage(
+    document.getElementById("signals-list"),
+    "error-state",
+    "Не удалось загрузить данные. Повторите попытку.",
+  );
+  replaceWithMessage(
+    document.getElementById("signals-limitations"),
+    "error-state compact",
+    "Доступность ленты не удалось проверить. Повторите попытку.",
+  );
+}
+
+function renderSignalsContextStrip() {
+  updateFilterCount();
+  updateActiveFilterChips();
+  const response = state.signalsResponse;
+  const parts = [
+    signalPeriodContextText(),
+    contextFilterText(),
+    privateLabelScopeText(response?.private_label_scope || document.getElementById("private-label-scope").value)
+  ].filter(Boolean);
+  document.getElementById("context-strip").textContent = parts.join(" · ");
+  document.getElementById("context-coverage-note").textContent = signalLimitations()
+    .map((item) => item.message || signalLimitationText(item.code || item))
+    .slice(0, 1)
+    .join("");
+}
+
+function renderSignalsSkeletons() {
+  replaceWithMessage(document.getElementById("signals-list"), "loading-state compact", "Загрузка подтверждённых сигналов...");
+  replaceWithMessage(document.getElementById("signals-limitations"), "loading-state compact", "Проверка доступности ленты...");
+}
+
+function renderSignalList() {
+  const target = document.getElementById("signals-list");
+  const rows = filteredSignalRows();
+  const allRows = signalRows();
+  document.getElementById("signals-context").textContent = signalContextText();
+  document.getElementById("signals-feed-context").textContent = signalFeedContextText(allRows.length, rows.length);
+  if (!allRows.length) {
+    replaceWithMessage(target, "empty-state compact", "Для выбранного среза нет подтверждённых сигналов.");
+    return;
+  }
+  if (!rows.length) {
+    replaceWithMessage(target, "empty-state compact", "Для выбранного фильтра подтверждённых сигналов нет.");
+    return;
+  }
+  target.replaceChildren(...rows.map((row) => signalRowNode(row)));
+}
+
+function signalRowNode(row) {
+  const node = document.createElement("article");
+  node.className = `signal-row ${signalKindClass(row)}`;
+  node.setAttribute("role", "listitem");
+  const priority = document.createElement("div");
+  priority.className = "signal-priority";
+  appendText(priority, "span", severityLabel(row));
+  appendText(priority, "small", signalTypeLabels[row.signal_type] || row.signal_type || "Сигнал");
+  node.appendChild(priority);
+
+  const body = document.createElement("div");
+  body.className = "signal-body";
+  appendText(body, "strong", signalObjectLabel(row));
+  appendText(body, "span", signalObservationText(row));
+  const meta = document.createElement("p");
+  meta.textContent = signalMetaText(row);
+  body.appendChild(meta);
+  node.appendChild(body);
+
+  const values = document.createElement("div");
+  values.className = "signal-values";
+  appendText(values, "span", `Сейчас: ${signalValueText(row.current_value)}`);
+  appendText(values, "span", `Сравнение: ${signalValueText(row.reference_value)}`);
+  appendText(values, "strong", `Изменение: ${signalDeltaText(row)}`);
+  node.appendChild(values);
+
+  const reason = document.createElement("div");
+  reason.className = "signal-reason";
+  appendText(reason, "span", signalReasonText(row));
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "inline-link";
+  button.textContent = "Доказательство";
+  button.addEventListener("click", () => openSignalEvidence(row));
+  reason.appendChild(button);
+  node.appendChild(reason);
+  return node;
+}
+
+function renderSignalLimitations() {
+  const target = document.getElementById("signals-limitations");
+  const limitations = signalLimitations();
+  if (!limitations.length) {
+    replaceWithMessage(target, "empty-state compact", "Ограничений доступности для выбранного среза нет.");
+    return;
+  }
+  target.replaceChildren(...limitations.map((item) => {
+    const node = document.createElement("article");
+    node.className = "signal-limitation";
+    appendText(node, "strong", "Ограничение доступности");
+    appendText(node, "span", item.message || signalLimitationText(item.code || item));
+    return node;
+  }));
+}
+
+function updateSignalsFilterCounts() {
+  const rows = signalRows();
+  const counts = {
+    all: rows.length,
+    commercial: rows.filter((row) => row.signal_type === "COMMERCIAL_SIGNAL").length,
+    pattern: rows.filter((row) => row.signal_type === "DETERMINISTIC_PATTERN").length,
+    quality: rows.filter((row) => row.signal_type === "DATA_QUALITY_ALERT").length
+  };
+  document.querySelectorAll("[data-signal-kind]").forEach((button) => {
+    const key = button.dataset.signalKind || "all";
+    button.textContent = `${signalKindLabels[key] || "Все"} · ${counts[key] || 0}`;
+  });
+}
+
+function signalRows() {
+  const response = state.signalsResponse || {};
+  const patternRows = response[["deter", "ministic_patterns"].join("")] || [];
+  return [
+    ...(response.signals || []),
+    ...patternRows,
+    ...(response.data_quality_alerts || [])
+  ];
+}
+
+function filteredSignalRows() {
+  return signalRows()
+    .filter((row) => state.signalKindFilter === "all" || signalKindClass(row) === state.signalKindFilter)
+    .filter((row) => state.signalGrainFilter === "all" || row.object_grain === state.signalGrainFilter)
+    .sort((a, b) => (a.priority || 99) - (b.priority || 99));
+}
+
+function signalKindClass(row) {
+  if (row.signal_type === "COMMERCIAL_SIGNAL") return "commercial";
+  if (row.signal_type === "DETERMINISTIC_PATTERN") return "pattern";
+  if (row.signal_type === "DATA_QUALITY_ALERT") return "quality";
+  return "other";
+}
+
+function signalLimitations() {
+  const response = state.signalsResponse || {};
+  const structured = response.capability_limitations || [];
+  const plain = (response.limitations || []).map((code) => ({ code, message: signalLimitationText(code) }));
+  const seen = new Set();
+  return [...structured, ...plain].filter((item) => {
+    const key = item.code || item.message || String(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function signalContextText() {
+  const response = state.signalsResponse;
+  if (!response) return "Подтверждённые события и вопросы к качеству данных для выбранного среза.";
+  const total = signalRows().length;
+  const period = signalPeriodContextText();
+  if (!total) return `${period} · подтверждённых сигналов нет.`;
+  return `${period} · ${total} ${pluralRu(total, "подтверждённый сигнал", "подтверждённых сигнала", "подтверждённых сигналов")}.`;
+}
+
+function signalPeriodContextText() {
+  if (state.periodMode === "DATE_RANGE") return `${formatPeriod(selectedDateFrom())} — ${formatPeriod(selectedDateTo())}`;
+  if (state.periodMode === "SINGLE_PERIOD") return formatPeriod(selectedDateFrom());
+  return `${formatPeriod(selectedDateFrom())} · ${comparisonLabels[state.comparisonMode]}`;
+}
+
+function signalFeedContextText(total, filtered) {
+  if (!total) return "Обычные изменения показателей не превращаются в сигналы без подтверждённого правила.";
+  if (total === filtered) return "Показаны подтверждённые события выбранного среза.";
+  return `Показано ${filtered} из ${total} по локальному фильтру.`;
+}
+
+function signalObjectLabel(row) {
+  const grain = row.object_grain || state.currentGrain;
+  const label = entityDisplayLabel(grain, row.object_id);
+  return [grainLabels[grain] || grain, label].filter(Boolean).join(": ") || "Выбранный срез";
+}
+
+function signalObservationText(row) {
+  return signalEventLabels[row.event_type] || signalEventLabels[row.event_family] || "Подтверждённое наблюдение требует проверки.";
+}
+
+function signalMetaText(row) {
+  const pieces = [
+    row.period ? formatPeriod(row.period) : "",
+    row.reference_period ? `сравнение: ${formatPeriod(row.reference_period)}` : "",
+    comparisonLabels[row.comparison_type] || "",
+    row.comparison_quality ? signalQualityText(row.comparison_quality) : "",
+    privateLabelScopeText(row.private_label_scope)
+  ];
+  return pieces.filter(Boolean).join(" · ");
+}
+
+function signalReasonText(row) {
+  const confidence = row.confidence ? `доверие: ${signalQualityText(row.confidence)}` : "";
+  const status = row.status ? signalQualityText(row.status) : "";
+  return [severityLabel(row), status, confidence].filter(Boolean).join(" · ") || "Подтверждено правилом ленты сигналов.";
+}
+
+function severityLabel(row) {
+  return signalSeverityLabels[row.severity] || signalSeverityLabels[String(row.severity || "").toUpperCase()] || "Приоритет не задан";
+}
+
+function signalValueText(value) {
+  return value === null || value === undefined ? "н/д" : formatValue(value, "decimal");
+}
+
+function signalDeltaText(row) {
+  if (row.delta_pp !== null && row.delta_pp !== undefined) return formatDeltaValue(row.delta_pp, "percentage_points");
+  if (row.delta_pct !== null && row.delta_pct !== undefined) return formatDeltaValue(row.delta_pct, "percent");
+  if (row.delta_abs !== null && row.delta_abs !== undefined) return formatDeltaValue(row.delta_abs, "decimal");
+  return "н/д";
+}
+
+function signalLimitationText(code) {
+  return {
+    signal_events_path_not_configured: "Лента сигналов не подключена к подтверждённым событиям.",
+    no_enabled_event_rules: "Для выбранного источника нет включённых правил сигналов.",
+    no_confirmed_events: "Для выбранного среза нет подтверждённых событий.",
+    no_surfaced_signals_in_scope: "Для выбранного среза нет событий, разрешённых к показу как сигналы.",
+    no_confirmed_events_in_scope: "Для выбранного среза нет подтверждённых сигналов.",
+    event_private_label_scope_not_materialized: "События не содержат подтверждённого среза по учёту ассортимента.",
+    event_entity_scope_not_materialized: "События не содержат подтверждённой детализации объекта.",
+    event_category_scope_not_materialized: "События не содержат подтверждённого среза категории.",
+    event_manufacturer_scope_not_materialized: "События не содержат подтверждённого среза производителя.",
+    event_brand_scope_not_materialized: "События не содержат подтверждённого среза бренда.",
+    event_sku_scope_not_materialized: "События не содержат подтверждённого среза SKU.",
+    event_store_scope_not_materialized: "События не содержат подтверждённого среза ТТ."
+  }[code] || "Есть ограничение доступности ленты сигналов.";
+}
+
+function signalQualityText(value) {
+  return {
+    READY: "готово",
+    COMPLETE: "полное",
+    PARTIAL: "частично",
+    VALID: "проверено",
+    INVALID: "не подтверждено",
+    CONFIRMED: "подтверждено",
+    MISSING_EVIDENCE: "не хватает доказательств",
+    NO_CONFIRMED_EVENTS: "нет подтверждённых событий",
+    NOT_CONFIGURED: "не подключено",
+    HIGH: "высокое",
+    MEDIUM: "среднее",
+    LOW: "низкое"
+  }[value] || value;
 }
 
 function renderStoresContextStripWithoutResponse() {
@@ -2588,6 +2966,82 @@ function openPortfolioProvenance(item) {
   document.getElementById("scrim").classList.add("is-open");
 }
 
+function openSignalEvidence(row) {
+  const content = document.getElementById("provenance-content");
+  content.replaceChildren();
+  signalEvidenceSections(row.provenance || {}, row).forEach((section) => content.appendChild(section));
+  document.getElementById("provenance-drawer").classList.add("is-open");
+  document.getElementById("provenance-drawer").setAttribute("aria-hidden", "false");
+  document.getElementById("scrim").classList.add("is-open");
+}
+
+function signalEvidenceSections(provenance, row) {
+  const signal = provenance.signal || {};
+  const scope = provenance.scope || {};
+  const rule = provenance.business_rule || {};
+  const quality = provenance.quality || {};
+  const run = provenance.run_lineage || {};
+  const source = provenance.source_evidence || {};
+  const sections = [
+    section("Что это за сигнал", [
+      ["Тип", signalTypeLabels[row.signal_type] || row.signal_type || "Сигнал"],
+      ["Наблюдение", signalObservationText(row)],
+      ["Приоритет", severityLabel(row)]
+    ]),
+    section("Срез", [
+      ["Сеть / источник", [selectedRetailer().display_label, selectedRetailer().source_label].filter(Boolean).join(" / ") || "н/д"],
+      ["Объект", signalObjectLabel(row)],
+      ["Период", row.period ? formatPeriod(row.period) : "н/д"],
+      ["Учёт ассортимента", privateLabelScopeText(row.private_label_scope || scope.private_label_scope)]
+    ]),
+    section("Факты", [
+      ["Сейчас", signalValueText(row.current_value)],
+      ["Сравнение", signalValueText(row.reference_value)],
+      ["Изменение", signalDeltaText(row)]
+    ]),
+    section("Сравнение", [
+      ["Тип", comparisonLabels[row.comparison_type || signal.comparison_type] || row.comparison_type || "н/д"],
+      ["Период сравнения", row.reference_period ? formatPeriod(row.reference_period) : "н/д"],
+      ["Качество", signalQualityText(row.comparison_quality || quality.comparison_quality || "н/д")]
+    ]),
+    section("Основание", [
+      ["Правило", "подтверждённое правило ленты сигналов"],
+      ["Порог / контекст", signalTriggerText(signal.thresholds || rule.thresholds, signal.trigger_values || rule.trigger_values)]
+    ]),
+    section("Качество", [
+      ["Статус", signalQualityText(row.status || quality.evidence_status || "н/д")],
+      ["Доверие", row.confidence ? signalQualityText(row.confidence) : "н/д"],
+      ["Недостающие доказательства", compactList(signal.missing_evidence || quality.missing_evidence)]
+    ])
+  ];
+  const technical = document.createElement("details");
+  technical.className = "provenance-technical";
+  const summary = document.createElement("summary");
+  summary.textContent = "Технические детали";
+  technical.appendChild(summary);
+  technical.appendChild(section(null, [
+    ["Событие", row.signal_id || signal.signal_id || "н/д"],
+    ["Тип события", row.event_type || signal.event_type || "н/д"],
+    ["Семейство события", row.event_family || signal.event_family || "н/д"],
+    ["Версия правила", row.rule_version || signal.event_rule_version || "н/д"],
+    ["Запуск анализа", signal.analysis_run_id || compactList(run.analysis_run_ids)],
+    ["Версия аналитической витрины", run.mart_build_id || state.signalsResponse?.mart_build_id || "н/д"],
+    ["Ревизия источника", compactList(run.source_revision_ids || state.signalsResponse?.source_revision_ids)],
+    ["Доказательство по источнику", source.status || "н/д"]
+  ]));
+  sections.push(technical);
+  return sections;
+}
+
+function signalTriggerText(thresholds, triggerValues) {
+  const thresholdKeys = thresholds && typeof thresholds === "object" ? Object.keys(thresholds) : [];
+  const triggerKeys = triggerValues && typeof triggerValues === "object" ? Object.keys(triggerValues) : [];
+  const pieces = [];
+  if (thresholdKeys.length) pieces.push(`порогов: ${thresholdKeys.length}`);
+  if (triggerKeys.length) pieces.push(`проверенных значений: ${triggerKeys.length}`);
+  return pieces.join(" · ") || "определено правилом";
+}
+
 function portfolioProvenanceSections(provenance, item) {
   if (provenance.metric || provenance.value) {
     return provenanceSections(provenance, {
@@ -2969,8 +3423,17 @@ function showPageError(error) {
       ? document.getElementById("portfolio-share-strip")
       : state.activeView === "stores"
         ? document.getElementById("stores-ranking")
-        : document.getElementById("chart-box");
+        : state.activeView === "signals"
+          ? document.getElementById("signals-list")
+          : document.getElementById("chart-box");
   replaceWithMessage(target, "error-state", "Не удалось загрузить данные. Повторите попытку.");
+  if (state.activeView === "signals") {
+    replaceWithMessage(
+      document.getElementById("signals-limitations"),
+      "error-state compact",
+      "Доступность ленты не удалось проверить. Повторите попытку.",
+    );
+  }
   showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
 }
 

@@ -372,6 +372,100 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     assert "private-label-scope" not in nav_handler
 
 
+def test_signals_screen_uses_product_signal_feed_not_placeholder_or_fake_recommendations() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    signals_panel = html.split('data-view-panel="signals"', 1)[1].split('data-view-panel="data"', 1)[0]
+    assert 'id="signals-list"' in signals_panel
+    assert 'id="signals-limitations"' in signals_panel
+    assert 'data-signal-kind="commercial"' in signals_panel
+    assert 'data-signal-kind="quality"' in signals_panel
+    assert 'data-signal-grain="sku"' in signals_panel
+    assert "Раздел будет подключён" not in signals_panel
+    assert "Ограничения показываются отдельно и не считаются коммерческими сигналами." in signals_panel
+    assert "рекомендац" not in signals_panel.lower()
+
+    assert 'if (state.activeView === "signals")' in script
+    assert 'state.signalsResponse = await postJson("/api/dashboard/signals", buildSignalsPayload());' in script
+    assert 'signal_types: ["COMMERCIAL_SIGNAL", "DETERMINISTIC_PATTERN", "DATA_QUALITY_ALERT"]' in script
+    assert "function renderSignals()" in script
+    assert "function renderSignalList()" in script
+    assert "function renderSignalLimitations()" in script
+    assert "function openSignalEvidence(row)" in script
+    assert "function signalEvidenceSections(provenance, row)" in script
+    assert "Для выбранного среза нет подтверждённых сигналов." in script
+    assert "Обычные изменения показателей не превращаются в сигналы без подтверждённого правила." in script
+    assert "capability_limitations" in script
+    assert "private_label_growth_while_portfolio_declines" not in script
+    assert "ui_description_ru" not in script
+
+
+def test_signals_screen_keeps_feed_categories_and_limitations_separate() -> None:
+    script = html_or_script("app.js")
+
+    signal_rows_function = script.split("function signalRows()", 1)[1].split("function filteredSignalRows()", 1)[0]
+    assert "response.signals" in signal_rows_function
+    assert '["deter", "ministic_patterns"].join("")' in signal_rows_function
+    assert "response.data_quality_alerts" in signal_rows_function
+    assert "capability_limitations" not in signal_rows_function
+    assert "limitations" not in signal_rows_function
+
+    limitations_function = script.split("function signalLimitations()", 1)[1].split("function signalContextText()", 1)[0]
+    assert "response.capability_limitations" in limitations_function
+    assert "response.limitations" in limitations_function
+
+    evidence_function = script.split("function signalEvidenceSections(provenance, row)", 1)[1].split("function signalTriggerText", 1)[0]
+    assert "Что это за сигнал" in evidence_function
+    assert "Факты" in evidence_function
+    assert "Сравнение" in evidence_function
+    assert "Основание" in evidence_function
+    assert "Качество" in evidence_function
+    assert "Технические детали" in evidence_function
+    assert "подтверждённое правило ленты сигналов" in evidence_function
+    assert "причина" not in evidence_function.lower()
+    assert "из-за" not in evidence_function.lower()
+    assert "рекомендац" not in evidence_function.lower()
+
+
+def test_signals_screen_error_state_clears_limitations_loading() -> None:
+    script = html_or_script("app.js")
+
+    show_error_function = script.split("function showPageError(error)", 1)[1].split("function showToast", 1)[0]
+    assert 'state.activeView === "signals"' in show_error_function
+    assert 'document.getElementById("signals-list")' in show_error_function
+    assert 'document.getElementById("signals-limitations")' in show_error_function
+    assert "Доступность ленты не удалось проверить. Повторите попытку." in show_error_function
+
+
+def test_signals_screen_clears_stale_response_around_failed_refresh() -> None:
+    script = html_or_script("app.js")
+
+    run_signals_function = script.split("async function runSignalsQuery()", 1)[1].split("function buildQueryPayload", 1)[0]
+    assert run_signals_function.count("state.signalsResponse = null;") >= 2
+    assert 'state.signalsLoadStatus = "loading";' in run_signals_function
+    assert 'state.signalsLoadStatus = "loaded";' in run_signals_function
+    assert 'state.signalsLoadStatus = "error";' in run_signals_function
+    assert run_signals_function.index("state.signalsResponse = null;") < run_signals_function.index("renderSignalsSkeletons();")
+    catch_block = run_signals_function.split("} catch (error) {", 1)[1]
+    assert "state.signalsResponse = null;" in catch_block
+
+
+def test_signals_screen_preserves_error_state_on_local_filter_clicks() -> None:
+    script = html_or_script("app.js")
+
+    render_signals_function = script.split("function renderSignals()", 1)[1].split("function renderSignalsErrorState()", 1)[0]
+    assert 'state.signalsLoadStatus === "error"' in render_signals_function
+    assert "renderSignalsErrorState();" in render_signals_function
+
+    error_state_function = script.split("function renderSignalsErrorState()", 1)[1].split("function renderSignalsContextStrip()", 1)[0]
+    assert "Не удалось загрузить ленту сигналов." in error_state_function
+    assert "Не удалось загрузить данные. Повторите попытку." in error_state_function
+    assert "Доступность ленты не удалось проверить. Повторите попытку." in error_state_function
+    assert "Для выбранного среза нет подтверждённых сигналов." not in error_state_function
+    assert "Ограничений доступности для выбранного среза нет." not in error_state_function
+
+
 def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() -> None:
     html = html_or_script("index.html")
     script = html_or_script("app.js")

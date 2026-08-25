@@ -383,12 +383,46 @@
           </section>
         </section>
 
-        <section class="dashboard-view section-shell is-hidden" data-view-panel="signals" aria-labelledby="signals-title">
-          <div class="section-shell-content">
+        <section class="dashboard-view signals-layout is-hidden" data-view-panel="signals" aria-labelledby="signals-title">
+          <div class="screen-heading">
             <p class="eyebrow">что требует внимания</p>
             <h2 id="signals-title">Сигналы</h2>
-            <p>Раздел будет подключён для подтверждённых сигналов, наблюдений и вопросов к качеству данных.</p>
+            <p id="signals-context">Подтверждённые события и вопросы к качеству данных для выбранного среза.</p>
           </div>
+
+          <section class="surface signals-panel" aria-label="Лента сигналов">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Лента внимания</h2>
+                <p id="signals-feed-context">Коммерческие сигналы отделены от качества данных и ограничений.</p>
+              </div>
+              <div class="signal-filter-bar" aria-label="Фильтры ленты сигналов">
+                <button type="button" class="signal-filter is-active" data-signal-kind="all" aria-pressed="true">Все</button>
+                <button type="button" class="signal-filter" data-signal-kind="commercial" aria-pressed="false">Коммерческие</button>
+                <button type="button" class="signal-filter" data-signal-kind="pattern" aria-pressed="false">Паттерны</button>
+                <button type="button" class="signal-filter" data-signal-kind="quality" aria-pressed="false">Качество данных</button>
+              </div>
+            </div>
+            <div class="signal-grain-filter" aria-label="Фильтр по объектам">
+              <button type="button" class="signal-grain is-active" data-signal-grain="all" aria-pressed="true">Все</button>
+              <button type="button" class="signal-grain" data-signal-grain="category" aria-pressed="false">Категории</button>
+              <button type="button" class="signal-grain" data-signal-grain="manufacturer" aria-pressed="false">Производители</button>
+              <button type="button" class="signal-grain" data-signal-grain="brand" aria-pressed="false">Бренды</button>
+              <button type="button" class="signal-grain" data-signal-grain="sku" aria-pressed="false">SKU</button>
+              <button type="button" class="signal-grain" data-signal-grain="store" aria-pressed="false">ТТ</button>
+            </div>
+            <div class="signal-list" id="signals-list" role="list" aria-live="polite"></div>
+          </section>
+
+          <section class="surface signal-limitations-panel" aria-label="Ограничения ленты сигналов">
+            <div class="panel-heading tight">
+              <div>
+                <h2>Доступность ленты</h2>
+                <p>Ограничения показываются отдельно и не считаются коммерческими сигналами.</p>
+              </div>
+            </div>
+            <div class="signal-limitations" id="signals-limitations"></div>
+          </section>
         </section>
 
         <section class="dashboard-view section-shell is-hidden" data-view-panel="data" aria-labelledby="data-title">
