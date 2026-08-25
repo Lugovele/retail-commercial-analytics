@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from typing import Any, cast
 
@@ -547,6 +548,449 @@ def test_non_include_scope_on_unscoped_facts_returns_limitation(tmp_path) -> Non
     assert "private_label_scope_not_materialized" in {item.issue_code for item in response.limitations}
 
 
+def test_filtered_network_query_rolls_up_single_category_scope(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A",)},
+            metric_concepts=("revenue", "retailer_margin_pct"),
+            comparison_mode=ComparisonMode.YOY,
+            mart_build_id="build_a",
+        )
+    )
+
+    values = {result.metric_concept: result.value for result in response.metric_results}
+    assert values["revenue"] == pytest.approx(40.0)
+    assert values["retailer_margin_pct"] == pytest.approx(0.25)
+    assert {item.entity_id for item in response.metric_results} == {"ALL"}
+    assert response.request_scope["entity_filters"] == {"category": ("CATEGORY_A",)}
+    assert {comparison.current_value for comparison in response.comparisons} >= {40.0, 0.25}
+
+
+def test_filtered_network_query_uses_or_within_filter_and_rolls_up_safe_metrics(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A", "CATEGORY_B")},
+            metric_concepts=("revenue", "retailer_margin_pct", "distribution"),
+            mart_build_id="build_a",
+        )
+    )
+
+    values = {result.metric_concept: result.value for result in response.metric_results}
+    assert values["revenue"] == pytest.approx(100.0)
+    assert values["retailer_margin_pct"] == pytest.approx(0.25)
+    assert "distribution" not in values
+    assert "scoped_filter_rollup_not_supported_for_metric" in {
+        item.issue_code for item in response.limitations
+    }
+
+
+def test_filtered_network_query_uses_and_across_cascading_filters(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A",), "manufacturer": ("MANUFACTURER_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert len(response.metric_results) == 1
+    assert response.metric_results[0].value == pytest.approx(30.0)
+
+
+def test_filtered_query_requires_canonical_filter_ids_not_display_labels(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    canonical = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+    label = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("Category A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert canonical.metric_results
+    assert label.metric_results == ()
+
+
+def test_parent_json_filter_maps_sku_to_canonical_product_id(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    facts = pl.DataFrame(
+        [
+            _entity_fact(
+                date(2026, 1, 1),
+                "store",
+                "STORE_A",
+                "revenue",
+                12.0,
+                "sum",
+                parent_entity_ids='{"canonical_product_id":"SKU_A"}',
+            ),
+            _entity_fact(
+                date(2026, 1, 1),
+                "store",
+                "STORE_B",
+                "revenue",
+                20.0,
+                "sum",
+                parent_entity_ids='{"canonical_product_id":"SKU_B"}',
+            ),
+        ],
+        schema=MART_METRIC_FACT_SCHEMA,
+    )
+    write_mart_metric_facts(facts, path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="store",
+            entity_filters={"sku": ("SKU_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert [result.entity_id for result in response.metric_results] == ["STORE_A"]
+    assert response.metric_results[0].value == pytest.approx(12.0)
+
+
+def test_product_store_filter_intersection_returns_explicit_limitation(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A",), "store": ("STORE_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert response.metric_results == ()
+    assert "product_store_filter_intersection_not_materialized" in {
+        item.issue_code for item in response.limitations
+    }
+
+
+def test_requested_product_grain_with_store_filter_returns_explicit_limitation(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    facts = pl.DataFrame(
+        [
+            _entity_fact(
+                date(2026, 1, 1),
+                "store",
+                "STORE_A",
+                "revenue",
+                1260.0,
+                "sum",
+            )
+        ],
+        schema=MART_METRIC_FACT_SCHEMA,
+    )
+    write_mart_metric_facts(facts, path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="sku",
+            entity_ids=("SKU_A",),
+            entity_filters={"store": ("STORE_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert response.metric_results == ()
+    assert "product_store_filter_intersection_not_materialized" in {
+        item.issue_code for item in response.limitations
+    }
+
+
+def test_requested_all_product_grain_with_store_filter_returns_explicit_limitation(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    facts = pl.DataFrame(
+        [
+            _entity_fact(
+                date(2026, 1, 1),
+                "store",
+                "STORE_A",
+                "revenue",
+                1260.0,
+                "sum",
+            )
+        ],
+        schema=MART_METRIC_FACT_SCHEMA,
+    )
+    write_mart_metric_facts(facts, path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="sku",
+            entity_filters={"store": ("STORE_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert response.metric_results == ()
+    assert "product_store_filter_intersection_not_materialized" in {
+        item.issue_code for item in response.limitations
+    }
+
+
+def test_existing_product_fact_with_store_parent_filter_is_rejected_before_direct_read(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    facts = pl.DataFrame(
+        [
+            _entity_fact(
+                date(2026, 1, 1),
+                "sku",
+                "SKU_A",
+                "revenue",
+                1260.0,
+                "sum",
+                parent_entity_ids='{"canonical_store_id":"STORE_A"}',
+            )
+        ],
+        schema=MART_METRIC_FACT_SCHEMA,
+    )
+    write_mart_metric_facts(facts, path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="sku",
+            entity_ids=("SKU_A",),
+            entity_filters={"store": ("STORE_A",)},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert response.metric_results == ()
+    assert "product_store_filter_intersection_not_materialized" in {
+        item.issue_code for item in response.limitations
+    }
+
+
+def test_scoped_rollup_preserves_empty_metric_concepts_as_all_safe_metrics(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A", "CATEGORY_B")},
+            mart_build_id="build_a",
+        )
+    )
+
+    assert {result.metric_concept for result in response.metric_results} == {
+        "revenue",
+        "retailer_margin_pct",
+    }
+
+
+def test_scoped_rollup_does_not_reinterpret_explicit_definition_ids(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A",)},
+            metric_definition_ids=("retailer_a.network.revenue.v1",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert response.metric_results == ()
+    assert "scoped_filter_rollup_not_supported_for_metric_definition_id" in {
+        item.issue_code for item in response.limitations
+    }
+
+
+def test_scoped_rollup_aggregates_mixed_quality_metadata(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    facts = _filtered_scope_facts().with_columns(
+        pl.when(pl.col("entity_id") == "CATEGORY_B")
+        .then(pl.lit("warning"))
+        .otherwise(pl.col("quality_status"))
+        .alias("quality_status"),
+        pl.when(pl.col("entity_id") == "CATEGORY_A")
+        .then(pl.lit("flag_a"))
+        .when(pl.col("entity_id") == "CATEGORY_B")
+        .then(pl.lit("flag_b"))
+        .otherwise(pl.col("quality_flags"))
+        .alias("quality_flags"),
+    )
+    write_mart_metric_facts(facts, path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A", "CATEGORY_B")},
+            metric_concepts=("revenue",),
+            mart_build_id="build_a",
+        )
+    )
+
+    assert len(response.metric_results) == 1
+    assert response.metric_results[0].value == pytest.approx(100.0)
+    assert response.metric_results[0].period_values[0].quality_status == "mixed"
+    assert response.metric_results[0].period_values[0].quality_flags == "flag_a,flag_b"
+
+
+def test_filtered_scope_hash_and_provenance_include_entity_filters(tmp_path) -> None:
+    path = tmp_path / "facts.parquet"
+    write_mart_metric_facts(_filtered_scope_facts(), path)
+    service = DashboardMartQueryService(path, mart_builds=(_build(period_end=date(2026, 1, 31)),))
+    base_request = DashboardMetricQueryRequest(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        date_from=date(2026, 1, 1),
+        date_to=date(2026, 1, 1),
+        period_mode=PeriodMode.SINGLE_PERIOD,
+        period_grain="month",
+        grain_id="network",
+        entity_ids=("ALL",),
+        metric_concepts=("revenue",),
+        mart_build_id="build_a",
+    )
+
+    unfiltered = service.query(base_request)
+    filtered = service.query(
+        replace(base_request, entity_filters={"category": ("CATEGORY_A",)})
+    )
+
+    assert unfiltered.scope_identity_hash != filtered.scope_identity_hash
+    provenance = filtered.metric_results[0].provenance
+    assert provenance is not None
+    assert provenance.payload["current_analytical_scope"]["entity_filters"] == {
+        "category": ("CATEGORY_A",)
+    }
+    assert provenance.payload["scoped_rollup"]["status"] == "DERIVED_FROM_FILTERED_FACTS"
+    assert provenance.payload["scoped_rollup"]["source_fact_grain"] == "category"
+
+
 def test_invalid_private_label_scope_is_rejected() -> None:
     with pytest.raises(ValueError, match="UNKNOWN"):
         DashboardMetricQueryRequest(
@@ -822,6 +1266,123 @@ def _fact(
         "quality_flags": None,
         "created_at": datetime(2026, 1, 15, tzinfo=UTC),
     }
+
+
+def _filtered_scope_facts() -> pl.DataFrame:
+    rows: list[dict[str, object]] = []
+    for period, factor in ((date(2025, 1, 1), 0.5), (date(2026, 1, 1), 1.0)):
+        rows.extend(
+            [
+                _entity_fact(
+                    period,
+                    "category",
+                    "CATEGORY_A",
+                    "revenue",
+                    40.0 * factor,
+                    "sum",
+                ),
+                _entity_fact(
+                    period,
+                    "category",
+                    "CATEGORY_A",
+                    "retailer_margin_pct",
+                    0.25,
+                    "ratio_of_sums",
+                    numerator=10.0 * factor,
+                    denominator=40.0 * factor,
+                ),
+                _entity_fact(
+                    period,
+                    "category",
+                    "CATEGORY_B",
+                    "revenue",
+                    60.0 * factor,
+                    "sum",
+                ),
+                _entity_fact(
+                    period,
+                    "category",
+                    "CATEGORY_B",
+                    "retailer_margin_pct",
+                    0.25,
+                    "ratio_of_sums",
+                    numerator=15.0 * factor,
+                    denominator=60.0 * factor,
+                ),
+                _entity_fact(
+                    period,
+                    "category",
+                    "CATEGORY_A",
+                    "distribution",
+                    0.5,
+                    "ratio_of_sums",
+                    numerator=5.0,
+                    denominator=10.0,
+                    strategy=RangeAggregationStrategy.PERIOD_ONLY,
+                ),
+                _entity_fact(
+                    period,
+                    "category",
+                    "CATEGORY_B",
+                    "distribution",
+                    0.4,
+                    "ratio_of_sums",
+                    numerator=4.0,
+                    denominator=10.0,
+                    strategy=RangeAggregationStrategy.PERIOD_ONLY,
+                ),
+                _entity_fact(
+                    period,
+                    "manufacturer",
+                    "MANUFACTURER_A",
+                    "revenue",
+                    30.0 * factor,
+                    "sum",
+                    parent_entity_ids='{"category":"CATEGORY_A"}',
+                ),
+                _entity_fact(
+                    period,
+                    "manufacturer",
+                    "MANUFACTURER_B",
+                    "revenue",
+                    70.0 * factor,
+                    "sum",
+                    parent_entity_ids='{"category":"CATEGORY_B"}',
+                ),
+            ]
+        )
+    return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
+
+
+def _entity_fact(
+    period: date,
+    grain: str,
+    entity_id: str,
+    concept: str,
+    value: float,
+    aggregation: str,
+    *,
+    numerator: float | None = None,
+    denominator: float | None = None,
+    parent_entity_ids: str = "{}",
+    strategy: RangeAggregationStrategy | None = None,
+) -> dict[str, object]:
+    row = _fact(
+        period,
+        concept,
+        value,
+        aggregation,
+        "build_a",
+        "retailer_a",
+        numerator=numerator,
+        denominator=denominator,
+        strategy=strategy,
+    )
+    row["grain_id"] = grain
+    row["entity_id"] = entity_id
+    row["parent_entity_ids"] = parent_entity_ids
+    row["metric_definition_id"] = f"retailer_a.{grain}.{concept}.v1"
+    return row
 
 
 def _ledger(

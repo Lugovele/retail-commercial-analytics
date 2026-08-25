@@ -131,6 +131,57 @@ def test_dashboard_range_query_returns_missing_periods_without_zero_fill(tmp_pat
     }
 
 
+def test_dashboard_query_route_rolls_up_canonical_multi_select_filters(tmp_path: Path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "GET",
+        "/api/dashboard/options",
+        query="retailer_id=retailer_a&source_id=source_a&private_label_scope=INCLUDE",
+    )
+    assert status.startswith("200")
+    options = json.loads(body)
+    network_id = options["entities"]["network"][0]["value"]
+    category_ids = [item["value"] for item in options["entities"]["category"][:2]]
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/query",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": [network_id],
+            "entity_filters": {"category": category_ids},
+            "metric_concepts": ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
+            "comparison_mode": "PREVIOUS_AVAILABLE",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert {item["metric_concept"] for item in response["metric_results"]} == {
+        "revenue",
+        "units",
+        "retailer_margin_abs",
+        "retailer_margin_pct",
+    }
+    assert response["request_scope"]["entity_filters"] == {"category": category_ids}
+    assert response["scope_identity_hash"]
+    provenance = response["metric_results"][0]["provenance"]
+    assert provenance["current_analytical_scope"]["entity_filters"] == {"category": category_ids}
+    assert provenance["scoped_rollup"]["status"] == "DERIVED_FROM_FILTERED_FACTS"
+
+
 def test_dashboard_contribution_route_returns_structured_rows(tmp_path: Path) -> None:
     app = create_dashboard_wsgi_app(build_synthetic_dashboard_runtime(tmp_path))
 

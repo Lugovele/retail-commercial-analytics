@@ -20,8 +20,26 @@ from retail_analytics.mart.metric_catalog import (
     MetricAvailabilityStatus,
     catalog_entry_for_fact,
 )
-from retail_analytics.mart.metric_facts import RangeAggregationStrategy
+from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA, RangeAggregationStrategy
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
+
+FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
+SCOPED_ROLLUP_SAFE_CONCEPTS = {
+    "revenue_vat",
+    "revenue",
+    "units",
+    "retailer_margin_abs",
+    "retailer_margin_pct",
+    "weighted_shelf_price_vat",
+    "weighted_input_price_vat",
+}
+PARENT_ENTITY_JSON_KEYS = {
+    "category": "category",
+    "manufacturer": "manufacturer",
+    "brand": "brand",
+    "sku": "canonical_product_id",
+    "store": "canonical_store_id",
+}
 
 
 class PeriodMode(StrEnum):
@@ -216,13 +234,30 @@ class DashboardMartQueryService:
         self._validate_active_revision_scope(request, mart_build_id)
         fetch_start = _comparison_fetch_start(request)
         limitations = list(self._private_label_scope_materialization_limitations(request))
-        raw = self._read_facts(request, mart_build_id=mart_build_id, period_start=fetch_start)
+        scoped_rollup_grain: str | None = None
+        if _has_product_store_intersection(request):
+            raw = pl.DataFrame()
+            limitations.append(
+                QueryLimitation(
+                    "product_store_filter_intersection_not_materialized",
+                    "Product and store filters require a materialized product-store analytical scope.",
+                )
+            )
+        else:
+            raw = self._read_facts(request, mart_build_id=mart_build_id, period_start=fetch_start)
+        if raw.is_empty() and request.entity_filters and not _has_product_store_intersection(request):
+            raw, scoped_rollup_grain, rollup_limitations = self._read_scoped_rollup_facts(
+                request,
+                mart_build_id=mart_build_id,
+                period_start=fetch_start,
+            )
+            limitations.extend(rollup_limitations)
         requested = _filter_requested_periods(raw, request)
         self._validate_fact_active_revisions(requested, request)
         _reject_source_revision_ambiguity(requested)
         _reject_duplicate_fact_contributors(requested)
         limitations.extend(self._period_grain_limitations(request))
-        limitations.extend(self._catalog_limitations(requested, request))
+        limitations.extend(self._catalog_limitations(requested, request, scoped_rollup_grain=scoped_rollup_grain))
         requested_periods = _expected_periods(request, requested)
         available_periods = tuple(
             sorted(set(requested.get_column("period_start").to_list())) if not requested.is_empty() else ()
@@ -252,6 +287,7 @@ class DashboardMartQueryService:
             missing_periods=missing_periods,
             comparisons=comparisons,
             response_quality_flags=quality_flags,
+            scoped_rollup_grain=scoped_rollup_grain,
         )
         lineage = tuple(result.lineage for result in metric_results if request.include_lineage and result.lineage is not None)
 
@@ -266,6 +302,7 @@ class DashboardMartQueryService:
                 "metric_definition_ids": request.metric_definition_ids,
                 "period_mode": request.period_mode.value,
                 "comparison_mode": request.comparison_mode.value,
+                "entity_filters": request.entity_filters or {},
                 "private_label_scope": request.private_label_scope.value,
             },
             requested_period_start=min(requested_periods) if requested_periods else request.date_from,
@@ -282,7 +319,10 @@ class DashboardMartQueryService:
             analysis_run_ids=analysis_run_ids,
             metric_definition_lineage=lineage,
             private_label_scope=request.private_label_scope,
-            scope_identity_hash=scope_identity_hash(private_label_scope=request.private_label_scope),
+            scope_identity_hash=scope_identity_hash(
+                private_label_scope=request.private_label_scope,
+                entity_filters=request.entity_filters,
+            ),
         )
 
     def _resolve_build_id(self, request: DashboardMetricQueryRequest) -> str:
@@ -434,10 +474,78 @@ class DashboardMartQueryService:
         """
         return duckdb.sql(sql, params=[_duckdb_path(self.metric_facts_path), *params]).pl()
 
+    def _read_scoped_rollup_facts(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        mart_build_id: str,
+        period_start: date | None,
+    ) -> tuple[pl.DataFrame, str | None, tuple[QueryLimitation, ...]]:
+        effective_grain = _effective_filter_grain(request)
+        if effective_grain is None:
+            return pl.DataFrame(), None, ()
+        if _has_product_store_intersection(request):
+            return (
+                pl.DataFrame(),
+                effective_grain,
+                (
+                    QueryLimitation(
+                        "product_store_filter_intersection_not_materialized",
+                        "Product and store filters require a materialized product-store analytical scope.",
+                    ),
+                ),
+            )
+        if request.metric_definition_ids:
+            return (
+                pl.DataFrame(),
+                effective_grain,
+                (
+                    QueryLimitation(
+                        "scoped_filter_rollup_not_supported_for_metric_definition_id",
+                        "Filtered aggregate rollup does not reinterpret explicit metric definition ids.",
+                    ),
+                ),
+            )
+        selected = tuple((request.entity_filters or {}).get(effective_grain, ()))
+        if not selected:
+            return pl.DataFrame(), None, ()
+        supported_metrics = tuple(
+            concept for concept in request.metric_concepts if concept in SCOPED_ROLLUP_SAFE_CONCEPTS
+        ) if request.metric_concepts else ()
+        limitations = [
+            QueryLimitation(
+                "scoped_filter_rollup_not_supported_for_metric",
+                "Selected filter scope cannot be safely rolled up for this metric concept.",
+                metric_concept=concept,
+            )
+            for concept in request.metric_concepts
+            if concept not in SCOPED_ROLLUP_SAFE_CONCEPTS
+        ]
+        if request.metric_concepts and not supported_metrics:
+            return pl.DataFrame(), effective_grain, tuple(limitations)
+        scoped_filters = {
+            key: values
+            for key, values in (request.entity_filters or {}).items()
+            if key != effective_grain and values
+        }
+        scoped_request = replace(
+            request,
+            grain_id=effective_grain,
+            entity_ids=selected,
+            entity_filters=scoped_filters,
+            metric_concepts=supported_metrics,
+            metric_definition_ids=(),
+        )
+        scoped = self._read_facts(scoped_request, mart_build_id=mart_build_id, period_start=period_start)
+        scoped_limitations = _scoped_rollup_limitations(scoped)
+        return _roll_up_scoped_facts(scoped, request), effective_grain, (*limitations, *scoped_limitations)
+
     def _catalog_limitations(
         self,
         frame: pl.DataFrame,
         request: DashboardMetricQueryRequest,
+        *,
+        scoped_rollup_grain: str | None = None,
     ) -> tuple[QueryLimitation, ...]:
         if not self.catalog:
             return ()
@@ -478,11 +586,12 @@ class DashboardMartQueryService:
                     )
                 )
                 continue
-            if request.grain_id not in entry.grain_support:
+            validation_grain = scoped_rollup_grain or request.grain_id
+            if validation_grain not in entry.grain_support:
                 limitations.append(
                     QueryLimitation(
                         "metric_not_supported_for_grain",
-                        f"Metric is not supported for grain_id={request.grain_id}",
+                        f"Metric is not supported for grain_id={validation_grain}",
                         metric_definition_id=entry.metric_definition_id,
                         metric_concept=entry.metric_concept,
                     )
@@ -790,6 +899,7 @@ def _attach_provenance(
     missing_periods: tuple[date, ...],
     comparisons: tuple[ComparisonResult, ...],
     response_quality_flags: tuple[str, ...],
+    scoped_rollup_grain: str | None = None,
 ) -> tuple[MetricQueryResult, ...]:
     return tuple(
         replace(
@@ -805,6 +915,7 @@ def _attach_provenance(
                     missing_periods=missing_periods,
                     comparisons=comparisons,
                     response_quality_flags=response_quality_flags,
+                    scoped_rollup_grain=scoped_rollup_grain,
                 )
             ),
         )
@@ -823,6 +934,7 @@ def _provenance_payload(
     missing_periods: tuple[date, ...],
     comparisons: tuple[ComparisonResult, ...],
     response_quality_flags: tuple[str, ...],
+    scoped_rollup_grain: str | None = None,
 ) -> dict[str, Any]:
     lineage = result.lineage
     period_source_revisions = tuple(sorted({period.source_revision_id for period in result.period_values}))
@@ -878,7 +990,11 @@ def _provenance_payload(
             "entity_id": result.entity_id,
             "entity_ids": request.entity_ids,
             "private_label_scope": request.private_label_scope.value,
-            "scope_identity_hash": scope_identity_hash(private_label_scope=request.private_label_scope),
+            "entity_filters": request.entity_filters or {},
+            "scope_identity_hash": scope_identity_hash(
+                private_label_scope=request.private_label_scope,
+                entity_filters=request.entity_filters,
+            ),
         },
         "metric": {
             "metric_concept": result.metric_concept,
@@ -926,6 +1042,16 @@ def _provenance_payload(
             "source_revision_ids": period_source_revisions,
             "source_row_ids": (),
         },
+        "scoped_rollup": {
+            "status": "DERIVED_FROM_FILTERED_FACTS" if scoped_rollup_grain else "NOT_APPLICABLE",
+            "source_fact_grain": scoped_rollup_grain,
+            "requested_grain": request.grain_id,
+            "entity_filters": request.entity_filters or {},
+            "formula": "sum child values or recompute ratio from child numerators and denominators"
+            if scoped_rollup_grain
+            else None,
+            "rolled_period_count": len(result.period_values),
+        },
         "quality": {
             "quality_statuses": quality_statuses,
             "quality_flags": quality_flags,
@@ -968,6 +1094,153 @@ def _comparison_target(frame: pl.DataFrame, request: DashboardMetricQueryRequest
         return candidate if candidate in periods else None
     earlier = [period for period in periods if period < request.date_from]
     return earlier[-1] if earlier else None
+
+
+def _effective_filter_grain(request: DashboardMetricQueryRequest) -> str | None:
+    selected = request.entity_filters or {}
+    candidates = [grain for grain in FILTER_GRAIN_ORDER if selected.get(grain)]
+    if not candidates:
+        return None
+    requested_index = FILTER_GRAIN_ORDER.index(request.grain_id) if request.grain_id in FILTER_GRAIN_ORDER else -1
+    effective = candidates[-1]
+    effective_index = FILTER_GRAIN_ORDER.index(effective)
+    return effective if effective_index > requested_index else None
+
+
+def _has_product_store_intersection(request: DashboardMetricQueryRequest) -> bool:
+    selected = request.entity_filters or {}
+    product_scope_requested = request.grain_id in {"category", "manufacturer", "brand", "sku"}
+    product_scope_filtered = any(selected.get(key) for key in ("category", "manufacturer", "brand", "sku"))
+    return bool(selected.get("store")) and (product_scope_requested or product_scope_filtered)
+
+
+def _scoped_rollup_limitations(frame: pl.DataFrame) -> tuple[QueryLimitation, ...]:
+    if frame.is_empty():
+        return ()
+    limitations: list[QueryLimitation] = []
+    for row in frame.to_dicts():
+        strategy = RangeAggregationStrategy(str(row["range_aggregation_strategy"]))
+        if strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS and row["value"] is None:
+            limitations.append(
+                QueryLimitation(
+                    "scoped_rollup_additive_value_missing",
+                    "Filtered aggregate requires non-null additive child values.",
+                    metric_definition_id=str(row["metric_definition_id"]),
+                    metric_concept=str(row["metric_concept"]),
+                )
+            )
+        if strategy in {
+            RangeAggregationStrategy.RATIO_OF_SUMS,
+            RangeAggregationStrategy.WEIGHTED_RATIO_OF_SUMS,
+            RangeAggregationStrategy.RECOMPUTE_FROM_COMPONENTS,
+        }:
+            if row["numerator_value"] is None or row["denominator_value"] is None:
+                limitations.append(
+                    QueryLimitation(
+                        "scoped_rollup_components_missing",
+                        "Filtered aggregate requires numerator and denominator child values.",
+                        metric_definition_id=str(row["metric_definition_id"]),
+                        metric_concept=str(row["metric_concept"]),
+                    )
+                )
+            elif _float_or_none(row["denominator_value"]) == 0:
+                limitations.append(
+                    QueryLimitation(
+                        "scoped_rollup_zero_denominator",
+                        "Filtered aggregate denominator is zero.",
+                        metric_definition_id=str(row["metric_definition_id"]),
+                        metric_concept=str(row["metric_concept"]),
+                    )
+                )
+    return tuple(_dedupe_limitations(limitations))
+
+
+def _roll_up_scoped_facts(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
+    if frame.is_empty():
+        return frame
+    rows = [row for row in frame.to_dicts() if row["metric_concept"] in SCOPED_ROLLUP_SAFE_CONCEPTS]
+    if not rows:
+        return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
+    target_entity_id = request.entity_ids[0] if request.entity_ids else request.grain_id
+    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+    for row in rows:
+        key = (
+            row["retailer_id"],
+            row["source_id"],
+            row["source_revision_id"],
+            row["analysis_run_id"],
+            row["mart_build_id"],
+            row.get("private_label_scope"),
+            row["period_grain"],
+            row["period_start"],
+            row["period_end"],
+            row["business_period_id"],
+            row["metric_concept"],
+            row["metric_name"],
+            row["metric_definition_id"],
+            row["metric_definition_version"],
+            row["metric_config_hash"],
+            row["semantic_family"],
+            row["semantic_compatibility_version"],
+            row["cross_retailer_comparable"],
+            row["aggregation"],
+            row["range_aggregation_strategy"],
+            row["share_scope"],
+            row["rule_version"],
+        )
+        grouped[key].append(row)
+
+    rolled_rows: list[dict[str, Any]] = []
+    for key, items in grouped.items():
+        template = dict(items[0])
+        template["grain_id"] = request.grain_id
+        template["entity_id"] = target_entity_id
+        template["parent_entity_ids"] = "{}"
+        template["quality_status"] = _roll_up_quality_status(items)
+        template["quality_flags"] = _roll_up_quality_flags(items)
+        template["created_at"] = max(item["created_at"] for item in items if item["created_at"] is not None)
+        template["value"], template["numerator_value"], template["denominator_value"] = _roll_up_metric_values(items)
+        rolled_rows.append(template)
+    return pl.DataFrame(rolled_rows, schema=MART_METRIC_FACT_SCHEMA)
+
+
+def _roll_up_quality_status(rows: list[dict[str, Any]]) -> str:
+    statuses = {str(row["quality_status"]) for row in rows}
+    return "valid" if statuses == {"valid"} else "mixed"
+
+
+def _roll_up_quality_flags(rows: list[dict[str, Any]]) -> str | None:
+    flags = sorted(
+        {
+            flag.strip()
+            for row in rows
+            for flag in str(row["quality_flags"] or "").split(",")
+            if flag.strip()
+        }
+    )
+    return ",".join(flags) if flags else None
+
+
+def _roll_up_metric_values(rows: list[dict[str, Any]]) -> tuple[float | None, float | None, float | None]:
+    if len(rows) == 1:
+        row = rows[0]
+        return _float_or_none(row["value"]), _float_or_none(row["numerator_value"]), _float_or_none(row["denominator_value"])
+    strategy = RangeAggregationStrategy(str(rows[0]["range_aggregation_strategy"]))
+    if strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS:
+        if any(row["value"] is None for row in rows):
+            return None, None, None
+        return sum(_float_or_zero(row["value"]) for row in rows), None, None
+    if strategy in {
+        RangeAggregationStrategy.RATIO_OF_SUMS,
+        RangeAggregationStrategy.WEIGHTED_RATIO_OF_SUMS,
+        RangeAggregationStrategy.RECOMPUTE_FROM_COMPONENTS,
+    }:
+        if any(row["numerator_value"] is None or row["denominator_value"] is None for row in rows):
+            return None, None, None
+        numerator = sum(_float_or_zero(row["numerator_value"]) for row in rows)
+        denominator = sum(_float_or_zero(row["denominator_value"]) for row in rows)
+        return (None if denominator == 0 else numerator / denominator), numerator, denominator
+    return None, None, None
 
 
 def _filter_requested_periods(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
@@ -1148,7 +1421,8 @@ def _add_json_parent_filter(clauses: list[str], params: list[Any], key: str, val
     if not values:
         return
     placeholders = ", ".join("?" for _ in values)
-    clauses.append(f"json_extract_string(parent_entity_ids, '$.{key}') IN ({placeholders})")
+    json_key = PARENT_ENTITY_JSON_KEYS.get(key, key)
+    clauses.append(f"json_extract_string(parent_entity_ids, '$.{json_key}') IN ({placeholders})")
     params.extend(values)
 
 

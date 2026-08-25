@@ -571,7 +571,10 @@ def _request_scope(request: SignalFeedRequest) -> dict[str, Any]:
         "entity_ids": request.entity_ids,
         "entity_filters": request.entity_filters or {},
         "private_label_scope": request.private_label_scope.value,
-        "scope_identity_hash": scope_identity_hash(private_label_scope=request.private_label_scope),
+        "scope_identity_hash": scope_identity_hash(
+            private_label_scope=request.private_label_scope,
+            entity_filters=request.entity_filters,
+        ),
     }
 
 

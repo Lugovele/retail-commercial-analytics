@@ -29,11 +29,22 @@ class PrivateLabelScopeResult:
     unknown_private_label_count: int
 
 
-def scope_identity_hash(*, private_label_scope: PrivateLabelScope | str) -> str:
+def scope_identity_hash(
+    *,
+    private_label_scope: PrivateLabelScope | str,
+    entity_filters: dict[str, tuple[str, ...]] | None = None,
+) -> str:
     """Return deterministic analytical scope identity."""
 
     scope = PrivateLabelScope(private_label_scope)
-    payload = {"private_label_scope": scope.value}
+    filters = {
+        key: tuple(sorted(values))
+        for key, values in sorted((entity_filters or {}).items())
+        if values
+    }
+    payload: dict[str, object] = {"private_label_scope": scope.value}
+    if filters:
+        payload["entity_filters"] = filters
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()[:16]
 

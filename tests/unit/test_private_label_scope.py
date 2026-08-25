@@ -46,6 +46,16 @@ def test_scope_identity_hash_distinguishes_universes() -> None:
     )
 
 
+def test_scope_identity_hash_is_order_invariant_for_or_filters() -> None:
+    assert scope_identity_hash(
+        private_label_scope=PrivateLabelScope.INCLUDE,
+        entity_filters={"category": ("CATEGORY_A", "CATEGORY_B")},
+    ) == scope_identity_hash(
+        private_label_scope=PrivateLabelScope.INCLUDE,
+        entity_filters={"category": ("CATEGORY_B", "CATEGORY_A")},
+    )
+
+
 def _frame() -> pl.DataFrame:
     return pl.DataFrame(
         {
