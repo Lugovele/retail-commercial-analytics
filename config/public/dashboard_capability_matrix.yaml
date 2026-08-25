@@ -1168,16 +1168,22 @@ capabilities:
   - sku
   - store
   single_period_support: PARTIAL
-  comparison_support: []
+  comparison_support:
+  - YOY
+  - PREVIOUS_AVAILABLE
   date_range_support: PARTIAL
   range_aggregation_strategy: unsupported
   private_label_scope_support: []
   format: text
   unit: signal
-  backend_fact_source: core.events
+  backend_fact_source: mart.signals.SignalFeedService
   availability_status: PARTIAL
   limitations:
-  - scope_aware_event_views_limited
+  - confirmed_rule_outputs_only
+  - commercial_signals_depend_on_enabled_rule_package
+  - capability_limitations_are_separate_from_commercial_signals
+  - private_label_scope_requires_materialized_event_scope
+  - source_row_ids_not_exposed
   - edlp_stability_windows_unresolved
   provenance_supported: false
   signal_eligible: true

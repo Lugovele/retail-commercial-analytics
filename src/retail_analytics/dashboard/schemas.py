@@ -17,6 +17,9 @@ from retail_analytics.mart import (
     PortfolioMarketResponse,
     PrivateLabelScope,
     QualityPolicy,
+    SignalFeedRequest,
+    SignalFeedResponse,
+    SignalType,
 )
 
 
@@ -103,6 +106,31 @@ class DashboardUiPortfolioMarketPayload:
     include_lineage: bool = True
 
 
+@dataclass(frozen=True)
+class DashboardUiSignalFeedPayload:
+    """UI-facing deterministic signal feed request."""
+
+    retailer_id: str
+    source_id: str
+    period_mode: PeriodMode | str
+    period_grain: str
+    date_from: date | str | None = None
+    date_to: date | str | None = None
+    grain_id: str = "network"
+    entity_ids: tuple[str, ...] = ()
+    entity_filters: dict[str, tuple[str, ...]] | None = None
+    comparison_mode: ComparisonMode | str = ComparisonMode.NONE
+    private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE
+    mart_build_id: str | None = None
+    signal_types: tuple[str, ...] = (
+        "COMMERCIAL_SIGNAL",
+        "DETERMINISTIC_PATTERN",
+        "DATA_QUALITY_ALERT",
+    )
+    limit: int = 50
+    include_capability_limitations: bool = True
+
+
 def build_backend_query_request(payload: DashboardUiQueryPayload | dict[str, Any]) -> DashboardMetricQueryRequest:
     """Build the exact backend query request from a UI payload."""
 
@@ -173,6 +201,29 @@ def build_portfolio_market_request(
         mart_build_id=data.mart_build_id,
         quality_policy=QualityPolicy(data.quality_policy),
         include_lineage=data.include_lineage,
+    )
+
+
+def build_signal_feed_request(payload: DashboardUiSignalFeedPayload | dict[str, Any]) -> SignalFeedRequest:
+    """Build a product-safe signal feed request from a UI payload."""
+
+    data = _coerce_signal_feed_payload(payload)
+    return SignalFeedRequest(
+        retailer_id=data.retailer_id,
+        source_id=data.source_id,
+        date_from=_date_or_none(data.date_from),
+        date_to=_date_or_none(data.date_to),
+        period_mode=PeriodMode(data.period_mode),
+        period_grain=data.period_grain,
+        grain_id=data.grain_id,
+        entity_ids=tuple(data.entity_ids),
+        entity_filters=data.entity_filters,
+        comparison_mode=ComparisonMode(data.comparison_mode),
+        private_label_scope=PrivateLabelScope(data.private_label_scope),
+        mart_build_id=data.mart_build_id,
+        signal_types=tuple(SignalType(item) for item in data.signal_types),
+        limit=data.limit,
+        include_capability_limitations=data.include_capability_limitations,
     )
 
 
@@ -287,6 +338,35 @@ def serialize_portfolio_market_response(response: PortfolioMarketResponse) -> di
         ],
         "limitations": list(response.limitations),
         "mart_build_id": response.mart_build_id,
+        "private_label_scope": response.private_label_scope.value,
+    }
+
+
+def serialize_signal_feed_response(response: SignalFeedResponse) -> dict[str, Any]:
+    """Serialize signal feed route output without inventing narrative."""
+
+    return {
+        "status": response.status.value,
+        "request_scope": _json_ready(response.request_scope),
+        "signals": [_signal_row(row) for row in response.signals],
+        "deterministic_patterns": [_signal_row(row) for row in response.deterministic_patterns],
+        "data_quality_alerts": [_signal_row(row) for row in response.data_quality_alerts],
+        "capability_limitations": [
+            {
+                "code": item.code,
+                "message": item.message,
+                "status": item.status,
+                "provenance": _json_ready(item.provenance),
+            }
+            for item in response.capability_limitations
+        ],
+        "limitations": list(response.limitations),
+        "event_count": response.event_count,
+        "surfaced_event_count": response.surfaced_event_count,
+        "excluded_event_counts": dict(response.excluded_event_counts),
+        "mart_build_id": response.mart_build_id,
+        "analysis_run_ids": list(response.analysis_run_ids),
+        "source_revision_ids": list(response.source_revision_ids),
         "private_label_scope": response.private_label_scope.value,
     }
 
@@ -452,6 +532,42 @@ def _coerce_portfolio_market_payload(
     )
 
 
+def _coerce_signal_feed_payload(
+    payload: DashboardUiSignalFeedPayload | dict[str, Any],
+) -> DashboardUiSignalFeedPayload:
+    if isinstance(payload, DashboardUiSignalFeedPayload):
+        return payload
+    raw_filters = payload.get("entity_filters")
+    filters = (
+        {str(key): tuple(str(item) for item in values) for key, values in raw_filters.items()}
+        if isinstance(raw_filters, dict)
+        else None
+    )
+    return DashboardUiSignalFeedPayload(
+        retailer_id=str(payload["retailer_id"]),
+        source_id=str(payload["source_id"]),
+        date_from=payload.get("date_from"),
+        date_to=payload.get("date_to"),
+        period_mode=payload.get("period_mode", PeriodMode.SINGLE_PERIOD),
+        period_grain=str(payload.get("period_grain", "month")),
+        grain_id=str(payload.get("grain_id", "network")),
+        entity_ids=tuple(str(item) for item in payload.get("entity_ids", ())),
+        entity_filters=filters,
+        comparison_mode=payload.get("comparison_mode", ComparisonMode.NONE),
+        private_label_scope=payload.get("private_label_scope", PrivateLabelScope.INCLUDE),
+        mart_build_id=payload.get("mart_build_id"),
+        signal_types=tuple(
+            str(item)
+            for item in payload.get(
+                "signal_types",
+                ("COMMERCIAL_SIGNAL", "DETERMINISTIC_PATTERN", "DATA_QUALITY_ALERT"),
+            )
+        ),
+        limit=int(payload.get("limit", 50)),
+        include_capability_limitations=bool(payload.get("include_capability_limitations", True)),
+    )
+
+
 def _date_or_none(value: date | str | None) -> date | None:
     if value is None or value == "":
         return None
@@ -486,3 +602,33 @@ def _json_ready(value: Any) -> Any:
     if isinstance(value, dict):
         return {key: _json_ready(item) for key, item in value.items()}
     return value
+
+
+def _signal_row(row: Any) -> dict[str, Any]:
+    return {
+        "signal_id": row.signal_id,
+        "signal_type": row.signal_type.value,
+        "event_type": row.event_type,
+        "event_family": row.event_family,
+        "object_grain": row.object_grain,
+        "object_id": row.object_id,
+        "category_id": row.category_id,
+        "period": _date_text(row.period),
+        "reference_period": _date_text(row.reference_period),
+        "comparison_type": row.comparison_type,
+        "current_value": row.current_value,
+        "reference_value": row.reference_value,
+        "delta_abs": row.delta_abs,
+        "delta_pct": row.delta_pct,
+        "delta_pp": row.delta_pp,
+        "rule_id": row.rule_id,
+        "rule_version": row.rule_version,
+        "event_config_hash": row.event_config_hash,
+        "severity": row.severity,
+        "priority": row.priority,
+        "confidence": row.confidence,
+        "comparison_quality": row.comparison_quality,
+        "private_label_scope": row.private_label_scope.value,
+        "status": row.status.value,
+        "provenance": _json_ready(row.provenance),
+    }

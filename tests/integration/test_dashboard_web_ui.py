@@ -233,6 +233,37 @@ def test_dashboard_portfolio_market_route_returns_product_contract(tmp_path: Pat
     assert competitor["limitations"] == ["broad_competitor_projection_not_route_ready"]
 
 
+def test_dashboard_signals_route_returns_empty_product_contract_without_demo_events(tmp_path: Path) -> None:
+    app = create_dashboard_wsgi_app(build_synthetic_dashboard_runtime(tmp_path))
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/signals",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["status"] == "NOT_CONFIGURED"
+    assert response["signals"] == []
+    assert response["deterministic_patterns"] == []
+    assert response["data_quality_alerts"] == []
+    assert response["capability_limitations"][0]["code"] == "signal_events_path_not_configured"
+    assert response["private_label_scope"] == "INCLUDE"
+
+
 def _call(
     app: WSGIApplication,
     method: str,

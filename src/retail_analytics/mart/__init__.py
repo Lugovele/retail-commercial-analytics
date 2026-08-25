@@ -105,6 +105,16 @@ from retail_analytics.mart.scopes import (
     apply_private_label_scope,
     scope_identity_hash,
 )
+from retail_analytics.mart.signals import (
+    CapabilityLimitation,
+    SignalFeedRequest,
+    SignalFeedResponse,
+    SignalFeedRow,
+    SignalFeedService,
+    SignalFeedStatus,
+    SignalRowStatus,
+    SignalType,
+)
 
 __all__ = [
     "ADDITIVE_CONTRIBUTION_METRICS",
@@ -112,6 +122,7 @@ __all__ = [
     "ActiveSkuSummary",
     "AdditiveContributionService",
     "BrandVsCategoryComparison",
+    "CapabilityLimitation",
     "CatalogIssueSeverity",
     "CatalogValidationIssue",
     "CategoryShareResult",
@@ -160,6 +171,13 @@ __all__ = [
     "RegionalMetricRow",
     "ScopedMetricsResult",
     "ShareMetric",
+    "SignalFeedRequest",
+    "SignalFeedResponse",
+    "SignalFeedRow",
+    "SignalFeedService",
+    "SignalFeedStatus",
+    "SignalRowStatus",
+    "SignalType",
     "apply_private_label_scope",
     "build_mart_metric_facts",
     "calculate_active_sku_summary",

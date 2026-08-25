@@ -230,7 +230,10 @@ Primary questions:
 - На каком правиле или качестве данных основан сигнал?
 - Куда перейти для проверки?
 
-Readiness: `PARTIAL` for current event/signal scope-aware presentation.
+Readiness: `PARTIAL`. The backend route for confirmed deterministic signal
+outputs is productized, but current signal availability depends on enabled
+private rule packages and materialized event outputs. Empty confirmed-signal
+responses are valid and must not be filled with ordinary metric deltas.
 
 Wireframe:
 

@@ -932,19 +932,19 @@ coverage:
     grain_support:
     - sku
 - concept_id: events_signals
-  fact_type: core.events
+  fact_type: mart.signals.SignalFeedService
   coverage_status: PARTIAL
   scope: PARTIAL
-  definition: PARTIAL
+  definition: COMPLETE
   components: PARTIAL
-  comparison: PARTIAL
-  rule: PARTIAL
-  run: PARTIAL
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
   source_evidence: PARTIAL
   quality: PARTIAL
   missing_fields:
-  - dashboard_query_provenance_object
   - source_row_ids
+  - ui_signal_detail_drawer
   UI_provenance_supported: false
   applicability:
     tab: Сигналы

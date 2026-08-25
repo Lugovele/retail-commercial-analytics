@@ -200,8 +200,60 @@ retailers:
     assert metadata["runtime_mode"] == "PRIVATE"
     assert metadata["retailers"][0]["display_label"] == "Retailer A Runtime"
     assert metadata["retailers"][0]["default_mart_build_id"] == "build_dashboard_synthetic"
+    assert metadata["signal_feed_configured"] is False
     assert runtime.query_service.metric_facts_path == tmp_path / "demo" / "synthetic_metric_facts.parquet"
     assert len(runtime.catalog) == 1
+
+
+def test_private_runtime_rejects_configured_missing_signal_artifacts(tmp_path) -> None:
+    demo = build_synthetic_dashboard_runtime(tmp_path / "demo")
+    builds_path = tmp_path / "mart_run_metadata" / "build.parquet"
+    ledger_path = tmp_path / "mart_source_ledger" / "ledger.parquet"
+    private_catalog_path = tmp_path / "private_dashboard_metric_catalog.yaml"
+    config_path = tmp_path / "dashboard_runtime.yaml"
+    write_mart_build_metadata(demo.query_service.mart_builds, builds_path)
+    write_source_ledger(demo.query_service.source_ledger, ledger_path)
+    private_catalog_path.write_text(
+        """
+overrides:
+  - retailer_id: retailer_a
+    source_id: source_a
+    metric_definition_id: retailer_a.network.revenue_vat.v1
+    metric_definition_version: v1
+    metric_concept: revenue_vat
+    display_label: Оборот с НДС
+    grain_support: [network]
+    period_support: [month]
+    comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    availability_status: READY
+    metric_config_hash: metric_hash_dashboard_synthetic
+    rule_version: rules_dashboard_synthetic_v1
+    private_label_scope_support: [INCLUDE, EXCLUDE, ONLY]
+""".strip(),
+        encoding="utf-8",
+    )
+    config_path.write_text(
+        f"""
+mode: PRIVATE
+metric_facts_path: {(tmp_path / "demo" / "synthetic_metric_facts.parquet").as_posix()}
+mart_builds_path: {builds_path.as_posix()}
+source_ledger_path: {ledger_path.as_posix()}
+events_path: {(tmp_path / "missing_events.parquet").as_posix()}
+public_metric_catalog_path: {Path("config/public/dashboard_metric_catalog.yaml").resolve().as_posix()}
+private_metric_catalog_path: {private_catalog_path.as_posix()}
+retailers:
+  - retailer_id: retailer_a
+    display_label: Retailer A Runtime
+    source_id: source_a
+    source_label: Source A Runtime
+""".strip(),
+        encoding="utf-8",
+    )
+
+    config = load_dashboard_runtime_config(config_path, mode=DashboardRuntimeMode.PRIVATE)
+
+    with pytest.raises(FileNotFoundError, match="missing_events.parquet"):
+        build_private_dashboard_runtime(config)
 
 
 def test_public_ui_assets_do_not_hardcode_private_retailer_terms() -> None:
