@@ -16,6 +16,8 @@ const state = {
   signalsLoadStatus: "idle",
   signalKindFilter: "all",
   signalGrainFilter: "all",
+  dataResponse: null,
+  dataPageOffset: 0,
   activeView: "overview",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
@@ -246,6 +248,7 @@ function bindStaticControls() {
         item.classList.toggle("is-active", item === button);
       });
       updatePeriodPanels();
+      resetDataPagination();
       await runActiveViewQuery();
     });
   });
@@ -269,6 +272,14 @@ function bindStaticControls() {
       renderSignals();
     });
   });
+  document.getElementById("data-prev-page")?.addEventListener("click", async () => {
+    state.dataPageOffset = Math.max(0, state.dataPageOffset - state.tablePageSize);
+    await runDataQuery();
+  });
+  document.getElementById("data-next-page")?.addEventListener("click", async () => {
+    state.dataPageOffset += state.tablePageSize;
+    await runDataQuery();
+  });
   document.querySelectorAll("[data-header-action]").forEach((button) => {
     if (button.disabled) return;
     button.addEventListener("click", () => {
@@ -285,6 +296,7 @@ function bindStaticControls() {
   document.getElementById("scrim").addEventListener("click", closeReportsPanel);
   document.getElementById("reset-filters").addEventListener("click", async () => {
     resetAllEntityFilters();
+    resetDataPagination();
     await refreshRuntimeOptions();
     updatePreviewGrain();
     await runActiveViewQuery();
@@ -343,6 +355,10 @@ function updatePressedGroup(selector, datasetKey, activeValue) {
   });
 }
 
+function resetDataPagination() {
+  state.dataPageOffset = 0;
+}
+
 function setupRetailerControl() {
   const retailerSelect = document.getElementById("retailer-select");
   retailerSelect.replaceChildren(
@@ -352,6 +368,7 @@ function setupRetailerControl() {
   renderRetailerIdentity();
   retailerSelect.addEventListener("change", async () => {
     resetAllEntityFilters();
+    resetDataPagination();
     renderRetailerIdentity();
     await loadCatalog();
     await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
@@ -380,10 +397,12 @@ function renderRetailerIdentity() {
 function bindDynamicControls() {
   document.getElementById("comparison-mode").addEventListener("change", async (event) => {
     state.comparisonMode = event.target.value;
+    resetDataPagination();
     await runActiveViewQuery();
   });
   document.getElementById("private-label-toggle").addEventListener("change", async (event) => {
     document.getElementById("private-label-scope").value = event.target.checked ? "INCLUDE" : "EXCLUDE";
+    resetDataPagination();
     await refreshRuntimeOptions({ resetEntities: true });
     await runActiveViewQuery();
   });
@@ -408,6 +427,7 @@ function bindDynamicControls() {
     select.addEventListener("change", async () => {
       resetChildFilters(id);
       applyFilterDrilldown(id);
+      resetDataPagination();
       await refreshRuntimeOptions();
       updatePreviewGrain();
       await runActiveViewQuery();
@@ -433,6 +453,7 @@ function bindDynamicControls() {
   document.querySelectorAll("[data-clear-filter]").forEach((button) => {
     button.addEventListener("click", async () => {
       clearEntityFilter(button.dataset.clearFilter);
+      resetDataPagination();
       await refreshRuntimeOptions();
       updatePreviewGrain();
       await runActiveViewQuery();
@@ -441,6 +462,7 @@ function bindDynamicControls() {
 
   ["period-single", "period-a", "date-from", "date-to"].forEach((id) => {
     document.getElementById(id).addEventListener("change", async () => {
+      resetDataPagination();
       await refreshRuntimeOptions({ resetEntities: true });
       await runActiveViewQuery();
     });
@@ -512,6 +534,10 @@ async function runActiveViewQuery() {
   }
   if (state.activeView === "signals") {
     await runSignalsQuery();
+    return;
+  }
+  if (state.activeView === "data") {
+    await runDataQuery();
     return;
   }
   if (state.activeView === "overview") {
@@ -623,6 +649,20 @@ async function runSignalsQuery() {
   } catch (error) {
     state.signalsResponse = null;
     state.signalsLoadStatus = "error";
+    setLoading(false, "Не удалось загрузить данные.");
+    showPageError(error);
+  }
+}
+
+async function runDataQuery() {
+  setLoading(true, "Запрос к данным");
+  renderDataSkeletons();
+  try {
+    state.dataResponse = await postJson("/api/dashboard/data", buildDataPayload());
+    renderDataScreen();
+    setLoading(false, "Данные обновлены");
+  } catch (error) {
+    state.dataResponse = null;
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
@@ -743,6 +783,26 @@ function buildSignalsPayload() {
     private_label_scope: document.getElementById("private-label-scope").value,
     signal_types: ["COMMERCIAL_SIGNAL", "DETERMINISTIC_PATTERN", "DATA_QUALITY_ALERT"],
     limit: 50
+  };
+}
+
+function buildDataPayload() {
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: selectedDateFrom(),
+    date_to: selectedDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    grain_id: state.currentGrain,
+    entity_ids: entityIdsForSummary(),
+    entity_filters: selectedFilterValuesForPortfolio(),
+    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value,
+    limit: state.tablePageSize,
+    offset: state.dataPageOffset
   };
 }
 
@@ -1449,6 +1509,187 @@ function signalFeedContextText(total, filtered) {
   return `Показано ${filtered} из ${total} по локальному фильтру.`;
 }
 
+function renderDataSkeletons() {
+  replaceWithMessage(document.getElementById("data-coverage-grid"), "loading-state compact", "Загрузка покрытия периодов...");
+  replaceWithMessage(document.getElementById("data-quality-summary"), "loading-state compact", "Проверка качества данных...");
+  renderMessageRow(document.getElementById("data-source-table"), "Загрузка строк для проверки...");
+  replaceWithMessage(document.getElementById("data-audit-content"), "loading-state compact", "Загрузка аудита расчёта...");
+}
+
+function renderDataScreen() {
+  const response = state.dataResponse;
+  updateFilterCount();
+  updateActiveFilterChips();
+  renderBreadcrumb();
+  document.getElementById("context-strip").textContent = [
+    periodContextText(response),
+    contextFilterText(),
+    privateLabelScopeText(response?.private_label_scope || document.getElementById("private-label-scope").value)
+  ].filter(Boolean).join(" · ");
+  document.getElementById("context-coverage-note").textContent = dataAvailabilityNote(response);
+  document.getElementById("data-context").textContent = "Текущий аналитический набор данных, покрытие, качество и проверка расчёта.";
+  renderDataAvailability();
+  renderDataQuality();
+  renderDataRows();
+  renderDataAudit();
+}
+
+function renderDataAvailability() {
+  const target = document.getElementById("data-coverage-grid");
+  const grid = state.dataResponse?.coverage_grid;
+  if (!grid || grid.status !== "READY") {
+    replaceWithMessage(target, "empty-state compact", "Покрытие периодов недоступно для текущего набора данных.");
+    return;
+  }
+  const table = document.createElement("table");
+  table.className = "availability-table";
+  const tbody = document.createElement("tbody");
+  (grid.years || []).forEach((yearRow) => {
+    const row = document.createElement("tr");
+    const yearHeader = document.createElement("th");
+    yearHeader.scope = "row";
+    yearHeader.textContent = yearRow.year;
+    row.appendChild(yearHeader);
+    (yearRow.months || []).forEach((month) => {
+      const cell = document.createElement("td");
+      cell.className = month.available ? "available" : "missing";
+      cell.setAttribute("aria-label", `${month.label}: ${month.available ? "есть данные" : "нет данных"}`);
+      appendText(cell, "span", month.available ? "●" : "—");
+      appendText(cell, "small", month.label);
+      row.appendChild(cell);
+    });
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  target.replaceChildren(table);
+}
+
+function renderDataQuality() {
+  const target = document.getElementById("data-quality-summary");
+  const quality = state.dataResponse?.quality_summary;
+  if (!quality) {
+    replaceWithMessage(target, "empty-state compact", "Сводка качества недоступна.");
+    return;
+  }
+  const items = [
+    ["Статус витрины", martBuildStatusText(quality.mart_build_status)],
+    ["Активные ревизии", quality.active_revision_count ?? "н/д"],
+    ["Строки источника", formatValue(quality.source_row_count, "integer")],
+    ["Строки витрины", formatValue(quality.fact_row_count, "integer")],
+    ["Проверки", quality.warnings?.length ? `${quality.warnings.length} требует внимания` : "доступные проверки без предупреждений"]
+  ];
+  const list = document.createElement("div");
+  list.className = "quality-list";
+  items.forEach(([label, value]) => {
+    const item = document.createElement("div");
+    appendText(item, "span", label);
+    appendText(item, "strong", value);
+    list.appendChild(item);
+  });
+  if (quality.warnings?.length) {
+    const warning = document.createElement("p");
+    warning.className = "quality-warning";
+    warning.textContent = "Есть предупреждения качества. Подробности доступны в аудите расчёта.";
+    list.appendChild(warning);
+  }
+  target.replaceChildren(list);
+}
+
+function renderDataRows() {
+  const table = document.getElementById("data-source-table");
+  const rowsPayload = state.dataResponse?.source_like_rows;
+  const prev = document.getElementById("data-prev-page");
+  const next = document.getElementById("data-next-page");
+  if (!rowsPayload || rowsPayload.status !== "READY") {
+    document.getElementById("data-rows-context").textContent =
+      "Проверочный набор строк не подключён для текущего режима; аналитические расчёты остаются доступными.";
+    renderMessageRow(table, "Строки для проверки пока недоступны для текущего набора данных.");
+    prev.disabled = true;
+    next.disabled = true;
+    return;
+  }
+  const columns = rowsPayload.columns || [];
+  const rows = rowsPayload.rows || [];
+  document.getElementById("data-rows-context").textContent =
+    `Показано ${rows.length} из ${rowsPayload.total_count || 0}. Строки ограничены выбранным срезом.`;
+  const thead = table.querySelector("thead") || document.createElement("thead");
+  const tbody = table.querySelector("tbody") || document.createElement("tbody");
+  const headerRow = document.createElement("tr");
+  columns.forEach((column) => appendText(headerRow, "th", dataColumnLabel(column)));
+  thead.replaceChildren(headerRow);
+  if (!rows.length) {
+    renderMessageRow(table, "Для выбранного среза строк не найдено.");
+  } else {
+    tbody.replaceChildren(...rows.map((row) => {
+      const tr = document.createElement("tr");
+      columns.forEach((column) => appendText(tr, "td", dataCellText(row[column], column)));
+      return tr;
+    }));
+    table.replaceChildren(thead, tbody);
+  }
+  const offset = rowsPayload.offset || 0;
+  const limit = rowsPayload.limit || state.tablePageSize;
+  const total = rowsPayload.total_count || 0;
+  prev.disabled = offset <= 0;
+  next.disabled = offset + limit >= total;
+}
+
+function renderDataAudit() {
+  const target = document.getElementById("data-audit-content");
+  const audit = state.dataResponse?.audit;
+  if (!audit) {
+    replaceWithMessage(target, "empty-state compact", "Аудит расчёта недоступен.");
+    return;
+  }
+  target.replaceChildren(section(null, [
+    ["Ревизии источника", compactList((audit.source_revisions || []).map((item) => item.source_revision_id))],
+    ["Статус обработки", compactList((audit.source_revisions || []).map((item) => item.processing_status))],
+    ["Периоды источника", compactList(audit.coverage_periods)],
+    ["Версия аналитической витрины", audit.mart_build?.mart_build_id || "н/д"],
+    ["Статус витрины", martBuildStatusText(audit.mart_build?.status)],
+    ["Запуск анализа", compactList(audit.mart_build?.analysis_run_ids)],
+    ["Версии правил", compactList(audit.mart_build?.rule_versions)],
+    ["Учёт ассортимента", privateLabelScopeText(audit.private_label_scope)]
+  ]));
+}
+
+function dataAvailabilityNote(response) {
+  const periods = response?.coverage_grid?.available_periods || [];
+  if (!periods.length) return "Покрытие периодов не найдено.";
+  return `${periods.length} ${pluralRu(periods.length, "период доступен", "периода доступны", "периодов доступны")}.`;
+}
+
+function dataColumnLabel(column) {
+  return {
+    period: "Период",
+    category: "Категория",
+    manufacturer: "Производитель",
+    brand: "Бренд",
+    sku_name: "SKU",
+    units: "Продажи, шт.",
+    revenue_vat: "Оборот с НДС",
+    private_label_flag: "Признак ассортимента"
+  }[column] || column;
+}
+
+function dataCellText(value, column) {
+  if (value === null || value === undefined || value === "") return "—";
+  if (column === "period") return formatPeriod(value);
+  if (column === "private_label_flag") return value ? "да" : "нет";
+  if (column === "units") return formatValue(Number(value), "integer");
+  if (column === "revenue_vat") return formatValue(Number(value), "currency");
+  return String(value);
+}
+
+function martBuildStatusText(status) {
+  return {
+    approved: "утверждена",
+    built: "собрана",
+    superseded: "заменена",
+    failed: "ошибка"
+  }[status] || status || "н/д";
+}
+
 function signalObjectLabel(row) {
   const grain = row.object_grain || state.currentGrain;
   const label = entityDisplayLabel(grain, row.object_id);
@@ -2093,6 +2334,7 @@ async function activateBreadcrumbGrain(grain) {
   state.currentGrain = grain;
   renderBreadcrumb();
   updatePreviewGrain();
+  resetDataPagination();
   await refreshRuntimeOptions();
   await runActiveViewQuery();
 }
@@ -2291,6 +2533,7 @@ async function selectComboboxValue(id, item) {
   closeCombobox(id);
   resetChildFilters(id);
   applyFilterDrilldown(id);
+  resetDataPagination();
   await refreshRuntimeOptions();
   updatePreviewGrain();
   await runActiveViewQuery();
@@ -2855,6 +3098,7 @@ function updateActiveFilterChips() {
     chip.setAttribute("aria-label", `Очистить фильтр ${grainLabels[key]}`);
     chip.addEventListener("click", async () => {
       clearEntityFilter(key);
+      resetDataPagination();
       await refreshRuntimeOptions();
       updatePreviewGrain();
       await runActiveViewQuery();
@@ -3431,7 +3675,9 @@ function showPageError(error) {
         ? document.getElementById("stores-ranking")
         : state.activeView === "signals"
           ? document.getElementById("signals-list")
-          : document.getElementById("chart-box");
+          : state.activeView === "data"
+            ? document.getElementById("data-coverage-grid")
+            : document.getElementById("chart-box");
   replaceWithMessage(target, "error-state", "Не удалось загрузить данные. Повторите попытку.");
   if (state.activeView === "signals") {
     replaceWithMessage(
@@ -3439,6 +3685,11 @@ function showPageError(error) {
       "error-state compact",
       "Доступность ленты не удалось проверить. Повторите попытку.",
     );
+  }
+  if (state.activeView === "data") {
+    replaceWithMessage(document.getElementById("data-quality-summary"), "error-state compact", "Качество данных не удалось проверить.");
+    renderMessageRow(document.getElementById("data-source-table"), "Строки для проверки не удалось загрузить.");
+    replaceWithMessage(document.getElementById("data-audit-content"), "error-state compact", "Аудит расчёта не удалось загрузить.");
   }
   showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
 }

@@ -425,12 +425,60 @@
           </section>
         </section>
 
-        <section class="dashboard-view section-shell is-hidden" data-view-panel="data" aria-labelledby="data-title">
-          <div class="section-shell-content">
-            <p class="eyebrow">данные и аудит</p>
-            <h2 id="data-title">Данные</h2>
-            <p>Раздел будет подключён для просмотра загрузок, покрытия, качества данных и аудита.</p>
+        <section class="dashboard-view data-layout is-hidden" data-view-panel="data" aria-labelledby="data-title">
+          <div class="screen-heading">
+            <div>
+              <p class="eyebrow">данные и аудит</p>
+              <h2 id="data-title">Данные</h2>
+              <p id="data-context">Текущий аналитический набор данных, покрытие, качество и проверка расчёта.</p>
+            </div>
           </div>
+
+          <section class="surface data-coverage-panel" aria-label="Покрытие периодов">
+            <div class="panel-heading tight">
+              <div>
+                <h3>Покрытие периодов</h3>
+                <p>Доступные периоды показаны как календарная сетка, без дорисовки пропущенных месяцев.</p>
+              </div>
+            </div>
+            <div class="availability-grid" id="data-coverage-grid" aria-live="polite"></div>
+          </section>
+
+          <section class="surface data-quality-panel" aria-label="Качество данных">
+            <div class="panel-heading tight">
+              <div>
+                <h3>Качество</h3>
+                <p>Результаты доступных детерминированных проверок для текущей аналитической витрины.</p>
+              </div>
+            </div>
+            <div class="quality-summary" id="data-quality-summary" aria-live="polite"></div>
+          </section>
+
+          <section class="surface data-source-panel" aria-label="Данные для проверки">
+            <div class="panel-heading tight">
+              <div>
+                <h3>Строки для проверки</h3>
+                <p id="data-rows-context">Постраничный просмотр утверждённого проверочного набора.</p>
+              </div>
+              <div class="table-actions">
+                <button type="button" class="ghost-button" id="data-prev-page">Назад</button>
+                <button type="button" class="ghost-button" id="data-next-page">Дальше</button>
+              </div>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table" id="data-source-table">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="surface data-audit-panel" aria-label="Аудит расчёта">
+            <details class="audit-details" id="data-audit-details">
+              <summary>Аудит расчёта</summary>
+              <div id="data-audit-content"></div>
+            </details>
+          </section>
         </section>
       </main>
     </div>

@@ -1306,6 +1306,118 @@ th:first-child {
   margin-top: var(--space-2);
 }
 
+.data-layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.dashboard-view.is-hidden {
+  display: none;
+}
+
+.availability-grid {
+  overflow-x: auto;
+}
+
+.availability-table {
+  width: auto;
+  min-width: 0;
+  border-collapse: separate;
+  border-spacing: var(--space-1);
+}
+
+.availability-table th,
+.availability-table td {
+  width: 56px;
+  min-width: 56px;
+  padding: var(--space-2);
+  text-align: center;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.availability-table th {
+  color: var(--brand-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.availability-table td.available {
+  color: var(--brand-primary);
+  border-color: color-mix(in srgb, var(--brand-primary) 24%, var(--border-default));
+  background: color-mix(in srgb, var(--brand-primary) 8%, var(--bg-surface));
+}
+
+.availability-table td.missing {
+  color: var(--text-muted);
+}
+
+.availability-table span {
+  display: block;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.availability-table small {
+  display: block;
+  margin-top: var(--space-1);
+  color: var(--text-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.quality-list {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+
+.quality-list div {
+  padding: var(--space-3);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-subtle);
+}
+
+.quality-list span {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.quality-list strong {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.quality-warning {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: var(--space-3);
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border-default));
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--warning) 8%, var(--bg-surface));
+}
+
+.data-audit-panel {
+  padding: 0;
+}
+
+.audit-details {
+  padding: var(--space-4);
+}
+
+.audit-details summary {
+  color: var(--brand-primary);
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 650;
+}
+
 th:first-child {
   background: var(--bg-subtle);
 }
@@ -1498,6 +1610,10 @@ th:first-child {
   .store-ranking-row strong {
     grid-column: 2;
   }
+
+  .quality-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 900px) {
@@ -1525,6 +1641,10 @@ th:first-child {
   .store-ranking-row strong {
     grid-column: auto;
     text-align: left;
+  }
+
+  .quality-list {
+    grid-template-columns: 1fr;
   }
 
   .panel-heading,

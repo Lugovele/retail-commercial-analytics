@@ -10,6 +10,11 @@ from typing import Any
 from urllib.parse import parse_qs
 from wsgiref.types import StartResponse, WSGIApplication, WSGIEnvironment
 
+from retail_analytics.dashboard.data import (
+    DashboardDataService,
+    build_data_request,
+    data_response_to_dict,
+)
 from retail_analytics.dashboard.runtime import (
     DashboardRuntime,
     build_dashboard_runtime,
@@ -45,6 +50,12 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
         events_path=resolved_runtime.events_path,
         event_rules_path=resolved_runtime.event_rules_path,
         mart_builds=resolved_runtime.query_service.mart_builds,
+    )
+    data_service = DashboardDataService(
+        resolved_runtime.query_service.metric_facts_path,
+        mart_builds=resolved_runtime.query_service.mart_builds,
+        source_ledger=resolved_runtime.query_service.source_ledger,
+        source_like_rows_path=resolved_runtime.source_like_rows_path,
     )
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
@@ -107,8 +118,13 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 signal_request = build_signal_feed_request(payload)
                 signal_response = signal_feed_service.feed(signal_request)
                 return _json_response(start_response, serialize_signal_feed_response(signal_response))
+            if method == "POST" and path == "/api/dashboard/data":
+                payload = _read_json(environ)
+                data_request = build_data_request(payload)
+                data_response = data_service.query(data_request)
+                return _json_response(start_response, data_response_to_dict(data_response))
             return _json_response(start_response, {"error": "not_found"}, status="404 Not Found")
-        except (FileNotFoundError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             return _json_response(
                 start_response,
                 {"error": type(exc).__name__, "message": str(exc)},

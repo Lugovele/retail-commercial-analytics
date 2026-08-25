@@ -3,11 +3,16 @@ from __future__ import annotations
 import io
 import json
 from collections.abc import Iterable
+from dataclasses import replace
+from datetime import date
 from pathlib import Path
 from typing import Any
 from wsgiref.types import WSGIApplication
 
+import polars as pl
+
 from retail_analytics.dashboard import build_synthetic_dashboard_runtime, create_dashboard_wsgi_app
+from retail_analytics.mart import DashboardMartQueryService
 
 
 def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> None:
@@ -262,6 +267,197 @@ def test_dashboard_signals_route_returns_empty_product_contract_without_demo_eve
     assert response["data_quality_alerts"] == []
     assert response["capability_limitations"][0]["code"] == "signal_events_path_not_configured"
     assert response["private_label_scope"] == "INCLUDE"
+
+
+def test_dashboard_data_route_returns_coverage_quality_source_rows_and_audit(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/data",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "comparison_mode": "NONE",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+            "limit": 1,
+            "offset": 0,
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["coverage_grid"]["status"] == "READY"
+    assert response["coverage_grid"]["available_periods"][0] == "2025-03-01"
+    assert response["quality_summary"]["summary"] == "deterministic_checks"
+    assert response["quality_summary"]["mart_build_status"] == "approved"
+    assert response["source_like_rows"]["status"] == "READY"
+    assert response["source_like_rows"]["limit"] == 1
+    assert response["source_like_rows"]["offset"] == 0
+    assert response["source_like_rows"]["total_count"] == 2
+    assert response["source_like_rows"]["columns"] == [
+        "period",
+        "category",
+        "manufacturer",
+        "brand",
+        "sku_name",
+        "units",
+        "revenue_vat",
+        "private_label_flag",
+    ]
+    assert len(response["source_like_rows"]["rows"]) == 1
+    assert response["audit"]["mart_build"]["mart_build_id"] == "build_dashboard_synthetic"
+    assert response["audit"]["source_revisions"]
+    assert "source_like_rows_not_configured" not in response["limitations"]
+
+
+def test_dashboard_data_route_scopes_private_label_and_missing_source_like_rows(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/data",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "comparison_mode": "NONE",
+            "private_label_scope": "EXCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["source_like_rows"]["status"] == "READY"
+    assert response["source_like_rows"]["total_count"] == 1
+    assert all(not row["private_label_flag"] for row in response["source_like_rows"]["rows"])
+
+    app_without_rows = create_dashboard_wsgi_app(build_synthetic_dashboard_runtime(tmp_path / "no-source-like"))
+    status, _, body = _call(
+        app_without_rows,
+        "POST",
+        "/api/dashboard/data",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "comparison_mode": "NONE",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    not_configured = json.loads(body)
+
+    assert status.startswith("200")
+    assert not_configured["source_like_rows"]["status"] == "NOT_CONFIGURED"
+    assert "source_like_rows_not_configured" in not_configured["limitations"]
+
+
+def test_dashboard_data_route_uses_current_build_revisions_for_rows_and_coverage(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")
+    stale_entry = replace(
+        runtime.query_service.source_ledger[0],
+        source_revision_id="revision_dashboard_stale",
+        observed_periods=(date(2024, 1, 1),),
+        business_period_ids=("2024-01-01",),
+        active_business_period_ids=("2024-01-01",),
+        period_start=date(2024, 1, 1),
+        period_end=date(2024, 1, 1),
+        row_count=999,
+        is_active_revision=False,
+    )
+    runtime = replace(
+        runtime,
+        source_like_rows_path=source_rows_path,
+        query_service=DashboardMartQueryService(
+            runtime.query_service.metric_facts_path,
+            catalog=runtime.query_service.catalog,
+            mart_builds=runtime.query_service.mart_builds,
+            source_ledger=(*runtime.query_service.source_ledger, stale_entry),
+        ),
+    )
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/data",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "comparison_mode": "NONE",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+            "limit": 10,
+            "offset": 0,
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert "2024-01-01" not in response["coverage_grid"]["available_periods"]
+    assert response["source_like_rows"]["total_count"] == 2
+    assert {
+        row["source_revision_id"]
+        for row in response["source_like_rows"]["rows"]
+        if "source_revision_id" in row
+    } == set()
+
+
+def _write_source_like_rows(path: Path) -> Path:
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a", "retailer_a", "retailer_b"],
+            "source_id": ["source_a", "source_a", "source_a", "source_b"],
+            "source_revision_id": [
+                "revision_dashboard_synthetic",
+                "revision_dashboard_synthetic",
+                "revision_dashboard_stale",
+                "revision_dashboard_synthetic",
+            ],
+            "period": ["2026-06-01", "2026-06-01", "2026-06-01", "2026-06-01"],
+            "category": ["CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD"],
+            "manufacturer": ["Manufacturer A", "Manufacturer B", "Manufacturer Stale", "Manufacturer X"],
+            "brand": ["Brand A", "Brand B", "Brand Stale", "Brand X"],
+            "sku_name": ["SKU A", "SKU B", "SKU Stale", "SKU X"],
+            "canonical_product_id": ["SKU_A_001", "SKU_B_001", "SKU_STALE", "SKU_X_001"],
+            "canonical_store_id": ["STORE_001", "STORE_002", "STORE_STALE", "STORE_X"],
+            "units": [10.0, 5.0, 999.0, 99.0],
+            "revenue_vat": [100.0, 50.0, 9990.0, 990.0],
+            "private_label_flag": [False, True, False, False],
+        }
+    ).write_parquet(path)
+    return path
 
 
 def _call(

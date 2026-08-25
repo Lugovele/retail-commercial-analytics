@@ -201,6 +201,7 @@ retailers:
     assert metadata["retailers"][0]["display_label"] == "Retailer A Runtime"
     assert metadata["retailers"][0]["default_mart_build_id"] == "build_dashboard_synthetic"
     assert metadata["signal_feed_configured"] is False
+    assert metadata["source_like_rows_configured"] is False
     assert runtime.query_service.metric_facts_path == tmp_path / "demo" / "synthetic_metric_facts.parquet"
     assert len(runtime.catalog) == 1
 
@@ -342,9 +343,9 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
         'data-view-panel="data"',
     )
     assert all(panel in html for panel in expected_panels)
-    assert "Раздел будет подключён" in html
-    assert "загрузок, покрытия, качества данных и аудита" in html
-    shell_text = html.split('<section class="dashboard-view section-shell', 1)[1]
+    assert "Раздел будет подключён" not in html
+    assert "Текущий аналитический набор данных, покрытие, качество и проверка расчёта." in html
+    shell_text = html.split('<nav class="workflow-nav"', 1)[1].split("</nav>", 1)[0]
     forbidden_shell_terms = (
         "backend",
         "runtime",
@@ -478,6 +479,60 @@ def test_signals_screen_preserves_error_state_on_local_filter_clicks() -> None:
     assert "Доступность ленты не удалось проверить. Повторите попытку." in error_state_function
     assert "Для выбранного среза нет подтверждённых сигналов." not in error_state_function
     assert "Ограничений доступности для выбранного среза нет." not in error_state_function
+
+
+def test_data_screen_implements_current_dataset_coverage_quality_rows_and_audit() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+    css = html_or_script("styles.css")
+
+    data_panel = html.split('data-view-panel="data"', 1)[1].split("</main>", 1)[0]
+    assert 'id="data-coverage-grid"' in data_panel
+    assert 'id="data-quality-summary"' in data_panel
+    assert 'id="data-source-table"' in data_panel
+    assert 'id="data-audit-details"' in data_panel
+    assert "Покрытие периодов" in data_panel
+    assert "Качество" in data_panel
+    assert "Строки для проверки" in data_panel
+    assert "Аудит расчёта" in data_panel
+    assert "Раздел будет подключён" not in data_panel
+    assert "ОТЧЁТЫ" not in data_panel
+
+    assert 'if (state.activeView === "data")' in script
+    assert 'state.dataResponse = await postJson("/api/dashboard/data", buildDataPayload());' in script
+    assert "function renderDataAvailability()" in script
+    assert "function renderDataQuality()" in script
+    assert "function renderDataRows()" in script
+    assert "function renderDataAudit()" in script
+    assert "function buildSvgChart" not in script.split("function renderDataAvailability()", 1)[1].split("function renderDataQuality()", 1)[0]
+    assert 'yearHeader.scope = "row"' in script
+    assert "function resetDataPagination()" in script
+    assert "state.dataPageOffset = 0;" in script
+    assert "resetDataPagination();" in script.split("async function selectComboboxValue", 1)[1].split("function handleComboboxKeydown", 1)[0]
+    assert "resetDataPagination();" in script.split("async function activateBreadcrumbGrain", 1)[1].split("function breadcrumbLabel", 1)[0]
+    assert "resetDataPagination();" in script.split("function updateActiveFilterChips", 1)[1].split("function entityDisplayLabel", 1)[0]
+    assert 'table.querySelector("thead") || document.createElement("thead")' in script
+    assert "table.replaceChildren(thead, tbody);" in script
+    assert "source_like_rows" in script
+    assert "source_like_rows_path" not in script
+    assert "Проверочный набор строк" in script
+    assert "Строки для проверки пока недоступны в этом runtime." not in script
+    assert "availability-table" in css
+    assert "quality-list" in css
+    assert "audit-details" in css
+    assert ".dashboard-view.is-hidden" in css
+
+
+def test_data_screen_error_state_clears_all_loading_blocks() -> None:
+    script = html_or_script("app.js")
+
+    show_error_function = script.split("function showPageError(error)", 1)[1].split("function showToast", 1)[0]
+    assert 'state.activeView === "data"' in show_error_function
+    assert 'document.getElementById("data-coverage-grid")' in show_error_function
+    assert 'document.getElementById("data-quality-summary")' in show_error_function
+    assert 'document.getElementById("data-source-table")' in show_error_function
+    assert 'document.getElementById("data-audit-content")' in show_error_function
+    assert "Строки для проверки не удалось загрузить." in show_error_function
 
 
 def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() -> None:
