@@ -418,12 +418,17 @@ All analytical controls belong to one compact row:
 
 The period control is collapsed in the row and opens a popover for single,
 comparison, and full-range modes. Network/report identity must use display
-metadata, never internal ids. Large lists require both browse and searchable
-combobox/typeahead; typing filters options locally and must not trigger a full
-analytics reload before selection. Filter hierarchy is category to manufacturer
-to brand to SKU. Store is orthogonal. Do not duplicate filter bars, selected
-filter chips, or long current-scope sentences per section. Breadcrumbs represent
-analytical drilldown, not filters or the full technical query state.
+metadata, never internal ids. Category, manufacturer, brand, SKU, and store are
+multi-select filters: selected values inside one filter are combined with OR,
+while different filters are combined with AND. Filter popovers stage selections
+until Apply; typing or checking pending values must not trigger a full analytics
+reload. Large lists require both browse and searchable combobox/typeahead; typed
+search filters options locally and ranks exact, prefix, word-prefix, then
+contains matches. Filter hierarchy is category to manufacturer to brand to SKU,
+and invalid child selections are cleared automatically. Store is orthogonal. Do
+not duplicate filter bars, selected filter chips, or long current-scope
+sentences per section. Breadcrumbs represent analytical drilldown, not filters
+or the full technical query state.
 
 ## Readiness Gating
 

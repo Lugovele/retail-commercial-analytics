@@ -192,9 +192,10 @@ def _optional_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
 
 
-def _parent_filters(params: dict[str, list[str]]) -> dict[str, str]:
-    return {
-        key: value
-        for key in ("category", "manufacturer", "brand", "sku", "store")
-        if (value := _first(params, key))
-    }
+def _parent_filters(params: dict[str, list[str]]) -> dict[str, tuple[str, ...]]:
+    filters: dict[str, tuple[str, ...]] = {}
+    for key in ("category", "manufacturer", "brand", "sku", "store"):
+        values = tuple(value for value in params.get(key, ()) if value)
+        if values:
+            filters[key] = values
+    return filters

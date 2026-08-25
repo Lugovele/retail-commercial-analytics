@@ -63,9 +63,14 @@ The period control is collapsed in the row and opens a popover for:
 
 Network/report identity must use runtime display metadata in the primary UI,
 never internal ids such as `retailer_a` or `source_001`. Secondary filters show
-their selected value in the control itself; selected values must not be repeated
-in a second chip row or long scope sentence. `Сбросить` appears only for active
-optional filters and must not reset network or primary period accidentally.
+their selected values in the control itself; selected values must not be repeated
+in a second chip row or long scope sentence. Category, manufacturer, brand, SKU,
+and store support multi-select: OR inside one filter, AND across different
+filters. Filter popovers stage changes until Apply, so browse/typeahead does not
+reload analytics before a confirmed selection. Parent filter changes clear
+invalid child selections across category -> manufacturer -> brand -> SKU. Store
+remains orthogonal. `Сбросить` appears only for active optional filters and must
+not reset network or primary period accidentally.
 
 Breadcrumbs represent drilldown only:
 

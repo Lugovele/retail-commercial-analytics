@@ -45,6 +45,16 @@ SUPPORTED_COMPARISON_MODES = ("NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE")
 SUPPORTED_PRIVATE_LABEL_SCOPES = ("INCLUDE", "EXCLUDE", "ONLY")
 DEFAULT_DASHBOARD_CONFIG_ENV = "RETAIL_ANALYTICS_DASHBOARD_CONFIG"
 DEFAULT_DASHBOARD_MODE_ENV = "RETAIL_ANALYTICS_DASHBOARD_MODE"
+SOURCE_LIKE_ENTITY_COLUMNS = {
+    "category": "category",
+    "manufacturer": "manufacturer",
+    "brand": "brand",
+    "sku": "canonical_product_id",
+    "store": "canonical_store_id",
+}
+SOURCE_LIKE_LABEL_COLUMNS = {
+    "store": ("store_display_label", "store_display_name", "store_name", "source_store_id", "canonical_store_id"),
+}
 ENTITY_PARENT_FILTERS = {
     "network": (),
     "category": (),
@@ -179,11 +189,12 @@ class DashboardRuntime:
         private_label_scope: str | PrivateLabelScope = PrivateLabelScope.INCLUDE,
         date_from: date | None = None,
         date_to: date | None = None,
-        parent_filters: dict[str, str] | None = None,
+        parent_filters: dict[str, tuple[str, ...]] | None = None,
     ) -> dict[str, Any]:
         """Return period and entity filter options from persisted mart facts."""
 
         scope = PrivateLabelScope(private_label_scope)
+        runtime_retailer = _runtime_retailer_for_scope(self.retailers, retailer_id, source_id)
         return {
             "periods": _period_options(self.query_service.metric_facts_path, retailer_id, source_id, scope),
             "entities": _entity_options(
@@ -194,6 +205,13 @@ class DashboardRuntime:
                 date_from=date_from,
                 date_to=date_to,
                 parent_filters=parent_filters or {},
+                source_like_rows_path=self.source_like_rows_path,
+                source_revision_ids=_source_revision_ids_for_options(
+                    self.query_service.mart_builds,
+                    retailer_id,
+                    source_id,
+                    runtime_retailer.default_mart_build_id if runtime_retailer else None,
+                ),
             ),
         }
 
@@ -448,8 +466,32 @@ def _entity_options(
     *,
     date_from: date | None,
     date_to: date | None,
-    parent_filters: dict[str, str],
+    parent_filters: dict[str, tuple[str, ...]],
+    source_like_rows_path: Path | None = None,
+    source_revision_ids: tuple[str, ...] = (),
 ) -> dict[str, list[dict[str, Any]]]:
+    if source_like_rows_path is not None and source_like_rows_path.exists():
+        source_like_entities = _source_like_entity_options(
+            source_like_rows_path,
+            retailer_id,
+            source_id,
+            scope,
+            date_from=date_from,
+            date_to=date_to,
+            parent_filters=parent_filters,
+            source_revision_ids=source_revision_ids,
+        )
+        if any(source_like_entities.values()):
+            source_like_entities["network"] = _metric_fact_entity_options_for_grain(
+                metric_facts_path,
+                retailer_id,
+                source_id,
+                scope,
+                "network",
+                date_from=date_from,
+                date_to=date_to,
+            )
+            return source_like_entities
     entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in SUPPORTED_GRAINS}
     for grain in SUPPORTED_GRAINS:
         clauses = ["retailer_id = ?", "source_id = ?", "grain_id = ?"]
@@ -464,10 +506,11 @@ def _entity_options(
             clauses.append("period_start <= CAST(? AS DATE)")
             params.append(date_to.isoformat())
         for parent_key in ENTITY_PARENT_FILTERS[grain]:
-            parent_value = parent_filters.get(parent_key)
-            if parent_value:
-                clauses.append(f"json_extract_string(parent_entity_ids, '$.{parent_key}') = ?")
-                params.append(parent_value)
+            parent_values = tuple(value for value in parent_filters.get(parent_key, ()) if value)
+            if parent_values:
+                placeholders = ", ".join("?" for _ in parent_values)
+                clauses.append(f"json_extract_string(parent_entity_ids, '$.{parent_key}') IN ({placeholders})")
+                params.extend(parent_values)
         rows = duckdb.sql(
             f"""
                 SELECT entity_id, COUNT(DISTINCT business_period_id) AS period_count
@@ -487,6 +530,164 @@ def _entity_options(
             for entity_id, period_count in rows
         ]
     return entities
+
+
+def _metric_fact_entity_options_for_grain(
+    metric_facts_path: Path,
+    retailer_id: str,
+    source_id: str,
+    scope: PrivateLabelScope,
+    grain: str,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+) -> list[dict[str, Any]]:
+    clauses = ["retailer_id = ?", "source_id = ?", "grain_id = ?"]
+    params: list[Any] = [retailer_id, source_id, grain]
+    if _facts_have_column(metric_facts_path, "private_label_scope"):
+        clauses.append("private_label_scope = ?")
+        params.append(scope.value)
+    if date_from is not None:
+        clauses.append("period_start >= CAST(? AS DATE)")
+        params.append(date_from.isoformat())
+    if date_to is not None:
+        clauses.append("period_start <= CAST(? AS DATE)")
+        params.append(date_to.isoformat())
+    rows = duckdb.sql(
+        f"""
+            SELECT entity_id, COUNT(DISTINCT business_period_id) AS period_count
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            GROUP BY entity_id
+            ORDER BY entity_id
+        """,
+        params=[_duckdb_path(metric_facts_path), *params],
+    ).fetchall()
+    return [
+        {
+            "value": str(entity_id),
+            "label": str(entity_id),
+            "period_count": int(period_count),
+        }
+        for entity_id, period_count in rows
+    ]
+
+
+def _source_like_entity_options(
+    source_like_rows_path: Path,
+    retailer_id: str,
+    source_id: str,
+    scope: PrivateLabelScope,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    parent_filters: dict[str, tuple[str, ...]],
+    source_revision_ids: tuple[str, ...],
+) -> dict[str, list[dict[str, Any]]]:
+    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in SUPPORTED_GRAINS}
+    available_columns = _source_columns(source_like_rows_path)
+    for grain, entity_column in SOURCE_LIKE_ENTITY_COLUMNS.items():
+        if entity_column not in available_columns:
+            continue
+        label_column = _source_like_label_column(grain, entity_column, available_columns)
+        clauses = ["retailer_id = ?", "source_id = ?", f"{entity_column} IS NOT NULL", f"{entity_column} <> ''"]
+        params: list[Any] = [retailer_id, source_id]
+        if "source_revision_id" in available_columns and source_revision_ids:
+            placeholders = ", ".join("?" for _ in source_revision_ids)
+            clauses.append(f"source_revision_id IN ({placeholders})")
+            params.extend(source_revision_ids)
+        if "private_label_flag" in available_columns and scope != PrivateLabelScope.INCLUDE:
+            clauses.append("private_label_flag = ?")
+            params.append(scope == PrivateLabelScope.ONLY)
+        if date_from is not None and "period" in available_columns:
+            clauses.append("period >= CAST(? AS DATE)")
+            params.append(date_from.isoformat())
+        if date_to is not None and "period" in available_columns:
+            clauses.append("period <= CAST(? AS DATE)")
+            params.append(date_to.isoformat())
+        for parent_key in ENTITY_PARENT_FILTERS[grain]:
+            parent_column = SOURCE_LIKE_ENTITY_COLUMNS.get(parent_key)
+            parent_values = tuple(value for value in parent_filters.get(parent_key, ()) if value)
+            if parent_column and parent_column in available_columns and parent_values:
+                placeholders = ", ".join("?" for _ in parent_values)
+                clauses.append(f"{parent_column} IN ({placeholders})")
+                params.extend(parent_values)
+        rows = duckdb.sql(
+            f"""
+                SELECT {entity_column}, MIN({label_column}) AS display_label, COUNT(DISTINCT period) AS period_count
+                FROM read_parquet(?)
+                WHERE {" AND ".join(clauses)}
+                GROUP BY {entity_column}
+                ORDER BY display_label
+            """,
+            params=[_duckdb_path(source_like_rows_path), *params],
+        ).fetchall()
+        entities[grain] = [
+            {
+                "value": str(entity_id),
+                "label": str(display_label or entity_id),
+                "period_count": int(period_count),
+            }
+            for entity_id, display_label, period_count in rows
+        ]
+    return entities
+
+
+def _source_like_label_column(grain: str, entity_column: str, available_columns: set[str]) -> str:
+    for candidate in SOURCE_LIKE_LABEL_COLUMNS.get(grain, (entity_column,)):
+        if candidate in available_columns:
+            return candidate
+    return entity_column
+
+
+def _source_revision_ids_for_options(
+    mart_builds: tuple[MartBuildMetadata, ...],
+    retailer_id: str,
+    source_id: str,
+    default_mart_build_id: str | None,
+) -> tuple[str, ...]:
+    matching = tuple(
+        build
+        for build in mart_builds
+        if build.retailer_id == retailer_id and source_id in build.source_ids and build.status == MartBuildStatus.APPROVED
+    )
+    if default_mart_build_id:
+        for build in matching:
+            if build.mart_build_id == default_mart_build_id:
+                return tuple(sorted(build.source_revision_ids))
+        raise ValueError(
+            "Default mart build is not available for dashboard filter options: "
+            f"{retailer_id}/{source_id}/{default_mart_build_id}"
+        )
+    if len(matching) > 1:
+        raise ValueError(
+            "Dashboard filter options require an explicit default mart build when multiple approved builds exist: "
+            f"{retailer_id}/{source_id}"
+        )
+    if not matching:
+        return ()
+    return tuple(sorted(matching[0].source_revision_ids))
+
+
+def _runtime_retailer_for_scope(
+    retailers: tuple[DashboardRuntimeRetailer, ...],
+    retailer_id: str,
+    source_id: str,
+) -> DashboardRuntimeRetailer | None:
+    for item in retailers:
+        if item.retailer_id == retailer_id and item.source_id == source_id:
+            return item
+    return None
+
+
+def _source_columns(source_like_rows_path: Path) -> set[str]:
+    return {
+        str(row[0])
+        for row in duckdb.sql(
+            "DESCRIBE SELECT * FROM read_parquet(?) LIMIT 0",
+            params=[_duckdb_path(source_like_rows_path)],
+        ).fetchall()
+    }
 
 
 def _facts_have_column(metric_facts_path: Path, column: str) -> bool:

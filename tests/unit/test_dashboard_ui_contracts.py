@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date
 from importlib import resources
 from pathlib import Path
 
+import polars as pl
 import pytest
 
 from retail_analytics.dashboard import (
@@ -17,6 +19,7 @@ from retail_analytics.dashboard import (
     load_dashboard_runtime_config,
     serialize_dashboard_query_response,
 )
+from retail_analytics.dashboard.app import _parent_filters
 from retail_analytics.history import write_source_ledger
 from retail_analytics.mart import (
     ComparisonMode,
@@ -376,7 +379,8 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     assert "function setActiveView(view, { refresh = true, scroll = false } = {})" in script
     assert "function setupSectionObserver()" in script
     assert "new IntersectionObserver" in script
-    assert "scrollIntoView" in script
+    assert "function scrollToView(view, { behavior = \"smooth\" } = {})" in script
+    assert "window.scrollTo({ top: Math.max(target, 0), behavior });" in script
     assert "history.pushState" in script
     assert "function ensureActiveViewData" in script
     assert "loadedViews" in script
@@ -528,7 +532,7 @@ def test_data_screen_implements_current_dataset_coverage_quality_rows_and_audit(
     assert 'yearHeader.scope = "row"' in script
     assert "function resetDataPagination()" in script
     assert "state.dataPageOffset = 0;" in script
-    assert "resetDataPagination();" in script.split("async function selectComboboxValue", 1)[1].split("function handleComboboxKeydown", 1)[0]
+    assert "resetDataPagination();" in script.split("async function applyPendingFilter", 1)[1].split("function handleFilterSearchKeydown", 1)[0]
     assert "resetDataPagination();" in script.split("async function activateBreadcrumbGrain", 1)[1].split("function breadcrumbLabel", 1)[0]
     reset_handler = script.split('document.getElementById("reset-filters").addEventListener("click"', 1)[1].split("});", 1)[0]
     assert "resetDataPagination();" in reset_handler
@@ -782,7 +786,7 @@ def test_workflow_navigation_uses_wrapping_without_visible_horizontal_scrollbar(
     assert ".workflow-nav" in css
     assert "flex-wrap: wrap" in css
     assert "position: sticky;" in css
-    assert "top: 64px;" in css
+    assert "top: 54px;" in css
     nav_body = css.split(".nav-item {", 1)[1].split(".nav-item.is-active", 1)[0]
     assert "background: transparent;" in nav_body
     assert "border: 0;" in nav_body
@@ -837,8 +841,9 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert 'ONLY: `Только ${scopeName}`' in script
     assert "function renderRetailerIdentity()" in script
     assert "hasMultipleRetailers" in script
-    assert 'data-clear-filter="category"' in html
-    assert 'document.querySelector(`[data-clear-filter="${id}"]`)?.classList.toggle("is-hidden", !hasValue);' in script
+    assert 'data-clear-pending-filter="category"' in html
+    assert 'data-inline-clear-filter="category"' in html
+    assert 'document.querySelector(`[data-inline-clear-filter="${id}"]`)?.classList.toggle("is-hidden", selected.length === 0);' in script
     assert "function breadcrumbLabel(grain, value)" in script
     assert "Все данные › Категория" not in html
     assert "row.classList.add(\"is-empty\")" in script
@@ -874,39 +879,181 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     html = html_or_script("index.html")
     script = html_or_script("app.js")
 
-    for filter_id in ("manufacturer", "brand", "sku", "store"):
-        assert f'data-combobox="{filter_id}"' in html
+    for filter_id in ("category", "manufacturer", "brand", "sku", "store"):
+        assert f'data-filter-trigger="{filter_id}"' in html
         assert f'id="{filter_id}-search"' in html
         assert 'role="combobox"' in html
         assert f'aria-controls="{filter_id}-options"' in html
-        assert f'id="{filter_id}-filter" class="native-filter-select"' in html
-        assert f'id="{filter_id}-options" role="listbox"' in html
-        assert f'data-clear-filter="{filter_id}"' in html
+        assert f'id="{filter_id}-filter" class="native-filter-select" multiple' in html
+        assert f'id="{filter_id}-filter-popover" role="dialog"' in html
+        assert f'id="{filter_id}-options" role="group"' in html
+        assert f'data-select-all="{filter_id}"' in html
+        assert f'data-clear-pending-filter="{filter_id}"' in html
+        assert f'data-inline-clear-filter="{filter_id}"' in html
+        assert f'data-apply-filter="{filter_id}"' in html
 
-    assert "renderComboboxOptions(id, values, allValues.length)" in script
-    assert "values.slice(0, maxComboboxOptions)" in script
-    assert "rankedEntityOptions(allValues, query)" in script
+    assert "function applyPendingFilter(id)" in script
+    assert "state.pendingFilters[id]" in script
+    assert "state.filters[id] = next;" in script
+    assert "function renderFilterOptions(id)" in script
+    assert "function visibleEntityOptions(id)" in script
+    assert ".slice(0, maxComboboxOptions)" in script
+    assert "const available = visibleEntityOptions(id);" in script
+    select_visible_body = script.split('document.querySelector(`[data-select-all="${id}"]`)', 1)[1].split("document.querySelectorAll(\"[data-clear-pending-filter]\")", 1)[0]
+    assert "const next = new Set(pendingValuesForFilter(id));" in select_visible_body
+    assert "if (event.target.checked) next.add(item.value);" in select_visible_body
+    assert "else next.delete(item.value);" in select_visible_body
+    assert "state.pendingFilters[id] = Array.from(next);" in select_visible_body
+    assert "rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || \"\")" in script
     assert "function searchRank(item, query)" in script
     assert "label.startsWith(query)" in script
     assert "haystack.includes(query)" in script
     assert "Показано ${visibleValues.length} из ${totalCount}" in script
     assert '"store": {' not in script
     assert "Фильтр ТТ будет подключён отдельно" not in script
-    assert "select.replaceChildren(option(\"\", filterConfig[id].label), option(item.value, item.label));" in script
-    assert "handleComboboxKeydown(event, id)" in script
-    assert "handleComboboxOptionKeydown(event, id, index, item)" in script
-    assert "setActiveComboboxOption(id, button)" in script
-    assert "aria-activedescendant" in script
+    assert "function handleFilterSearchKeydown(event, id)" in script
+    assert "function handleFilterOptionKeydown(event, id, index)" in script
     assert "event.key === \"ArrowUp\"" in script
     assert "event.key === \"Home\"" in script
     assert "event.key === \"End\"" in script
-    assert "event.key === \"Enter\" || event.key === \" \"" in script
-    assert "control?.contains(document.activeElement)" in script
+    assert "event.key === \"Enter\"" in script
     assert "input.addEventListener(\"blur\"" not in script
-    assert "clearEntityFilter(button.dataset.clearFilter)" in script
+    search_key_body = script.split("function handleFilterSearchKeydown", 1)[1].split("function handleFilterOptionKeydown", 1)[0]
+    assert 'document.getElementById(`${id}-filter-trigger`)?.focus();' in search_key_body
+    pending_clear_body = script.split('document.querySelectorAll("[data-clear-pending-filter]")', 1)[1].split('document.querySelectorAll("[data-inline-clear-filter]")', 1)[0]
+    assert "state.pendingFilters[button.dataset.clearPendingFilter] = [];" in pending_clear_body
+    assert "runActiveViewQuery" not in pending_clear_body
+    assert "clearEntityFilter(button.dataset.inlineClearFilter)" in script
     assert "resetAllEntityFilters();" in script
-    assert "entityDisplayLabel(key, value)" in script
+    assert "entityDisplayLabel(id, value)" in script
     assert "values.slice(0, 250)" not in script
+
+
+def test_scope_toolbar_uses_single_row_multiselect_contract() -> None:
+    html = html_or_script("index.html")
+    css = html_or_script("styles.css")
+    scope_body = html.split('<section class="scope-panel"', 1)[1].split("</section>", 1)[0]
+
+    expected_order = [
+        'id="retailer-control"',
+        'id="period-popover-button"',
+        'data-filter-trigger="category"',
+        'data-filter-trigger="manufacturer"',
+        'data-filter-trigger="brand"',
+        'data-filter-trigger="sku"',
+        'data-filter-trigger="store"',
+        'id="private-label-scope"',
+    ]
+    positions = [scope_body.index(marker) for marker in expected_order]
+    assert positions == sorted(positions)
+    assert "filter-grid" in scope_body
+    assert "display: contents;" in css.split(".filter-grid", 1)[1].split(".multi-filter", 1)[0]
+    assert scope_body.count("native-filter-select") == 5
+    assert scope_body.count('id="private-label-scope"') == 1
+    assert "filter-chip" not in html
+    assert "data-combobox" not in html
+
+
+def test_browser_filter_state_is_staged_multi_value_and_applied_once() -> None:
+    script = html_or_script("app.js")
+
+    assert "filters: { category: [], manufacturer: [], brand: [], sku: [], store: [] }" in script
+    assert "pendingFilters: {}" in script
+    assert "values.forEach((value) => params.append(key, value));" in script
+    assert "state.filters[id] = next;" in script
+    input_handler = script.split('document.getElementById(`${id}-search`)?.addEventListener("input"', 1)[1].split('document.getElementById(`${id}-search`)?.addEventListener("keydown"', 1)[0]
+    assert "renderFilterOptions(id);" in input_handler
+    assert "runActiveViewQuery" not in input_handler
+    apply_body = script.split("async function applyPendingFilter(id)", 1)[1].split("function handleFilterSearchKeydown", 1)[0]
+    assert "await refreshRuntimeOptions();" in apply_body
+    assert "await runActiveViewQuery();" in apply_body
+    assert "resetChildFilters(id);" in apply_body
+
+
+def test_dashboard_options_parent_filters_preserve_multi_values() -> None:
+    params = {
+        "category": ["water", "juice", ""],
+        "manufacturer": ["maker_a", "maker_b"],
+        "brand": [""],
+    }
+
+    assert _parent_filters(params) == {
+        "category": ("water", "juice"),
+        "manufacturer": ("maker_a", "maker_b"),
+    }
+
+
+def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    active_build = runtime.query_service.mart_builds[0]
+    other_approved_build = replace(
+        active_build,
+        mart_build_id="build_dashboard_other_approved",
+        source_revision_ids=("revision_other_approved",),
+        analysis_run_ids=("analysis_dashboard_other_approved",),
+    )
+    runtime.query_service.mart_builds = (active_build, other_approved_build)
+    source_like_path = tmp_path / "source_like_rows.parquet"
+    pl.DataFrame(
+        [
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "canonical_product_id": "SKU_ACTIVE",
+                "canonical_store_id": "STORE_ACTIVE",
+                "source_store_id": "Store Active Label",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_stale",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_STALE",
+                "manufacturer": "MANUFACTURER_STALE",
+                "brand": "BRAND_STALE",
+                "canonical_product_id": "SKU_STALE",
+                "canonical_store_id": "STORE_STALE",
+                "source_store_id": "Store Stale Label",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_other_approved",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_OTHER_BUILD",
+                "manufacturer": "MANUFACTURER_OTHER_BUILD",
+                "brand": "BRAND_OTHER_BUILD",
+                "canonical_product_id": "SKU_OTHER_BUILD",
+                "canonical_store_id": "STORE_OTHER_BUILD",
+                "source_store_id": "Store Other Approved Build",
+                "private_label_flag": False,
+            },
+        ]
+    ).write_parquet(source_like_path)
+    runtime = replace(runtime, source_like_rows_path=source_like_path)
+
+    options = runtime.options_metadata(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+    )
+    entities = options["entities"]
+
+    assert [item["value"] for item in entities["category"]] == ["CATEGORY_ACTIVE"]
+    assert [item["value"] for item in entities["manufacturer"]] == ["MANUFACTURER_ACTIVE"]
+    assert [item["value"] for item in entities["brand"]] == ["BRAND_ACTIVE"]
+    assert [item["value"] for item in entities["sku"]] == ["SKU_ACTIVE"]
+    assert [item["value"] for item in entities["store"]] == ["STORE_ACTIVE"]
+    assert [item["label"] for item in entities["store"]] == ["Store Active Label"]
 
 
 def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:
@@ -920,6 +1067,11 @@ def test_continuous_report_scope_keeps_filters_during_period_and_assortment_chan
     assert "resetEntities: true" not in period_handler
     assert "await refreshRuntimeOptions();" in assortment_handler
     assert "resetEntities: true" not in assortment_handler
+    assert "async function applyScopeChange(work)" in script
+    assert "const preservedView = state.scopeEditView || viewFromHash() || state.activeView || \"overview\";" in script
+    assert "state.suppressScrollspyUntil = Date.now() + 1200;" in script
+    assert "if (Date.now() < state.suppressScrollspyUntil) return;" in script
+    assert "state.scopeEditView = viewFromHash() || state.activeView || \"overview\";" in script
     assert "await navigateToView(link.dataset.view);" in nav_handler
     assert "resetAllEntityFilters" not in nav_handler
     navigate_body = script.split("async function navigateToView(view)", 1)[1].split("function viewFromHash", 1)[0]
@@ -1068,8 +1220,10 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert 'state.currentGrain = "store";' not in filter_body
     assert "nearestSelectedGrain" not in script
     assert "await refreshRuntimeOptions();" in script
-    assert 'category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] }' in script
-    assert 'manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] }' in script
+    assert 'category: {' in script
+    assert 'childFilters: ["manufacturer", "brand", "sku"]' in script
+    assert 'manufacturer: {' in script
+    assert 'childFilters: ["brand", "sku"]' in script
     assert "contextFilterText()" in script
     assert "grainLabels[state.currentGrain]" in script
     assert "manufacturer-search" in html_or_script("index.html")
@@ -1140,7 +1294,7 @@ def test_store_filter_remains_filter_while_store_click_sets_drilldown() -> None:
     assert "await refreshRuntimeOptions();" in select_store_body
     assert "await runStoresQuery();" in select_store_body
     assert "function entityIdsForStores()" in script
-    assert "const selected = selectedStoreId();" in script
+    assert "const selected = selectedStoreIds();" in script
     assert 'return firstEntityIds("store", state.tablePageSize);' in script
 
 

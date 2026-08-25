@@ -24,6 +24,12 @@ const state = {
   comparisonMode: "YOY",
   currentGrain: "network",
   drilldownPath: [],
+  filters: { category: [], manufacturer: [], brand: [], sku: [], store: [] },
+  pendingFilters: {},
+  filterQueries: { category: "", manufacturer: "", brand: "", sku: "", store: "" },
+  openFilterId: null,
+  scopeEditView: null,
+  suppressScrollspyUntil: 0,
   chartMetric: "revenue",
   salesDriverMetric: "revenue",
   storesMetric: "revenue",
@@ -224,16 +230,19 @@ const comparisonLabels = {
   NONE: "Без сравнения"
 };
 const filterConfig = {
-  category: { label: "Все категории", childFilters: ["manufacturer", "brand", "sku"] },
-  manufacturer: { label: "Все производители", childFilters: ["brand", "sku"] },
-  brand: { label: "Все бренды", childFilters: ["sku"] },
-  sku: { label: "Все SKU", childFilters: [] },
+  category: { label: "Все категории", title: "Категория", searchPlaceholder: "Найти категорию", childFilters: ["manufacturer", "brand", "sku"] },
+  manufacturer: { label: "Все производители", title: "Производитель", searchPlaceholder: "Найти производителя", childFilters: ["brand", "sku"] },
+  brand: { label: "Все бренды", title: "Бренд", searchPlaceholder: "Найти бренд", childFilters: ["sku"] },
+  sku: { label: "Все SKU", title: "SKU", searchPlaceholder: "Найти SKU", childFilters: [] },
   store: {
     label: "Все ТТ",
+    title: "ТТ",
+    searchPlaceholder: "Найти ТТ",
     childFilters: []
   }
 };
-const searchFilterIds = ["manufacturer", "brand", "sku", "store"];
+const multiFilterIds = ["category", "manufacturer", "brand", "sku", "store"];
+const searchFilterIds = ["category", "manufacturer", "brand", "sku", "store"];
 const drilldownOrder = ["network", "category", "manufacturer", "brand", "sku", "store"];
 const maxComboboxOptions = 20;
 const sectionIdByView = {
@@ -256,15 +265,17 @@ document.addEventListener("DOMContentLoaded", async () => {
 function bindStaticControls() {
   document.querySelectorAll("[data-period-mode]").forEach((button) => {
     button.addEventListener("click", async () => {
-      state.periodMode = button.dataset.periodMode;
-      document.querySelectorAll("[data-period-mode]").forEach((item) => {
-        item.classList.toggle("is-active", item === button);
+      await applyScopeChange(async () => {
+        state.periodMode = button.dataset.periodMode;
+        document.querySelectorAll("[data-period-mode]").forEach((item) => {
+          item.classList.toggle("is-active", item === button);
+        });
+        updatePeriodPanels();
+        updatePeriodSummary();
+        invalidateLoadedViews();
+        resetDataPagination();
+        await runActiveViewQuery();
       });
-      updatePeriodPanels();
-      updatePeriodSummary();
-      invalidateLoadedViews();
-      resetDataPagination();
-      await runActiveViewQuery();
     });
   });
 
@@ -311,12 +322,14 @@ function bindStaticControls() {
   document.getElementById("close-reports-panel").addEventListener("click", closeReportsPanel);
   document.getElementById("scrim").addEventListener("click", closeReportsPanel);
   document.getElementById("reset-filters").addEventListener("click", async () => {
-    resetAllEntityFilters();
-    resetDataPagination();
-    await refreshRuntimeOptions();
-    updatePreviewGrain();
-    invalidateLoadedViews();
-    await runActiveViewQuery();
+    await applyScopeChange(async () => {
+      resetAllEntityFilters();
+      resetDataPagination();
+      await refreshRuntimeOptions();
+      updatePreviewGrain();
+      invalidateLoadedViews();
+      await runActiveViewQuery();
+    });
   });
   bindPeriodPopover();
 }
@@ -340,6 +353,7 @@ function togglePeriodPopover() {
   const popover = document.getElementById("period-popover");
   const button = document.getElementById("period-popover-button");
   const isOpen = popover && !popover.classList.contains("is-hidden");
+  if (!isOpen) state.scopeEditView = viewFromHash() || state.activeView || "overview";
   popover?.classList.toggle("is-hidden", isOpen);
   button?.setAttribute("aria-expanded", isOpen ? "false" : "true");
 }
@@ -414,7 +428,33 @@ function updateHash(view) {
 
 function scrollToView(view, { behavior = "smooth" } = {}) {
   const section = document.getElementById(sectionIdByView[view]);
-  section?.scrollIntoView({ behavior, block: "start" });
+  if (!section) return;
+  const stickyOffset = 148;
+  const target = section.getBoundingClientRect().top + window.scrollY - stickyOffset;
+  if (behavior === "auto") {
+    window.scrollTo(0, Math.max(target, 0));
+    return;
+  }
+  window.scrollTo({ top: Math.max(target, 0), behavior });
+}
+
+async function applyScopeChange(work) {
+  const preservedView = state.scopeEditView || viewFromHash() || state.activeView || "overview";
+  state.suppressScrollspyUntil = Date.now() + 1200;
+  setActiveView(preservedView, { refresh: false, scroll: false });
+  await work();
+  state.suppressScrollspyUntil = Date.now() + 1200;
+  setActiveView(preservedView, { refresh: false, scroll: false });
+  updateHash(preservedView);
+  scrollToView(preservedView, { behavior: "auto" });
+  [250, 900, 1800, 3000].forEach((delay) => {
+    window.setTimeout(() => {
+      state.suppressScrollspyUntil = Date.now() + 900;
+      setActiveView(preservedView, { refresh: false, scroll: false });
+      scrollToView(preservedView, { behavior: "auto" });
+    }, delay);
+  });
+  state.scopeEditView = null;
 }
 
 function setupSectionObserver() {
@@ -422,6 +462,7 @@ function setupSectionObserver() {
   const sections = Array.from(document.querySelectorAll(".report-section"));
   if (!sections.length || !("IntersectionObserver" in window)) return;
   sectionObserver = new IntersectionObserver((entries) => {
+    if (Date.now() < state.suppressScrollspyUntil) return;
     if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
       const lastView = sections[sections.length - 1]?.dataset.viewPanel;
       if (lastView && lastView !== state.activeView) setActiveView(lastView, { refresh: true, scroll: false });
@@ -452,6 +493,7 @@ function setupSectionObserver() {
 }
 
 function updateActiveSectionFromScroll() {
+  if (Date.now() < state.suppressScrollspyUntil) return;
   const sections = Array.from(document.querySelectorAll(".report-section"));
   if (!sections.length) return;
   if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
@@ -482,6 +524,12 @@ function updatePressedGroup(selector, datasetKey, activeValue) {
   });
 }
 
+function setInfoButtonLabel(button, label = "Откуда эта цифра?") {
+  button.textContent = "i";
+  button.setAttribute("aria-label", label);
+  button.title = label;
+}
+
 function resetDataPagination() {
   state.dataPageOffset = 0;
 }
@@ -494,15 +542,17 @@ function setupRetailerControl() {
   retailerSelect.value = state.runtime.default_retailer_id;
   renderRetailerIdentity();
   retailerSelect.addEventListener("change", async () => {
-    resetAllEntityFilters();
-    resetDataPagination();
-    renderRetailerIdentity();
-    await loadCatalog();
-    await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
-    updatePrivateLabelTerminology();
-    updatePreviewGrain();
-    invalidateLoadedViews();
-    await runActiveViewQuery();
+    await applyScopeChange(async () => {
+      resetAllEntityFilters();
+      resetDataPagination();
+      renderRetailerIdentity();
+      await loadCatalog();
+      await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
+      updatePrivateLabelTerminology();
+      updatePreviewGrain();
+      invalidateLoadedViews();
+      await runActiveViewQuery();
+    });
   });
 }
 
@@ -519,23 +569,26 @@ function renderRetailerIdentity() {
   if (!identity || hasMultipleRetailers) return;
   identity.replaceChildren();
   appendText(identity, "strong", retailer.display_label || "Текущий отчёт");
-  appendText(identity, "span", "Текущий отчёт");
 }
 
 function bindDynamicControls() {
   document.getElementById("comparison-mode").addEventListener("change", async (event) => {
-    state.comparisonMode = event.target.value;
-    updatePeriodSummary();
-    invalidateLoadedViews();
-    resetDataPagination();
-    await runActiveViewQuery();
+    await applyScopeChange(async () => {
+      state.comparisonMode = event.target.value;
+      updatePeriodSummary();
+      invalidateLoadedViews();
+      resetDataPagination();
+      await runActiveViewQuery();
+    });
   });
   document.getElementById("private-label-scope").addEventListener("change", async () => {
-    resetDataPagination();
-    await refreshRuntimeOptions();
-    updatePrivateLabelTerminology();
-    invalidateLoadedViews();
-    await runActiveViewQuery();
+    await applyScopeChange(async () => {
+      resetDataPagination();
+      await refreshRuntimeOptions();
+      updatePrivateLabelTerminology();
+      invalidateLoadedViews();
+      await runActiveViewQuery();
+    });
   });
   document.getElementById("chart-metric").addEventListener("change", async (event) => {
     state.chartMetric = event.target.value;
@@ -553,55 +606,71 @@ function bindDynamicControls() {
     renderStores();
   });
 
-  for (const id of Object.keys(filterConfig)) {
-    const select = document.getElementById(`${id}-filter`);
-    select.addEventListener("change", async () => {
-      resetChildFilters(id);
-      applyFilterDrilldown(id);
-      resetDataPagination();
-      await refreshRuntimeOptions();
-      updatePreviewGrain();
-      invalidateLoadedViews();
-      await runActiveViewQuery();
+  multiFilterIds.forEach((id) => {
+    document.getElementById(`${id}-filter-trigger`)?.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleFilterPopover(id);
     });
-  }
-
-  searchFilterIds.forEach((id) => {
-    const input = document.getElementById(`${id}-search`);
-    input.addEventListener("input", () => populateEntityFilter(id));
-    input.addEventListener("focus", () => {
-      setTimeout(() => {
-        populateEntityFilter(id);
-        openCombobox(id);
-      }, 120);
+    document.getElementById(`${id}-filter-popover`)?.addEventListener("click", (event) => event.stopPropagation());
+    document.getElementById(`${id}-search`)?.addEventListener("input", (event) => {
+      state.filterQueries[id] = event.target.value || "";
+      renderFilterOptions(id);
     });
-    input.addEventListener("keydown", (event) => handleComboboxKeydown(event, id));
-    document.querySelector(`[data-combobox="${id}"]`)?.addEventListener("focusout", () => {
-      setTimeout(() => {
-        const control = document.querySelector(`[data-combobox="${id}"]`);
-        if (!control?.contains(document.activeElement)) closeCombobox(id);
-      }, 0);
+    document.getElementById(`${id}-search`)?.addEventListener("keydown", (event) => handleFilterSearchKeydown(event, id));
+    document.querySelector(`[data-select-all="${id}"]`)?.addEventListener("change", (event) => {
+      const available = visibleEntityOptions(id);
+      const next = new Set(pendingValuesForFilter(id));
+      available.forEach((item) => {
+        if (event.target.checked) next.add(item.value);
+        else next.delete(item.value);
+      });
+      state.pendingFilters[id] = Array.from(next);
+      renderFilterOptions(id);
     });
   });
 
-  document.querySelectorAll("[data-clear-filter]").forEach((button) => {
+  document.querySelectorAll("[data-clear-pending-filter]").forEach((button) => {
     button.addEventListener("click", async () => {
-      clearEntityFilter(button.dataset.clearFilter);
-      resetDataPagination();
-      await refreshRuntimeOptions();
-      updatePreviewGrain();
-      invalidateLoadedViews();
-      await runActiveViewQuery();
+      state.pendingFilters[button.dataset.clearPendingFilter] = [];
+      renderFilterOptions(button.dataset.clearPendingFilter);
     });
+  });
+
+  document.querySelectorAll("[data-inline-clear-filter]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await applyScopeChange(async () => {
+        clearEntityFilter(button.dataset.inlineClearFilter);
+        closeFilterPopover(button.dataset.inlineClearFilter);
+        resetDataPagination();
+        await refreshRuntimeOptions();
+        updatePreviewGrain();
+        invalidateLoadedViews();
+        await runActiveViewQuery();
+      });
+    });
+  });
+
+  document.querySelectorAll("[data-apply-filter]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await applyPendingFilter(button.dataset.applyFilter);
+    });
+  });
+
+  document.addEventListener("click", () => closeAllFilterPopovers());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeAllFilterPopovers();
   });
 
   ["period-single", "period-a", "date-from", "date-to"].forEach((id) => {
     document.getElementById(id).addEventListener("change", async () => {
-      updatePeriodSummary();
-      resetDataPagination();
-      await refreshRuntimeOptions();
-      invalidateLoadedViews();
-      await runActiveViewQuery();
+      await applyScopeChange(async () => {
+        updatePeriodSummary();
+        resetDataPagination();
+        await refreshRuntimeOptions();
+        invalidateLoadedViews();
+        await runActiveViewQuery();
+      });
     });
   });
   document.getElementById("sales-drivers-provenance")?.addEventListener("click", () => openSalesDriverProvenance());
@@ -626,7 +695,9 @@ async function loadOptions() {
   const dateTo = selectedDateTo();
   if (dateFrom) params.set("date_from", dateFrom);
   if (dateTo) params.set("date_to", dateTo);
-  Object.entries(selectedFilterValues()).forEach(([key, value]) => params.set(key, value));
+  Object.entries(selectedFilterValues()).forEach(([key, values]) => {
+    values.forEach((value) => params.append(key, value));
+  });
   state.options = await getJson(`/api/dashboard/options?${params.toString()}`);
 }
 
@@ -1033,7 +1104,7 @@ function renderKpis() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "inline-link";
-    button.textContent = "Откуда?";
+    setInfoButtonLabel(button);
     button.addEventListener("click", () => openProvenance(concept));
     card.appendChild(button);
     return card;
@@ -1059,7 +1130,7 @@ function renderKpiSecondaryContext() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "inline-link";
-    button.textContent = "Откуда?";
+    setInfoButtonLabel(button);
     button.addEventListener("click", () => openProvenance(concept));
     item.appendChild(button);
     return item;
@@ -1160,7 +1231,7 @@ function renderDiagnosis() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "inline-link";
-      button.textContent = "Откуда?";
+      setInfoButtonLabel(button);
       button.addEventListener("click", () => openProvenance(concept));
       card.appendChild(button);
     }
@@ -1219,7 +1290,7 @@ function renderSalesDriverMatrix() {
       const button = document.createElement("button");
       button.type = "button";
       button.className = "inline-link";
-      button.textContent = "Откуда?";
+      setInfoButtonLabel(button);
       button.addEventListener("click", () => openProvenance(concept));
       actionCell.appendChild(button);
     } else {
@@ -2112,7 +2183,7 @@ function storeProvenanceButton(result) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "inline-link";
-  button.textContent = "Откуда?";
+  setInfoButtonLabel(button);
   button.addEventListener("click", () => openStoreProvenance(result));
   return button;
 }
@@ -2139,7 +2210,8 @@ function renderPortfolioPosition() {
   const shareItems = portfolioItems(portfolioShareConcepts).filter(isDisplayablePortfolioItem);
   const rank = portfolioItem("manufacturer_rank_revenue");
   const rows = rank?.rows || [];
-  const selectedManufacturer = selectedFilterValues().manufacturer || (state.currentGrain === "manufacturer" ? entityIdsForSummary()[0] : "");
+  const selectedManufacturer =
+    selectedFilterValues().manufacturer?.[0] || (state.currentGrain === "manufacturer" ? entityIdsForSummary()[0] : "");
 
   if (shareItems.length) {
     shareStrip.replaceChildren(...shareItems.map((item) => portfolioMetricTile(item)));
@@ -2295,7 +2367,7 @@ function portfolioProvenanceButton(item) {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "inline-link";
-  button.textContent = "Откуда?";
+  setInfoButtonLabel(button);
   button.addEventListener("click", () => openPortfolioProvenance(item));
   return button;
 }
@@ -2413,8 +2485,8 @@ function renderContributionTable(table) {
     const actionCell = document.createElement("td");
     const provenanceButton = document.createElement("button");
     provenanceButton.type = "button";
-    provenanceButton.className = "text-button";
-    provenanceButton.textContent = "Откуда?";
+    provenanceButton.className = "inline-link";
+    setInfoButtonLabel(provenanceButton);
     provenanceButton.addEventListener("click", () => openContributionProvenance(row));
     actionCell.appendChild(provenanceButton);
     tr.appendChild(actionCell);
@@ -2445,7 +2517,7 @@ function renderContextStripForResponse(response) {
 function renderBreadcrumb() {
   const row = document.getElementById("breadcrumb-row");
   if (!row) return;
-  const activePath = state.drilldownPath.filter((item) => document.getElementById(`${item.grain}-filter`)?.value === item.value);
+  const activePath = state.drilldownPath.filter((item) => selectedValuesForFilter(item.grain).includes(item.value));
   if (activePath.length !== state.drilldownPath.length) state.drilldownPath = activePath;
   if (!activePath.length) {
     row.replaceChildren();
@@ -2472,7 +2544,7 @@ function renderBreadcrumb() {
 
 function canActivateSummaryGrain(grain) {
   if (grain === "network") return true;
-  return Boolean(document.getElementById(`${grain}-filter`)?.value);
+  return selectedValuesForFilter(grain).length > 0;
 }
 
 async function activateBreadcrumbGrain(grain) {
@@ -2554,9 +2626,39 @@ function updatePeriodSummary() {
     detail.textContent = "Один период";
     return;
   }
-  const reference = document.getElementById("period-b-derived")?.textContent || "период сравнения";
+  const reference = derivedComparisonPeriodLabel();
   summary.textContent = `${formatCompactPeriod(selectedDateFrom())} / ${formatCompactPeriodText(reference)}`;
   detail.textContent = comparisonLabels[state.comparisonMode] || "Сравнение";
+}
+
+function derivedComparisonPeriodLabel() {
+  const explicitReference = document.getElementById("period-b-derived")?.textContent || "";
+  if (explicitReference && !["Не используется", "Нет подходящего периода"].includes(explicitReference)) {
+    return explicitReference;
+  }
+  const current = selectedDateFrom();
+  const periods = (state.options?.periods || []).map((period) => period.value);
+  if (!current || !periods.length) return explicitReference || "период сравнения";
+  if (state.comparisonMode === "YOY") {
+    const yoy = shiftMonth(current, -12);
+    return periods.includes(yoy) ? formatPeriod(yoy) : "Нет подходящего периода";
+  }
+  if (state.comparisonMode === "MOM") {
+    const mom = shiftMonth(current, -1);
+    return periods.includes(mom) ? formatPeriod(mom) : "Нет подходящего периода";
+  }
+  if (state.comparisonMode === "PREVIOUS_AVAILABLE") {
+    const previous = periods.filter((period) => period < current).at(-1);
+    return previous ? formatPeriod(previous) : "Нет подходящего периода";
+  }
+  return explicitReference || "период сравнения";
+}
+
+function shiftMonth(value, offset) {
+  const [year, month] = value.split("-").map(Number);
+  if (!year || !month) return "";
+  const shifted = new Date(Date.UTC(year, month - 1 + offset, 1));
+  return shifted.toISOString().slice(0, 10);
 }
 
 function updateComparisonPeriodDisplay(response) {
@@ -2586,52 +2688,38 @@ function populateEntityFilters() {
 
 function populateEntityFilter(id) {
   const config = filterConfig[id];
-  const select = document.getElementById(`${id}-filter`);
-  const previous = select.value;
-  const input = document.getElementById(`${id}-search`);
   const allValues = state.options.entities?.[id] || [];
-  const selected = allValues.find((item) => item.value === previous);
-  const rawQuery = input?.value || "";
-  const query = input && selected && document.activeElement === input && rawQuery === selected.label ? "" : rawQuery;
+  const availableValues = new Set(allValues.map((item) => item.value));
+  state.filters[id] = selectedValuesForFilter(id).filter((value) => availableValues.has(value));
+  if (state.pendingFilters[id]) {
+    state.pendingFilters[id] = state.pendingFilters[id].filter((value) => availableValues.has(value));
+  }
   if (config.querySupported === false) {
-    select.replaceChildren(option("", config.label));
-    select.value = "";
-    if (input) {
-      input.value = "";
-      input.placeholder = config.unavailableText;
-      input.disabled = true;
-      input.title = config.unavailableText;
-      input.setAttribute("aria-disabled", "true");
-      document.querySelector(`[data-clear-filter="${id}"]`)?.setAttribute("disabled", "disabled");
-      document.querySelector(`[data-combobox="${id}"]`)?.classList.add("is-disabled");
-      renderComboboxUnavailable(id, config.unavailableText);
-    }
+    state.filters[id] = [];
+    state.pendingFilters[id] = [];
+    document.getElementById(`${id}-search`)?.setAttribute("disabled", "disabled");
+    document.querySelector(`[data-clear-filter="${id}"]`)?.setAttribute("disabled", "disabled");
+    document.querySelector(`[data-filter="${id}"]`)?.classList.add("is-disabled");
+    renderFilterUnavailable(id, config.unavailableText);
+    syncFilterControl(id);
     updateFilterCount();
     return;
   }
-  const values = rankedEntityOptions(allValues, query);
-  if (!input) {
-    select.replaceChildren(option("", config.label), ...values.map((item) => option(item.value, item.label)));
-    select.value = values.some((item) => item.value === previous) ? previous : "";
-    updateFilterCount();
-    return;
-  }
-  select.replaceChildren(option("", config.label), ...(selected ? [option(selected.value, selected.label)] : []));
-  select.value = selected ? selected.value : "";
-  if (input && selected && document.activeElement !== input) input.value = selected.label;
-  renderComboboxOptions(id, values, allValues.length);
-  select.title = allValues.length > maxComboboxOptions ? "Можно открыть список или начать вводить название." : "Выбор меняет аналитический срез.";
+  document.getElementById(`${id}-search`)?.removeAttribute("disabled");
+  document.querySelector(`[data-clear-filter="${id}"]`)?.removeAttribute("disabled");
+  document.querySelector(`[data-filter="${id}"]`)?.classList.remove("is-disabled");
+  syncFilterControl(id);
+  renderFilterOptions(id);
   updateFilterCount();
 }
 
-function renderComboboxUnavailable(id, message) {
+function renderFilterUnavailable(id, message) {
   const list = document.getElementById(`${id}-options`);
   if (!list) return;
   const item = document.createElement("div");
-  item.className = "combo-empty";
+  item.className = "filter-empty";
   item.textContent = message;
   list.replaceChildren(item);
-  list.classList.add("is-open");
 }
 
 function rankedEntityOptions(values, rawQuery) {
@@ -2658,163 +2746,245 @@ function compareEntityLabels(left, right) {
   return String(left.label).localeCompare(String(right.label), "ru-RU", { numeric: true, sensitivity: "base" });
 }
 
-function renderComboboxOptions(id, values, totalCount) {
+function renderFilterOptions(id) {
   const input = document.getElementById(`${id}-search`);
   const list = document.getElementById(`${id}-options`);
   if (!input || !list) return;
-  const visibleValues = values.slice(0, maxComboboxOptions);
+  const values = rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || "");
+  const totalCount = state.options.entities?.[id]?.length || 0;
+  const visibleValues = visibleEntityOptions(id);
+  const pending = new Set(pendingValuesForFilter(id));
   list.replaceChildren();
   if (!visibleValues.length) {
     const empty = document.createElement("div");
-    empty.className = "combo-empty";
+    empty.className = "filter-empty";
     empty.textContent = "Ничего не найдено";
     list.appendChild(empty);
   } else {
     visibleValues.forEach((item, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "combo-option";
-      button.setAttribute("role", "option");
-      button.dataset.value = item.value;
-      button.id = `${id}-option-${index}`;
-      button.textContent = item.label;
-      button.addEventListener("mousedown", (event) => event.preventDefault());
-      button.addEventListener("click", async () => {
-        await selectComboboxValue(id, item);
+      const label = document.createElement("label");
+      label.className = "filter-option";
+      label.id = `${id}-option-${index}`;
+      label.dataset.value = item.value;
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = pending.has(item.value);
+      checkbox.addEventListener("change", () => {
+        togglePendingFilterValue(id, item.value, checkbox.checked);
       });
-      button.addEventListener("keydown", async (event) => {
-        await handleComboboxOptionKeydown(event, id, index, item);
-      });
-      button.addEventListener("focus", () => setActiveComboboxOption(id, button));
-      list.appendChild(button);
+      checkbox.addEventListener("keydown", (event) => handleFilterOptionKeydown(event, id, index));
+      const text = document.createElement("span");
+      text.textContent = item.label;
+      label.append(checkbox, text);
+      list.appendChild(label);
     });
     const count = document.createElement("div");
-    count.className = "combo-count";
+    count.className = "filter-count-note";
     count.textContent = `Показано ${visibleValues.length} из ${totalCount}`;
     list.appendChild(count);
   }
-  const shouldOpen = document.activeElement === input || list.contains(document.activeElement);
-  list.classList.toggle("is-open", shouldOpen);
-  input.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  input.setAttribute("aria-expanded", state.openFilterId === id ? "true" : "false");
+  updateFilterPopoverFooter(id);
 }
 
-async function selectComboboxValue(id, item) {
-  const select = document.getElementById(`${id}-filter`);
-  select.replaceChildren(option("", filterConfig[id].label), option(item.value, item.label));
-  select.value = item.value;
-  document.getElementById(`${id}-search`).value = item.label;
-  closeCombobox(id);
-  resetChildFilters(id);
-  applyFilterDrilldown(id);
-  resetDataPagination();
-  await refreshRuntimeOptions();
-  updatePreviewGrain();
-  invalidateLoadedViews();
-  await runActiveViewQuery();
+function visibleEntityOptions(id) {
+  return rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || "")
+    .slice(0, maxComboboxOptions);
 }
 
-function handleComboboxKeydown(event, id) {
+function togglePendingFilterValue(id, value, checked) {
+  const next = new Set(pendingValuesForFilter(id));
+  if (checked) next.add(value);
+  else next.delete(value);
+  state.pendingFilters[id] = Array.from(next);
+  renderFilterOptions(id);
+}
+
+async function applyPendingFilter(id) {
+  await applyScopeChange(async () => {
+    const previous = selectedValuesForFilter(id);
+    const next = pendingValuesForFilter(id);
+    state.filters[id] = next;
+    if (valuesChanged(previous, next)) {
+      resetChildFilters(id);
+      applyFilterDrilldown(id);
+    }
+    closeFilterPopover(id);
+    resetDataPagination();
+    await refreshRuntimeOptions();
+    updatePreviewGrain();
+    invalidateLoadedViews();
+    await runActiveViewQuery();
+  });
+}
+
+function handleFilterSearchKeydown(event, id) {
   const list = document.getElementById(`${id}-options`);
-  const options = Array.from(list?.querySelectorAll(".combo-option") || []);
+  const options = Array.from(list?.querySelectorAll(".filter-option input") || []);
   if (event.key === "Escape") {
-    closeCombobox(id);
+    closeFilterPopover(id);
+    document.getElementById(`${id}-filter-trigger`)?.focus();
     return;
   }
   if (event.key === "ArrowDown") {
     event.preventDefault();
-    openCombobox(id);
+    openFilterPopover(id);
     options[0]?.focus();
   }
   if (event.key === "Enter") {
     event.preventDefault();
-    openCombobox(id);
-    options[0]?.click();
+    if (options[0]) {
+      options[0].checked = !options[0].checked;
+      options[0].dispatchEvent(new Event("change"));
+    }
   }
 }
 
-async function handleComboboxOptionKeydown(event, id, index, item) {
-  const list = document.getElementById(`${id}-options`);
-  const options = Array.from(list?.querySelectorAll(".combo-option") || []);
+function handleFilterOptionKeydown(event, id, index) {
+  const options = Array.from(document.querySelectorAll(`#${id}-options .filter-option input`));
   if (!options.length) return;
   if (event.key === "ArrowDown") {
     event.preventDefault();
-    options[Math.min(index + 1, options.length - 1)].focus();
+    options[Math.min(index + 1, options.length - 1)]?.focus();
   } else if (event.key === "ArrowUp") {
     event.preventDefault();
-    if (index === 0) {
-      document.getElementById(`${id}-search`).focus();
-    } else {
-      options[Math.max(index - 1, 0)].focus();
-    }
+    if (index === 0) document.getElementById(`${id}-search`)?.focus();
+    else options[Math.max(index - 1, 0)]?.focus();
   } else if (event.key === "Home") {
     event.preventDefault();
-    options[0].focus();
+    options[0]?.focus();
   } else if (event.key === "End") {
     event.preventDefault();
-    options[options.length - 1].focus();
-  } else if (event.key === "Enter" || event.key === " ") {
+    options[options.length - 1]?.focus();
+  } else if (event.key === "Enter") {
     event.preventDefault();
-    await selectComboboxValue(id, item);
+    options[index].checked = !options[index].checked;
+    options[index].dispatchEvent(new Event("change"));
   } else if (event.key === "Escape") {
     event.preventDefault();
-    closeCombobox(id);
-    document.getElementById(`${id}-search`).focus();
+    closeFilterPopover(id);
+    document.getElementById(`${id}-filter-trigger`)?.focus();
   }
 }
 
-function setActiveComboboxOption(id, activeOption) {
-  const list = document.getElementById(`${id}-options`);
-  const input = document.getElementById(`${id}-search`);
-  Array.from(list?.querySelectorAll(".combo-option") || []).forEach((optionNode) => {
-    optionNode.setAttribute("aria-selected", optionNode === activeOption ? "true" : "false");
-  });
-  input?.setAttribute("aria-activedescendant", activeOption.id);
+function toggleFilterPopover(id) {
+  if (state.openFilterId === id) {
+    closeFilterPopover(id);
+    return;
+  }
+  openFilterPopover(id);
 }
 
-function openCombobox(id) {
+function openFilterPopover(id) {
+  closeAllFilterPopovers();
+  state.scopeEditView = viewFromHash() || state.activeView || "overview";
+  state.openFilterId = id;
+  state.pendingFilters[id] = selectedValuesForFilter(id);
+  state.filterQueries[id] = "";
   const input = document.getElementById(`${id}-search`);
-  const list = document.getElementById(`${id}-options`);
-  if (!input || !list) return;
-  list.classList.add("is-open");
-  input.setAttribute("aria-expanded", "true");
+  if (input) input.value = "";
+  document.getElementById(`${id}-filter-popover`)?.classList.remove("is-hidden");
+  document.getElementById(`${id}-filter-trigger`)?.setAttribute("aria-expanded", "true");
+  renderFilterOptions(id);
+  setTimeout(() => document.getElementById(`${id}-search`)?.focus(), 0);
 }
 
-function closeCombobox(id) {
-  const input = document.getElementById(`${id}-search`);
-  const list = document.getElementById(`${id}-options`);
-  if (!input || !list) return;
-  list.classList.remove("is-open");
-  input.setAttribute("aria-expanded", "false");
-  input.removeAttribute("aria-activedescendant");
+function closeFilterPopover(id) {
+  document.getElementById(`${id}-filter-popover`)?.classList.add("is-hidden");
+  document.getElementById(`${id}-filter-trigger`)?.setAttribute("aria-expanded", "false");
+  document.getElementById(`${id}-search`)?.setAttribute("aria-expanded", "false");
+  if (state.openFilterId === id) state.openFilterId = null;
+}
+
+function closeAllFilterPopovers() {
+  multiFilterIds.forEach(closeFilterPopover);
+}
+
+function syncAllFilterControls() {
+  multiFilterIds.forEach(syncFilterControl);
+}
+
+function syncFilterControl(id) {
+  syncHiddenFilterSelect(id);
+  updateFilterTriggerSummary(id);
+  updateFilterPopoverFooter(id);
+}
+
+function syncHiddenFilterSelect(id) {
+  const select = document.getElementById(`${id}-filter`);
+  if (!select) return;
+  const selected = new Set(selectedValuesForFilter(id));
+  const options = state.options.entities?.[id] || [];
+  select.replaceChildren(...options.map((item) => {
+    const node = option(item.value, item.label);
+    node.selected = selected.has(item.value);
+    return node;
+  }));
+}
+
+function updateFilterTriggerSummary(id) {
+  const summary = document.getElementById(`${id}-filter-summary`);
+  const trigger = document.getElementById(`${id}-filter-trigger`);
+  if (!summary || !trigger) return;
+  const selected = selectedValuesForFilter(id);
+  document.querySelector(`[data-inline-clear-filter="${id}"]`)?.classList.toggle("is-hidden", selected.length === 0);
+  trigger.classList.toggle("has-selection", selected.length > 0);
+  if (!selected.length) {
+    summary.textContent = filterConfig[id].label;
+    trigger.removeAttribute("title");
+    return;
+  }
+  const labels = selected.map((value) => entityDisplayLabel(id, value)).filter(Boolean);
+  const text = labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1}`;
+  summary.textContent = text;
+  trigger.title = labels.join(", ");
+}
+
+function updateFilterPopoverFooter(id) {
+  const selectedCount = pendingValuesForFilter(id).length;
+  const footer = document.getElementById(`${id}-selected-count`);
+  if (footer) footer.textContent = `Выбрано: ${selectedCount}`;
+  const selected = new Set(pendingValuesForFilter(id));
+  const visible = visibleEntityOptions(id);
+  const selectAll = document.querySelector(`[data-select-all="${id}"]`);
+  if (selectAll) {
+    const visibleValues = visible.map((item) => item.value);
+    selectAll.checked = visibleValues.length > 0 && visibleValues.every((value) => selected.has(value));
+    selectAll.indeterminate = visibleValues.some((value) => selected.has(value)) && !selectAll.checked;
+  }
 }
 
 function clearEntityFilter(id, { resetChildren = true, preserveCurrentGrain = false } = {}) {
-  document.getElementById(`${id}-filter`).value = "";
-  const search = document.getElementById(`${id}-search`);
-  if (search) search.value = "";
+  state.filters[id] = [];
+  state.pendingFilters[id] = [];
+  state.filterQueries[id] = "";
+  syncFilterControl(id);
   if (resetChildren) resetChildFilters(id);
   trimDrilldownFrom(id);
   if (!preserveCurrentGrain && state.currentGrain === id) state.currentGrain = nearestDrilldownGrain();
   renderBreadcrumb();
+  renderFilterOptions(id);
+  syncAllFilterControls();
 }
 
 function resetChildFilters(filterId) {
   (filterConfig[filterId]?.childFilters || []).forEach((id) => {
-    document.getElementById(`${id}-filter`).value = "";
-    const search = document.getElementById(`${id}-search`);
-    if (search) search.value = "";
-    closeCombobox(id);
+    state.filters[id] = [];
+    state.pendingFilters[id] = [];
+    state.filterQueries[id] = "";
+    closeFilterPopover(id);
+    syncFilterControl(id);
     trimDrilldownFrom(id);
   });
 }
 
 function resetAllEntityFilters() {
   Object.keys(filterConfig).forEach((id) => {
-    const select = document.getElementById(`${id}-filter`);
-    if (select) select.value = "";
-    const search = document.getElementById(`${id}-search`);
-    if (search) search.value = "";
-    closeCombobox(id);
+    state.filters[id] = [];
+    state.pendingFilters[id] = [];
+    state.filterQueries[id] = "";
+    closeFilterPopover(id);
+    syncFilterControl(id);
   });
   state.currentGrain = "network";
   state.drilldownPath = [];
@@ -2833,15 +3003,10 @@ function applyFilterDrilldown(filterId) {
 
 async function drillIntoEntity(entityId) {
   const targetGrain = state.previewGrain;
-  const select = document.getElementById(`${targetGrain}-filter`);
-  if (!select) return;
-  const item = (state.options.entities?.[targetGrain] || []).find((optionItem) => optionItem.value === entityId);
-  if (item && searchFilterIds.includes(targetGrain)) {
-    select.replaceChildren(option("", filterConfig[targetGrain].label), option(item.value, item.label));
-    const search = document.getElementById(`${targetGrain}-search`);
-    if (search) search.value = item.label;
-  }
-  select.value = entityId;
+  if (!document.getElementById(`${targetGrain}-filter`)) return;
+  state.filters[targetGrain] = [entityId];
+  state.pendingFilters[targetGrain] = [entityId];
+  syncFilterControl(targetGrain);
   state.currentGrain = targetGrain;
   setExplicitDrilldown(targetGrain, entityId);
   resetChildFilters(targetGrain);
@@ -2853,15 +3018,10 @@ async function drillIntoEntity(entityId) {
 }
 
 async function selectStore(entityId) {
-  const select = document.getElementById("store-filter");
-  if (!select) return;
-  const item = (state.options.entities?.store || []).find((optionItem) => optionItem.value === entityId);
-  if (item) {
-    select.replaceChildren(option("", filterConfig.store.label), option(item.value, item.label));
-    const search = document.getElementById("store-search");
-    if (search) search.value = item.label;
-  }
-  select.value = entityId;
+  if (!document.getElementById("store-filter")) return;
+  state.filters.store = [entityId];
+  state.pendingFilters.store = [entityId];
+  syncFilterControl("store");
   state.currentGrain = "store";
   setExplicitDrilldown("store", entityId);
   renderBreadcrumb();
@@ -2892,28 +3052,41 @@ function selectedComparisonMode() {
   return state.periodMode === "COMPARE" ? state.comparisonMode : "NONE";
 }
 
+function selectedValuesForFilter(id) {
+  return Array.isArray(state.filters[id]) ? [...state.filters[id]] : [];
+}
+
+function pendingValuesForFilter(id) {
+  return Array.isArray(state.pendingFilters[id]) ? [...state.pendingFilters[id]] : selectedValuesForFilter(id);
+}
+
+function valuesChanged(left, right) {
+  if (left.length !== right.length) return true;
+  const leftValues = new Set(left);
+  return right.some((value) => !leftValues.has(value));
+}
+
 function selectedFilterValues() {
   return Object.fromEntries(
     Object.keys(filterConfig)
-      .map((id) => [id, document.getElementById(`${id}-filter`)?.value || ""])
-      .filter(([, value]) => value)
+      .map((id) => [id, selectedValuesForFilter(id).filter(Boolean)])
+      .filter(([, values]) => values.length)
   );
 }
 
 function nearestDrilldownGrain() {
   const active = state.drilldownPath
-    .filter((item) => document.getElementById(`${item.grain}-filter`)?.value === item.value)
+    .filter((item) => selectedValuesForFilter(item.grain).includes(item.value))
     .map((item) => item.grain);
   return active[active.length - 1] || "network";
 }
 
 function selectedParentFiltersForGrain(grain) {
   const selected = selectedFilterValues();
-  const selectedEntity = grain === state.currentGrain ? document.getElementById(`${grain}-filter`)?.value || "" : "";
   return Object.fromEntries(
     Object.entries(selected)
-      .filter(([key, value]) => !(key === grain && value === selectedEntity))
-      .map(([key, value]) => [key, [value]])
+      .filter(([key]) => key !== grain)
+      .filter(([, values]) => values.length)
   );
 }
 
@@ -2921,7 +3094,7 @@ function setExplicitDrilldown(grain, value) {
   const index = drilldownOrder.indexOf(grain);
   state.drilldownPath = state.drilldownPath
     .filter((item) => drilldownOrder.indexOf(item.grain) < index)
-    .filter((item) => document.getElementById(`${item.grain}-filter`)?.value === item.value);
+    .filter((item) => selectedValuesForFilter(item.grain).includes(item.value));
   state.drilldownPath.push({ grain, value });
 }
 
@@ -2941,8 +3114,8 @@ function salesDriverDetailGrain() {
 
 function entityIdsForSummary() {
   if (state.currentGrain === "network") return firstEntityIds("network", 1);
-  const selected = document.getElementById(`${state.currentGrain}-filter`)?.value;
-  if (selected) return [selected];
+  const selected = selectedValuesForFilter(state.currentGrain);
+  if (selected.length) return selected;
   state.currentGrain = nearestDrilldownGrain();
   renderBreadcrumb();
   updatePreviewGrain();
@@ -2958,18 +3131,22 @@ function entityIdsForSalesDriverDetail() {
 }
 
 function entityIdsForStores() {
-  const selected = selectedStoreId();
-  if (selected) return [selected];
+  const selected = selectedStoreIds();
+  if (selected.length) return selected;
   return firstEntityIds("store", state.tablePageSize);
 }
 
+function selectedStoreIds() {
+  return selectedValuesForFilter("store");
+}
+
 function selectedStoreId() {
-  return document.getElementById("store-filter")?.value || "";
+  return selectedStoreIds()[0] || "";
 }
 
 function storesHasProductFilters() {
   const selected = selectedFilterValues();
-  return ["category", "manufacturer", "brand", "sku"].some((key) => Boolean(selected[key]));
+  return ["category", "manufacturer", "brand", "sku"].some((key) => Boolean(selected[key]?.length));
 }
 
 function firstEntityIds(grain, limit) {
@@ -3041,7 +3218,7 @@ function selectedFilterValuesForPortfolio() {
   return Object.fromEntries(
     ["category", "manufacturer", "brand", "sku", "store"]
       .filter((key) => selected[key])
-      .map((key) => [key, [selected[key]]])
+      .map((key) => [key, selected[key]])
   );
 }
 
@@ -3063,7 +3240,7 @@ function portfolioShareUnavailableText() {
 }
 
 function portfolioRankUnavailableText(item) {
-  if (!selectedFilterValues().category && state.currentGrain !== "category") {
+  if (!selectedFilterValues().category?.length && state.currentGrain !== "category") {
     return "Выберите категорию, чтобы увидеть рейтинг производителей.";
   }
   if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
@@ -3078,7 +3255,7 @@ function portfolioAssortmentUnavailableText(item) {
 
 function portfolioBrandUnavailableText(item) {
   if (state.periodMode !== "COMPARE") return "Сравнение бренда с категорией доступно в режиме сравнения.";
-  if (state.currentGrain !== "brand" && !selectedFilterValues().brand) return "Выберите бренд внутри категории, чтобы увидеть сравнение с категорией.";
+  if (state.currentGrain !== "brand" && !selectedFilterValues().brand?.length) return "Выберите бренд внутри категории, чтобы увидеть сравнение с категорией.";
   if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
   return "Сравнение бренда с категорией недоступно для выбранного среза.";
 }
@@ -3233,13 +3410,16 @@ function periodContextText() {
 
 function contextFilterText() {
   const selected = selectedFilterValues();
-  const parts = Object.entries(selected).map(([key, value]) => `${grainLabels[key]}: ${entityDisplayLabel(key, value)}`);
+  const parts = Object.entries(selected).map(([key, values]) => {
+    const labels = values.map((value) => entityDisplayLabel(key, value)).filter(Boolean);
+    return labels.length === 1 ? `${grainLabels[key]}: ${labels[0]}` : `${grainLabels[key]}: ${labels.length} выбрано`;
+  });
   return parts.length ? parts.join(" · ") : "";
 }
 
 function contextSummaryText(response) {
   const selected = selectedFilterValues();
-  const count = Object.keys(selected).length;
+  const count = Object.values(selected).reduce((total, values) => total + values.length, 0);
   const filterText = count ? `${count} ${pluralRu(count, "фильтр", "фильтра", "фильтров")}` : "Все категории";
   return [
     periodContextText(),
@@ -3265,13 +3445,14 @@ function coverageNoteText(response) {
 }
 
 function updateFilterCount() {
-  const count = Object.keys(selectedFilterValues()).length;
+  const count = Object.values(selectedFilterValues()).reduce((total, values) => total + values.length, 0);
   const target = document.getElementById("filter-count");
   if (target) target.textContent = count ? `${count} выбрано` : "не выбраны";
   document.getElementById("reset-filters")?.classList.toggle("is-hidden", count === 0);
   Object.keys(filterConfig).forEach((id) => {
-    const hasValue = Boolean(document.getElementById(`${id}-filter`)?.value);
+    const hasValue = selectedValuesForFilter(id).length > 0;
     document.querySelector(`[data-clear-filter="${id}"]`)?.classList.toggle("is-hidden", !hasValue);
+    syncFilterControl(id);
   });
 }
 

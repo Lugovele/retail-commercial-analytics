@@ -135,8 +135,14 @@ interaction_model:
     browse_without_typing_required_for: [manufacturer, brand, sku, store]
     typeahead_required_for: [manufacturer, brand, sku, store]
     typeahead_must_not_reload_analytics_before_selection: true
+    multi_select_required_for: [category, manufacturer, brand, sku, store]
+    multi_select_semantics:
+      within_one_filter: OR
+      across_filters: AND
+      pending_selection_requires_apply: true
     bounded_option_rendering_required: true
     cascade: category_to_manufacturer_to_brand_to_sku
+    invalid_child_selection: clear_automatically
     store_filter: orthogonal
   drilldown:
     breadcrumb_represents: selected_analytical_entity_path_only

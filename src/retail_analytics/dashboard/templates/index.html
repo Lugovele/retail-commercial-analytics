@@ -29,10 +29,10 @@
       <main>
         <section class="scope-panel" aria-label="Аналитический срез">
           <div class="scope-toolbar">
-            <div class="report-control" id="retailer-control">
-              <div class="report-identity" id="retailer-identity" aria-live="polite">
+            <div class="scope-field report-control" id="retailer-control">
+              <span class="scope-label">Сеть</span>
+              <div class="scope-control report-identity" id="retailer-identity" aria-live="polite">
                 <strong>Загрузка отчёта</strong>
-                <span>Источник определяется</span>
               </div>
               <label class="control control-retailer is-hidden" id="retailer-select-control">
                 <span>Сеть</span>
@@ -40,9 +40,9 @@
               </label>
             </div>
 
-            <div class="period-control" aria-label="Период">
-              <button type="button" class="scope-trigger period-trigger" id="period-popover-button" aria-haspopup="dialog" aria-expanded="false" aria-controls="period-popover">
-                <span class="scope-trigger-label">Период</span>
+            <div class="scope-field period-control" aria-label="Период">
+              <span class="scope-label">Период</span>
+              <button type="button" class="scope-control scope-trigger period-trigger" id="period-popover-button" aria-haspopup="dialog" aria-expanded="false" aria-controls="period-popover">
                 <strong id="period-summary">Загрузка</strong>
                 <span class="period-summary-detail" id="period-summary-detail">Сравнение</span>
               </button>
@@ -90,58 +90,110 @@
             </div>
 
             <div class="filter-grid" aria-label="Фильтры аналитического среза">
-              <label class="control category-control">
-                <span>Категория</span>
-                <div class="select-box">
-                  <select id="category-filter"></select>
-                  <button type="button" class="combo-clear" data-clear-filter="category" aria-label="Очистить категорию">×</button>
+              <div class="scope-field multi-filter" data-filter="category">
+                <span class="scope-label">Категория</span>
+                <button type="button" class="scope-control filter-trigger" id="category-filter-trigger" data-filter-trigger="category" aria-haspopup="dialog" aria-expanded="false" aria-controls="category-filter-popover">
+                  <span id="category-filter-summary">Все категории</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="category" aria-label="Очистить категорию" title="Очистить категорию">×</button>
+                <select id="category-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="category-filter-popover" role="dialog" aria-label="Категория">
+                  <h3>Категория</h3>
+                  <input class="filter-search" id="category-search" type="search" placeholder="Найти категорию" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="category-options" />
+                  <label class="select-all-row"><input type="checkbox" id="category-select-all" data-select-all="category" /> Выбрать показанные</label>
+                  <div class="filter-options" id="category-options" role="group" aria-label="Варианты категории"></div>
+                  <div class="filter-popover-footer">
+                    <span id="category-selected-count">Выбрано: 0</span>
+                    <button type="button" class="filter-clear-action" data-clear-pending-filter="category">Очистить</button>
+                    <button type="button" class="filter-apply-action" data-apply-filter="category">Применить</button>
+                  </div>
                 </div>
-              </label>
-              <label class="control combo-control" data-combobox="manufacturer">
-                <span>Производитель</span>
-                <div class="combo-box">
-                  <input class="entity-search" id="manufacturer-search" type="search" placeholder="Поиск производителя" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="manufacturer-options" />
-                  <button type="button" class="combo-clear" data-clear-filter="manufacturer" aria-label="Очистить производителя">×</button>
+              </div>
+              <div class="scope-field multi-filter" data-filter="manufacturer">
+                <span class="scope-label">Производитель</span>
+                <button type="button" class="scope-control filter-trigger" id="manufacturer-filter-trigger" data-filter-trigger="manufacturer" aria-haspopup="dialog" aria-expanded="false" aria-controls="manufacturer-filter-popover">
+                  <span id="manufacturer-filter-summary">Все производители</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="manufacturer" aria-label="Очистить производителя" title="Очистить производителя">×</button>
+                <select id="manufacturer-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="manufacturer-filter-popover" role="dialog" aria-label="Производитель">
+                  <h3>Производитель</h3>
+                  <input class="filter-search" id="manufacturer-search" type="search" placeholder="Найти производителя" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="manufacturer-options" />
+                  <label class="select-all-row"><input type="checkbox" id="manufacturer-select-all" data-select-all="manufacturer" /> Выбрать показанные</label>
+                  <div class="filter-options" id="manufacturer-options" role="group" aria-label="Варианты производителя"></div>
+                  <div class="filter-popover-footer">
+                    <span id="manufacturer-selected-count">Выбрано: 0</span>
+                    <button type="button" class="filter-clear-action" data-clear-pending-filter="manufacturer">Очистить</button>
+                    <button type="button" class="filter-apply-action" data-apply-filter="manufacturer">Применить</button>
+                  </div>
                 </div>
-                <select id="manufacturer-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
-                <div class="combo-options" id="manufacturer-options" role="listbox"></div>
-              </label>
-              <label class="control combo-control" data-combobox="brand">
-                <span>Бренд</span>
-                <div class="combo-box">
-                  <input class="entity-search" id="brand-search" type="search" placeholder="Поиск бренда" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="brand-options" />
-                  <button type="button" class="combo-clear" data-clear-filter="brand" aria-label="Очистить бренд">×</button>
+              </div>
+              <div class="scope-field multi-filter" data-filter="brand">
+                <span class="scope-label">Бренд</span>
+                <button type="button" class="scope-control filter-trigger" id="brand-filter-trigger" data-filter-trigger="brand" aria-haspopup="dialog" aria-expanded="false" aria-controls="brand-filter-popover">
+                  <span id="brand-filter-summary">Все бренды</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="brand" aria-label="Очистить бренд" title="Очистить бренд">×</button>
+                <select id="brand-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="brand-filter-popover" role="dialog" aria-label="Бренд">
+                  <h3>Бренд</h3>
+                  <input class="filter-search" id="brand-search" type="search" placeholder="Найти бренд" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="brand-options" />
+                  <label class="select-all-row"><input type="checkbox" id="brand-select-all" data-select-all="brand" /> Выбрать показанные</label>
+                  <div class="filter-options" id="brand-options" role="group" aria-label="Варианты бренда"></div>
+                  <div class="filter-popover-footer">
+                    <span id="brand-selected-count">Выбрано: 0</span>
+                    <button type="button" class="filter-clear-action" data-clear-pending-filter="brand">Очистить</button>
+                    <button type="button" class="filter-apply-action" data-apply-filter="brand">Применить</button>
+                  </div>
                 </div>
-                <select id="brand-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
-                <div class="combo-options" id="brand-options" role="listbox"></div>
-              </label>
-              <label class="control combo-control" data-combobox="sku">
-                <span>SKU</span>
-                <div class="combo-box">
-                  <input class="entity-search" id="sku-search" type="search" placeholder="Поиск SKU" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sku-options" />
-                  <button type="button" class="combo-clear" data-clear-filter="sku" aria-label="Очистить SKU">×</button>
+              </div>
+              <div class="scope-field multi-filter" data-filter="sku">
+                <span class="scope-label">SKU</span>
+                <button type="button" class="scope-control filter-trigger" id="sku-filter-trigger" data-filter-trigger="sku" aria-haspopup="dialog" aria-expanded="false" aria-controls="sku-filter-popover">
+                  <span id="sku-filter-summary">Все SKU</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="sku" aria-label="Очистить SKU" title="Очистить SKU">×</button>
+                <select id="sku-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="sku-filter-popover" role="dialog" aria-label="SKU">
+                  <h3>SKU</h3>
+                  <input class="filter-search" id="sku-search" type="search" placeholder="Найти SKU" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sku-options" />
+                  <label class="select-all-row"><input type="checkbox" id="sku-select-all" data-select-all="sku" /> Выбрать показанные</label>
+                  <div class="filter-options" id="sku-options" role="group" aria-label="Варианты SKU"></div>
+                  <div class="filter-popover-footer">
+                    <span id="sku-selected-count">Выбрано: 0</span>
+                    <button type="button" class="filter-clear-action" data-clear-pending-filter="sku">Очистить</button>
+                    <button type="button" class="filter-apply-action" data-apply-filter="sku">Применить</button>
+                  </div>
                 </div>
-                <select id="sku-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
-                <div class="combo-options" id="sku-options" role="listbox"></div>
-              </label>
-              <label class="control combo-control" data-combobox="store">
-                <span>ТТ</span>
-                <div class="combo-box">
-                  <input class="entity-search" id="store-search" type="search" placeholder="Поиск ТТ" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="store-options" />
-                  <button type="button" class="combo-clear" data-clear-filter="store" aria-label="Очистить ТТ">×</button>
+              </div>
+              <div class="scope-field multi-filter" data-filter="store">
+                <span class="scope-label">ТТ</span>
+                <button type="button" class="scope-control filter-trigger" id="store-filter-trigger" data-filter-trigger="store" aria-haspopup="dialog" aria-expanded="false" aria-controls="store-filter-popover">
+                  <span id="store-filter-summary">Все ТТ</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="store" aria-label="Очистить ТТ" title="Очистить ТТ">×</button>
+                <select id="store-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="store-filter-popover" role="dialog" aria-label="ТТ">
+                  <h3>ТТ</h3>
+                  <input class="filter-search" id="store-search" type="search" placeholder="Найти ТТ" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="store-options" />
+                  <label class="select-all-row"><input type="checkbox" id="store-select-all" data-select-all="store" /> Выбрать показанные</label>
+                  <div class="filter-options" id="store-options" role="group" aria-label="Варианты ТТ"></div>
+                  <div class="filter-popover-footer">
+                    <span id="store-selected-count">Выбрано: 0</span>
+                    <button type="button" class="filter-clear-action" data-clear-pending-filter="store">Очистить</button>
+                    <button type="button" class="filter-apply-action" data-apply-filter="store">Применить</button>
+                  </div>
                 </div>
-                <select id="store-filter" class="native-filter-select" aria-hidden="true" tabindex="-1"></select>
-                <div class="combo-options" id="store-options" role="listbox"></div>
-              </label>
-              <label class="toggle-control">
-                <span class="scope-trigger-label" id="private-label-label">Ассортимент</span>
-                <select id="private-label-scope">
+              </div>
+              <label class="scope-field toggle-control">
+                <span class="scope-label" id="private-label-label">Ассортимент</span>
+                <select class="scope-control" id="private-label-scope">
                   <option value="INCLUDE">Весь ассортимент</option>
                   <option value="EXCLUDE">Без выбранного ассортимента</option>
                   <option value="ONLY">Только выбранный ассортимент</option>
                 </select>
               </label>
-              <button type="button" class="filter-reset is-hidden" id="reset-filters">Сбросить</button>
+              <button type="button" class="filter-reset is-hidden" id="reset-filters">Сбросить фильтры</button>
             </div>
           </div>
         </section>
@@ -175,7 +227,7 @@
                     <span>Показатель</span>
                     <select id="chart-metric"></select>
                   </label>
-                  <button type="button" class="text-button" data-open-provenance>Откуда эта цифра?</button>
+                  <button type="button" class="text-button inline-link" data-open-provenance aria-label="Откуда эта цифра?" title="Откуда эта цифра?">i</button>
                 </div>
               </div>
               <div class="chart-box" id="chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
