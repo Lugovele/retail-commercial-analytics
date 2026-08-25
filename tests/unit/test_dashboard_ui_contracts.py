@@ -608,6 +608,10 @@ def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
     assert "async function runSalesDriversQuery()" in script
     assert 'state.salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);' in script
     assert 'state.salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);' in script
+    assert "renderSalesDriverTrend()" in script
+    sales_driver_trend = script.split("function renderSalesDriverTrend()", 1)[1].split("function renderSalesDriverDetailTable()", 1)[0]
+    assert "box.replaceChildren(buildSvgChart(points, entry))" in sales_driver_trend
+    assert "buildOverviewSvgChart" not in sales_driver_trend
     assert 'state.salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
     assert "buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts)" in script
     assert "buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts())" in script
@@ -1166,6 +1170,40 @@ def test_overview_uses_exactly_four_primary_kpi_concepts() -> None:
     assert "primaryKpis.map" in script
     assert "revenue_velocity" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
     assert "distribution" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
+
+
+def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
+    css = html_or_script("styles.css")
+
+    assert "min-height: 104px" in css
+    assert "padding: 13px 14px 12px" in css
+    assert "font-size: 23px" in css
+    assert "padding: 7px 10px" in css
+    assert "min-height: 132px" not in css
+
+
+def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> None:
+    script = html_or_script("app.js")
+    css = html_or_script("styles.css")
+
+    assert "function chartYearSeries(points)" in script
+    assert "function chartPathSegments(points)" in script
+    assert "function monthLabelsShort()" in script
+    assert "box.replaceChildren(buildOverviewSvgChart(points, entry))" in script
+    assert "box.replaceChildren(buildSvgChart(points, entry))" in script
+    assert 'return ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]' in script
+    assert "monthIndex !== previous.monthIndex + 1" in script
+    assert "overview-chart-line--series-" in script
+    assert "chart-legend--series-" in script
+    assert "comparison-point-marker" in script
+    assert "month-grid-line" in css
+    assert "#chart-box" in css
+    assert "overview-chart-svg" in css
+    assert "height: 304px" in css
+    assert "stroke-width: 1.8" in css
+    assert "stroke-width: 3" in css
+    overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
+    assert "value || 0" not in overview_chart
 
 
 def test_overview_decision_layout_uses_contribution_and_driver_guardrails() -> None:

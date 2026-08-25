@@ -1232,13 +1232,79 @@ function renderChart() {
     footnote.textContent = limitationText(result);
     return;
   }
-  box.replaceChildren(buildSvgChart(points, entry));
+  box.replaceChildren(buildOverviewSvgChart(points, entry));
   const missing = (coverage?.missing_periods || []).map(formatPeriod).join(", ");
   const limitation = limitationText(result);
   footnote.textContent = [
     missing ? `Пропущены периоды: ${missing}` : "Все запрошенные периоды с данными показаны.",
     limitation
   ].filter(Boolean).join(" ");
+}
+
+function buildOverviewSvgChart(points, entry) {
+  const width = 860;
+  const height = 318;
+  const pad = { left: 72, right: 34, top: 30, bottom: 54 };
+  const svg = svgEl("svg", { class: "chart-svg overview-chart-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${entry.display_label}: динамика` });
+  const values = points.map((point) => point.value);
+  const max = Math.max(...values, 1);
+  const min = Math.min(0, ...values);
+  const range = max - min || 1;
+  const x = (monthIndex) => pad.left + (monthIndex * (width - pad.left - pad.right)) / 11;
+  const y = (value) => pad.top + (max - value) * (height - pad.top - pad.bottom) / range;
+  const series = chartYearSeries(points);
+
+  for (let tick = 0; tick <= 4; tick += 1) {
+    const value = min + (range * tick) / 4;
+    const yy = y(value);
+    svg.appendChild(svgEl("line", { class: "grid-line", x1: pad.left, y1: yy, x2: width - pad.right, y2: yy }));
+    svg.appendChild(svgText(pad.left - 10, yy + 4, formatValue(value, entry.format), "end", "axis-label"));
+  }
+  svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: height - pad.bottom, x2: width - pad.right, y2: height - pad.bottom }));
+  svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: pad.top, x2: pad.left, y2: height - pad.bottom }));
+  svg.appendChild(svgText(pad.left, 14, unitLabel(entry.format), "start", "axis-unit"));
+
+  monthLabelsShort().forEach((month, index) => {
+    const xx = x(index);
+    svg.appendChild(svgEl("line", { class: "month-grid-line", x1: xx, y1: pad.top, x2: xx, y2: height - pad.bottom }));
+    svg.appendChild(svgText(xx, height - 28, month, "middle", "axis-label month-label"));
+  });
+
+  series.forEach((yearSeries, seriesIndex) => {
+    chartPathSegments(yearSeries.points).forEach((segment) => {
+      if (segment.length > 1) {
+        const path = segment.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.monthIndex)} ${y(point.value)}`).join(" ");
+        svg.appendChild(svgEl("path", { class: `overview-chart-line overview-chart-line--series-${seriesIndex % 3}`, d: path }));
+      }
+    });
+    yearSeries.points.forEach((point) => {
+      const circle = svgEl("circle", {
+        class: `overview-chart-point overview-chart-point--series-${seriesIndex % 3}`,
+        cx: x(point.monthIndex),
+        cy: y(point.value),
+        r: isSelectedComparisonPeriod(point.period) ? 4.8 : 3.6,
+        tabindex: 0
+      });
+      const tooltip = `${formatPeriod(point.period)} · ${entry.display_label}: ${formatValue(point.value, entry.format)}`;
+      circle.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
+      circle.addEventListener("focus", (event) => showTooltip(event, tooltip));
+      circle.addEventListener("mouseleave", hideTooltip);
+      circle.addEventListener("blur", hideTooltip);
+      circle.addEventListener("click", () => openProvenance(entry.metric_concept));
+      svg.appendChild(circle);
+      if (isSelectedComparisonPeriod(point.period)) {
+        svg.appendChild(svgEl("circle", {
+          class: "comparison-point-marker",
+          cx: x(point.monthIndex),
+          cy: y(point.value),
+          r: 7.2
+        }));
+        svg.appendChild(svgText(x(point.monthIndex), y(point.value) - 10, point.period === selectedDateFrom() ? "A" : "B", "middle", "marker-label"));
+      }
+    });
+    svg.appendChild(svgText(width - pad.right - 58, pad.top + 14 + seriesIndex * 18, String(yearSeries.year), "start", `chart-legend chart-legend--series-${seriesIndex % 3}`));
+  });
+  return svg;
 }
 
 function buildSvgChart(points, entry) {
@@ -1284,6 +1350,46 @@ function buildSvgChart(points, entry) {
     }
   });
   return svg;
+}
+
+function chartYearSeries(points) {
+  const byYear = new Map();
+  points.forEach((point) => {
+    const date = new Date(`${point.period}T00:00:00`);
+    const year = date.getFullYear();
+    const monthIndex = date.getMonth();
+    if (!byYear.has(year)) byYear.set(year, []);
+    byYear.get(year).push({ ...point, year, monthIndex });
+  });
+  return Array.from(byYear.entries())
+    .sort(([left], [right]) => left - right)
+    .map(([year, yearPoints]) => ({
+      year,
+      points: yearPoints.sort((left, right) => left.monthIndex - right.monthIndex)
+    }));
+}
+
+function chartPathSegments(points) {
+  const segments = [];
+  let current = [];
+  points.forEach((point) => {
+    const previous = current[current.length - 1];
+    if (previous && point.monthIndex !== previous.monthIndex + 1) {
+      segments.push(current);
+      current = [];
+    }
+    current.push(point);
+  });
+  if (current.length) segments.push(current);
+  return segments;
+}
+
+function monthLabelsShort() {
+  return ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+}
+
+function isSelectedComparisonPeriod(period) {
+  return comparisonMarkerPeriods().includes(period);
 }
 
 function renderDiagnosis() {
