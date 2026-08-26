@@ -1692,6 +1692,108 @@ metric_rules:
   - SINGLE_PERIOD
   - DATE_RANGE
   readiness_requirement: READY_PROJECTION
+- concept_id: manufacturer_abc_revenue
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: manufacturer_abc_units
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: manufacturer_abc_margin_abs
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: sku_abc_revenue
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: sku_abc_units
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: sku_abc_margin_abs
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
 - concept_id: abc
   allowed_screens:
   - portfolio_market

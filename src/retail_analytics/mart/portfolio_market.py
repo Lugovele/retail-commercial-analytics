@@ -124,6 +124,14 @@ class PortfolioMarketService:
         "entity_cumulative_units_share": ("units", True),
         "entity_cumulative_margin_share": ("retailer_margin_abs", True),
     }
+    _ABC_CONCEPTS: ClassVar[dict[str, tuple[str, str]]] = {
+        "manufacturer_abc_revenue": ("manufacturer", "revenue"),
+        "manufacturer_abc_units": ("manufacturer", "units"),
+        "manufacturer_abc_margin_abs": ("manufacturer", "retailer_margin_abs"),
+        "sku_abc_revenue": ("sku", "revenue"),
+        "sku_abc_units": ("sku", "units"),
+        "sku_abc_margin_abs": ("sku", "retailer_margin_abs"),
+    }
     _ACTIVE_SKU_CONCEPTS: ClassVar[set[str]] = {
         "active_sku_count",
         "historical_peak_active_sku_count",
@@ -176,6 +184,8 @@ class PortfolioMarketService:
                 items.append(self._share_projection_item(effective_request, concept_id))
             elif concept_id in self._RANK_CONCEPTS:
                 items.append(self._rank_item(effective_request, concept_id))
+            elif concept_id in self._ABC_CONCEPTS:
+                items.append(self._abc_item(effective_request, concept_id))
             elif concept_id == "manufacturer_population_count":
                 items.append(self._manufacturer_population_item(effective_request))
             elif concept_id in self._ACTIVE_SKU_CONCEPTS:
@@ -392,6 +402,109 @@ class PortfolioMarketService:
                 evaluated_periods=evaluated_periods,
                 deterministic_secondary_sort="entity_id_ascending" if include_cumulative else None,
                 reference_period=reference_period,
+            ),
+        )
+
+    def _abc_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
+        abc_grain, basis_metric = self._ABC_CONCEPTS[concept_id]
+        if request.period_mode != PeriodMode.SINGLE_PERIOD:
+            return _not_applicable(request, concept_id, "category_position", "abc_range_semantics_unsupported")
+        if request.comparison_mode != ComparisonMode.NONE:
+            return _not_applicable(request, concept_id, "category_position", "abc_comparison_semantics_unsupported")
+        unsupported_scope = _scope_filter_unsupported_limitation(request, prefix="abc")
+        if unsupported_scope:
+            return _not_applicable(request, concept_id, "category_position", unsupported_scope)
+        ownership_universe, ownership_limitation = _abc_ownership_universe(request)
+        if ownership_limitation:
+            return _not_applicable(request, concept_id, "category_position", ownership_limitation)
+        assert ownership_universe is not None
+        category, category_limitation = _share_category_scope(request, abc_grain)
+        if category_limitation:
+            return _not_applicable(request, concept_id, "category_position", category_limitation)
+        if not category:
+            return _not_applicable(request, concept_id, "category_position", "abc_requires_single_category_scope")
+        filters = _rank_universe_filters(abc_grain, category)
+        response = self.query_service.query(
+            _metric_request(
+                request,
+                grain_id=abc_grain,
+                metric_concepts=(basis_metric,),
+                comparison_mode=ComparisonMode.NONE,
+                entity_ids=(),
+                entity_filters=filters,
+            )
+        )
+        rank_rows = _rank_rows(
+            response.metric_results,
+            rank_grain=abc_grain,
+            metric_concept=basis_metric,
+            category=category,
+        )
+        negative_or_missing = [row for row in rank_rows if cast(float, row["metric_value"]) < 0]
+        if negative_or_missing:
+            return _not_applicable(
+                request,
+                concept_id,
+                "category_position",
+                "abc_negative_contribution_semantics_unsupported",
+            )
+        share_rows = _share_rows(
+            rank_rows,
+            share_grain=abc_grain,
+            basis_metric=basis_metric,
+            category=category,
+            include_cumulative=True,
+        )
+        if not share_rows:
+            return _not_applicable(request, concept_id, "category_position", "no_abc_metric_facts")
+        universe_total = _share_universe_metric_value(share_rows)
+        if universe_total is None or universe_total <= 0:
+            return _not_applicable(request, concept_id, "category_position", "abc_positive_universe_required")
+        rows = _abc_rows(share_rows, ownership_universe=ownership_universe)
+        focal_entities = _rank_focal_entities(request, abc_grain)
+        rows = _filter_rank_rows(rows, focal_entities=focal_entities)
+        limitations = tuple(item.issue_code for item in response.limitations)
+        if not rows:
+            limitations = (*limitations, "no_abc_rows_after_focal_selection")
+        return PortfolioMarketItem(
+            concept_id=concept_id,
+            status=PortfolioConceptStatus.READY if rows and not limitations else PortfolioConceptStatus.PARTIAL,
+            block_id="category_position",
+            grain_id=abc_grain,
+            entity_id=None,
+            label=None,
+            value=None,
+            unit="abc_class",
+            rows=rows,
+            limitations=tuple(dict.fromkeys(limitations)),
+            provenance=_projection_provenance(
+                request,
+                concept_id=concept_id,
+                projection_semantics="abc_classification_from_cumulative_share_projection",
+                component_metric_concepts=(basis_metric,),
+                input_results=response.metric_results,
+                population_scope={
+                    "abc_entity_type": abc_grain,
+                    "abc_basis_metric": basis_metric,
+                    "category": category,
+                    "ownership_universe": ownership_universe,
+                    "universe_type": "selected_category_entities",
+                    "universe_value": category,
+                    "universe_metric_value": universe_total,
+                    "universe_size": _rank_universe_size(share_rows),
+                    "focal_entity_ids": focal_entities,
+                    "period_scope": "MONTH",
+                    "threshold_policy": "first_row_a_else_after_row_cumulative_lte_0_80_a_lte_0_95_b_else_c",
+                    "a_cumulative_share_lte": 0.8,
+                    "b_cumulative_share_lte": 0.95,
+                    "threshold_crossing_policy": "class_by_cumulative_share_after_entity",
+                    "zero_value_policy": "zero_value_rows_classified_c_when_universe_total_positive",
+                    "negative_value_policy": "fail_closed",
+                    "classification_enum": ("A", "B", "C"),
+                },
+                tie_policy="competition_rank_with_entity_id_secondary_order_may_split_ties",
+                evaluated_periods=tuple(response.available_periods),
+                deterministic_secondary_sort="entity_id_ascending",
             ),
         )
 
@@ -949,6 +1062,47 @@ def _share_movement_rows(
     return tuple(sorted(movement_rows, key=lambda row: (row["rank"] is None, row["rank"] or 999999, str(row["entity_id"]))))
 
 
+def _abc_rows(
+    share_rows: tuple[dict[str, Any], ...],
+    *,
+    ownership_universe: str,
+) -> tuple[dict[str, Any], ...]:
+    rows: list[dict[str, Any]] = []
+    for index, row in enumerate(share_rows):
+        cumulative_share = cast(float | None, row.get("cumulative_share"))
+        abc_class = _abc_class_for_row(row, position=index)
+        abc_row = dict(row)
+        abc_row.update(
+            {
+                "abc_class": abc_class,
+                "ownership_universe": ownership_universe,
+                "category_scope": row.get("category"),
+                "period_scope": "MONTH",
+                "threshold_policy": "first_row_a_else_after_row_cumulative",
+                "threshold_crossing_policy": "class_by_cumulative_share_after_entity",
+                "a_cumulative_share_lte": 0.8,
+                "b_cumulative_share_lte": 0.95,
+                "cumulative_share_for_classification": cumulative_share,
+            }
+        )
+        rows.append(abc_row)
+    return tuple(rows)
+
+
+def _abc_class_for_row(row: dict[str, Any], *, position: int) -> str:
+    metric_value = cast(float, row["metric_value"])
+    if metric_value == 0:
+        return "C"
+    if position == 0:
+        return "A"
+    cumulative_share = cast(float, row["cumulative_share"])
+    if cumulative_share <= 0.8:
+        return "A"
+    if cumulative_share <= 0.95:
+        return "B"
+    return "C"
+
+
 def _rank_movement_rows(
     current_rows: tuple[dict[str, Any], ...],
     reference_rows: tuple[dict[str, Any], ...],
@@ -1057,6 +1211,14 @@ def _share_category_scope(request: PortfolioMarketQueryRequest, share_grain: str
     if not category:
         return None, f"{share_grain}_share_requires_category_scope"
     return category, None
+
+
+def _abc_ownership_universe(request: PortfolioMarketQueryRequest) -> tuple[str | None, str | None]:
+    if request.private_label_scope == PrivateLabelScope.ONLY:
+        return "OWN_PORTFOLIO_CATEGORY", None
+    if request.private_label_scope == PrivateLabelScope.EXCLUDE:
+        return "COMPETITOR_CATEGORY", None
+    return None, "abc_ownership_universe_required"
 
 
 def _rank_universe_filters(rank_grain: str, category: str | None) -> dict[str, tuple[str, ...]] | None:

@@ -256,6 +256,278 @@ def test_rank_null_metric_value_is_not_zero_filled(tmp_path) -> None:
     assert "manufacturer_c" not in {row["entity_id"] for row in response.items[0].rows}
 
 
+def test_manufacturer_abc_requires_explicit_ownership_universe(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(_request(grain_id="manufacturer", concept_ids=("manufacturer_abc_revenue",)))
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("abc_ownership_universe_required",)
+
+
+def test_manufacturer_abc_reuses_rank_share_cumulative_rows(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts(private_label_scope=PrivateLabelScope.ONLY))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    item = response.items[0]
+    rows = {row["entity_id"]: row for row in item.rows}
+    assert item.status == PortfolioConceptStatus.READY
+    assert [row["entity_id"] for row in item.rows] == ["manufacturer_b", "manufacturer_a", "manufacturer_c"]
+    assert rows["manufacturer_b"]["abc_class"] == "A"
+    assert rows["manufacturer_a"]["abc_class"] == "B"
+    assert rows["manufacturer_c"]["abc_class"] == "C"
+    assert rows["manufacturer_a"]["share"] == pytest.approx(150.0 / 450.0)
+    assert rows["manufacturer_a"]["cumulative_share"] == pytest.approx(400.0 / 450.0)
+    assert item.provenance is not None
+    assert item.provenance["projection"]["projection_semantics"] == (
+        "abc_classification_from_cumulative_share_projection"
+    )
+    assert item.provenance["projection"]["population_scope"]["ownership_universe"] == "OWN_PORTFOLIO_CATEGORY"
+    assert item.provenance["projection"]["population_scope"]["threshold_crossing_policy"] == (
+        "class_by_cumulative_share_after_entity"
+    )
+
+
+def test_abc_threshold_crossing_uses_after_row_cumulative_share(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 79.0), ("entity_b", 15.0), ("entity_c", 3.0), ("entity_d", 3.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    rows = {row["entity_id"]: row for row in response.items[0].rows}
+    assert rows["entity_a"]["abc_class"] == "A"
+    assert rows["entity_b"]["abc_class"] == "B"
+    assert rows["entity_c"]["abc_class"] == "C"
+    assert rows["entity_b"]["cumulative_share"] == pytest.approx(0.94)
+    assert rows["entity_c"]["cumulative_share"] == pytest.approx(0.97)
+
+
+def test_abc_first_row_remains_a_when_it_crosses_eighty_percent(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 84.0), ("entity_b", 10.0), ("entity_c", 6.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    rows = {row["entity_id"]: row for row in response.items[0].rows}
+    assert rows["entity_a"]["abc_class"] == "A"
+    assert rows["entity_b"]["abc_class"] == "B"
+    assert rows["entity_c"]["abc_class"] == "C"
+
+
+def test_abc_ties_use_stable_order_and_may_split_at_threshold(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 50.0), ("entity_b", 30.0), ("entity_c", 30.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    rows = response.items[0].rows
+    assert [row["entity_id"] for row in rows] == ["entity_a", "entity_b", "entity_c"]
+    assert rows[1]["rank"] == rows[2]["rank"] == 2
+    assert rows[1]["abc_class"] == "A"
+    assert rows[2]["abc_class"] == "C"
+    assert response.items[0].provenance is not None
+    assert response.items[0].provenance["projection"]["tie_policy"] == (
+        "competition_rank_with_entity_id_secondary_order_may_split_ties"
+    )
+
+
+def test_abc_first_row_policy_is_position_based_not_rank_based_for_top_ties(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 50.0), ("entity_b", 50.0), ("entity_c", 10.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    rows = response.items[0].rows
+    assert [row["entity_id"] for row in rows] == ["entity_a", "entity_b", "entity_c"]
+    assert rows[0]["rank"] == rows[1]["rank"] == 1
+    assert rows[0]["abc_class"] == "A"
+    assert rows[1]["abc_class"] == "B"
+    assert rows[1]["cumulative_share"] == pytest.approx(100.0 / 110.0)
+
+
+def test_abc_zero_values_are_classified_c_when_universe_is_positive(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 100.0), ("entity_b", 0.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    rows = {row["entity_id"]: row for row in response.items[0].rows}
+    assert rows["entity_b"]["share"] == pytest.approx(0.0)
+    assert rows["entity_b"]["abc_class"] == "C"
+
+
+def test_abc_negative_margin_fails_closed(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _abc_facts(("entity_a", 100.0), ("entity_b", -5.0), concept="retailer_margin_abs"),
+    )
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_margin_abs",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("abc_negative_contribution_semantics_unsupported",)
+
+
+def test_abc_zero_denominator_fails_closed(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 0.0), ("entity_b", 0.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("abc_positive_universe_required",)
+
+
+def test_abc_focal_selection_happens_after_full_universe_classification(tmp_path) -> None:
+    service = _service(tmp_path, _abc_facts(("entity_a", 79.0), ("entity_b", 15.0), ("entity_c", 3.0), ("entity_d", 3.0)))
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a",), "manufacturer": ("entity_b",)},
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    assert [row["entity_id"] for row in response.items[0].rows] == ["entity_b"]
+    assert response.items[0].rows[0]["abc_class"] == "B"
+    assert response.items[0].rows[0]["universe_metric_value"] == pytest.approx(100.0)
+
+
+def test_abc_own_and_competitor_universes_are_separate(tmp_path) -> None:
+    facts = pl.concat(
+        [
+            _abc_facts(("entity_a", 70.0), ("entity_b", 30.0), private_label_scope=PrivateLabelScope.ONLY),
+            _abc_facts(("entity_a", 20.0), ("entity_b", 80.0), private_label_scope=PrivateLabelScope.EXCLUDE),
+        ]
+    )
+    service = _service(tmp_path, facts)
+
+    own = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+    competitor = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.EXCLUDE,
+        )
+    )
+
+    assert own.items[0].rows[0]["entity_id"] == "entity_a"
+    assert competitor.items[0].rows[0]["entity_id"] == "entity_b"
+    assert own.items[0].provenance["projection"]["population_scope"]["ownership_universe"] == "OWN_PORTFOLIO_CATEGORY"
+    assert competitor.items[0].provenance["projection"]["population_scope"]["ownership_universe"] == (
+        "COMPETITOR_CATEGORY"
+    )
+
+
+def test_sku_abc_supports_three_bases_without_composite_score(tmp_path) -> None:
+    facts = pl.concat(
+        [
+            _abc_facts(("sku_a", 60.0), ("sku_b", 40.0), grain_id="sku", concept="revenue"),
+            _abc_facts(("sku_a", 40.0), ("sku_b", 60.0), grain_id="sku", concept="units"),
+            _abc_facts(("sku_a", 50.0), ("sku_b", 50.0), grain_id="sku", concept="retailer_margin_abs"),
+        ]
+    )
+    service = _service(tmp_path, facts)
+
+    responses = [
+        service.query(
+            _request(grain_id="sku", concept_ids=(concept,), private_label_scope=PrivateLabelScope.ONLY)
+        ).items[0]
+        for concept in ("sku_abc_revenue", "sku_abc_units", "sku_abc_margin_abs")
+    ]
+
+    assert [item.provenance["projection"]["component_metric_concepts"][0] for item in responses] == [
+        "revenue",
+        "units",
+        "retailer_margin_abs",
+    ]
+    assert all("composite" not in item.provenance["projection"]["projection_semantics"] for item in responses)
+
+
+def test_abc_rejects_range_multi_category_and_store_scopes(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts(private_label_scope=PrivateLabelScope.ONLY))
+
+    range_response = service.query(
+        _request(
+            grain_id="manufacturer",
+            period_mode=PeriodMode.DATE_RANGE,
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+    category_response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a", "category_b")},
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+    store_response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a",), "store": ("store_a",)},
+            concept_ids=("manufacturer_abc_revenue",),
+            private_label_scope=PrivateLabelScope.ONLY,
+        )
+    )
+
+    assert range_response.items[0].limitations == ("abc_range_semantics_unsupported",)
+    assert category_response.items[0].limitations == ("portfolio_requires_single_category",)
+    assert store_response.items[0].limitations == ("abc_scope_filter_unsupported",)
+
+
 def test_entity_share_recomputes_denominator_from_additive_metric_values(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts())
 
@@ -1085,6 +1357,28 @@ def _portfolio_facts(
                     parent_entity_ids={"category": "category_a", "sku": sku},
                 )
             )
+    return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
+
+
+def _abc_facts(
+    *values: tuple[str, float],
+    grain_id: str = "manufacturer",
+    concept: str = "revenue",
+    private_label_scope: PrivateLabelScope = PrivateLabelScope.ONLY,
+) -> pl.DataFrame:
+    rows = [
+        _fact(
+            date(2026, 1, 1),
+            grain_id,
+            entity_id,
+            concept,
+            value,
+            "sum",
+            private_label_scope,
+            parent_entity_ids={"category": "category_a", grain_id: entity_id},
+        )
+        for entity_id, value in values
+    ]
     return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
 
 

@@ -1243,6 +1243,132 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - store
+- concept_id: manufacturer_abc_revenue
+  fact_type: mart.portfolio_market.abc_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: COMPLETE
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: ABC
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - manufacturer
+- concept_id: manufacturer_abc_units
+  fact_type: mart.portfolio_market.abc_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: COMPLETE
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: ABC
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - manufacturer
+- concept_id: manufacturer_abc_margin_abs
+  fact_type: mart.portfolio_market.abc_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: COMPLETE
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: ABC
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - manufacturer
+- concept_id: sku_abc_revenue
+  fact_type: mart.portfolio_market.abc_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: COMPLETE
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: ABC
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - sku
+- concept_id: sku_abc_units
+  fact_type: mart.portfolio_market.abc_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: COMPLETE
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: ABC
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - sku
+- concept_id: sku_abc_margin_abs
+  fact_type: mart.portfolio_market.abc_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: COMPLETE
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: ABC
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - sku
 - concept_id: abc
   fact_type: core.scoring.abc
   coverage_status: PARTIAL

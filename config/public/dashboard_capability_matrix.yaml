@@ -1661,6 +1661,198 @@ capabilities:
   provenance_supported: false
   signal_eligible: false
   recommendation_eligible_future: true
+- concept_id: manufacturer_abc_revenue
+  ui_label_ru: Manufacturer ABC by revenue
+  ui_description_ru: ABC classification for manufacturers inside one category and one ownership universe by revenue contribution.
+  tab: Business analytics
+  group: ABC
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - manufacturer
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: unsupported
+  private_label_scope_support:
+  - EXCLUDE
+  - ONLY
+  format: text
+  unit: abc_class
+  backend_fact_source: mart.portfolio_market.abc_projection
+  availability_status: READY
+  limitations:
+  - single_category_only
+  - ownership_universe_required
+  - additive_basis_only
+  - first_row_a_else_after_row_cumulative_thresholds
+  - ties_may_split_by_stable_entity_order
+  - negative_contribution_fail_closed
+  - custom_range_abc_unsupported
+  - not_delisting_or_tiering
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: manufacturer_abc_units
+  ui_label_ru: Manufacturer ABC by units
+  ui_description_ru: ABC classification for manufacturers inside one category and one ownership universe by units contribution.
+  tab: Business analytics
+  group: ABC
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - manufacturer
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: unsupported
+  private_label_scope_support:
+  - EXCLUDE
+  - ONLY
+  format: text
+  unit: abc_class
+  backend_fact_source: mart.portfolio_market.abc_projection
+  availability_status: READY
+  limitations:
+  - single_category_only
+  - ownership_universe_required
+  - additive_basis_only
+  - first_row_a_else_after_row_cumulative_thresholds
+  - ties_may_split_by_stable_entity_order
+  - negative_contribution_fail_closed
+  - custom_range_abc_unsupported
+  - not_delisting_or_tiering
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: manufacturer_abc_margin_abs
+  ui_label_ru: Manufacturer ABC by absolute margin
+  ui_description_ru: ABC classification for manufacturers inside one category and one ownership universe by absolute-margin contribution.
+  tab: Business analytics
+  group: ABC
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - manufacturer
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: unsupported
+  private_label_scope_support:
+  - EXCLUDE
+  - ONLY
+  format: text
+  unit: abc_class
+  backend_fact_source: mart.portfolio_market.abc_projection
+  availability_status: READY
+  limitations:
+  - single_category_only
+  - ownership_universe_required
+  - additive_basis_only
+  - first_row_a_else_after_row_cumulative_thresholds
+  - ties_may_split_by_stable_entity_order
+  - negative_contribution_fail_closed
+  - custom_range_abc_unsupported
+  - not_delisting_or_tiering
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: sku_abc_revenue
+  ui_label_ru: SKU ABC by revenue
+  ui_description_ru: ABC classification for SKU inside one category and one ownership universe by revenue contribution.
+  tab: Business analytics
+  group: ABC
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: unsupported
+  private_label_scope_support:
+  - EXCLUDE
+  - ONLY
+  format: text
+  unit: abc_class
+  backend_fact_source: mart.portfolio_market.abc_projection
+  availability_status: READY
+  limitations:
+  - single_category_only
+  - ownership_universe_required
+  - additive_basis_only
+  - first_row_a_else_after_row_cumulative_thresholds
+  - ties_may_split_by_stable_entity_order
+  - negative_contribution_fail_closed
+  - custom_range_abc_unsupported
+  - not_delisting_or_tiering
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: sku_abc_units
+  ui_label_ru: SKU ABC by units
+  ui_description_ru: ABC classification for SKU inside one category and one ownership universe by units contribution.
+  tab: Business analytics
+  group: ABC
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: unsupported
+  private_label_scope_support:
+  - EXCLUDE
+  - ONLY
+  format: text
+  unit: abc_class
+  backend_fact_source: mart.portfolio_market.abc_projection
+  availability_status: READY
+  limitations:
+  - single_category_only
+  - ownership_universe_required
+  - additive_basis_only
+  - first_row_a_else_after_row_cumulative_thresholds
+  - ties_may_split_by_stable_entity_order
+  - negative_contribution_fail_closed
+  - custom_range_abc_unsupported
+  - not_delisting_or_tiering
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: sku_abc_margin_abs
+  ui_label_ru: SKU ABC by absolute margin
+  ui_description_ru: ABC classification for SKU inside one category and one ownership universe by absolute-margin contribution.
+  tab: Business analytics
+  group: ABC
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: NOT_APPLICABLE
+  range_aggregation_strategy: unsupported
+  private_label_scope_support:
+  - EXCLUDE
+  - ONLY
+  format: text
+  unit: abc_class
+  backend_fact_source: mart.portfolio_market.abc_projection
+  availability_status: READY
+  limitations:
+  - single_category_only
+  - ownership_universe_required
+  - additive_basis_only
+  - first_row_a_else_after_row_cumulative_thresholds
+  - ties_may_split_by_stable_entity_order
+  - negative_contribution_fail_closed
+  - custom_range_abc_unsupported
+  - not_delisting_or_tiering
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
 - concept_id: abc
   ui_label_ru: ABC
   ui_description_ru: ABC-классификация SKU внутри категории по подтверждённым базисам.
