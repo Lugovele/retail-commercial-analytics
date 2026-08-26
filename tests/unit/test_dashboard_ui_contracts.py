@@ -690,6 +690,7 @@ def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() ->
     assert "function catalogEntries(concept)" in script
     assert "catalogEntries(concept).find((item) => item.grain_support?.includes(grain))" in script
     assert "metricEntryForGrain(concept, grain)" in script
+    assert "function salesDriverDisplayEntry(concept)" in script
     assert "const salesDriverGrainSupport = {" in script
     assert "period_only" in script
     assert 'return [staticCell("Недоступно"), staticCell("Показатель доступен только по отдельным периодам.")];' in script
@@ -698,7 +699,9 @@ def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() ->
     assert "сортировка доступна по столбцам таблицы" in script
     assert "retailer_margin_pct" in script
     assert "weighted_input_price_vat" in script
+    assert "active_store_count" in script
     assert "revenue_velocity" in script
+    assert "margin_velocity" in script
     assert "manufacturer_rank_revenue" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
     assert "category_revenue_share" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
     assert "contribution_to_delta" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
@@ -721,16 +724,57 @@ def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
     assert "buildOverviewSvgChart" not in sales_driver_trend
     assert 'const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
     assert "state.salesDriversTableResponse = salesDriversTableResponse;" in script
-    assert "buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts)" in script
+    assert "const summaryGrain = salesDriverSummaryGrain();" in script
+    assert "buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), concepts)" in script
     assert "buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts())" in script
     assert "comparisonFor(state.salesDriversResponse, result)" in script
     assert '["READY", "PARTIAL"].includes(entry.availability_status)' in script
     assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "!salesDriverGrainSupport[concept]?.includes(grain)" in script
+    assert 'active_store_count: ["network", "category", "manufacturer", "brand", "sku"]' in script
     assert 'distribution: ["category", "manufacturer", "brand", "sku"]' in script
     assert 'velocity: ["category", "manufacturer", "brand", "sku"]' in script
+    assert 'revenue_velocity: ["category", "manufacturer", "brand", "sku"]' in script
+    assert 'margin_velocity: ["category", "manufacturer", "brand", "sku"]' in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
+
+
+def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fallback() -> None:
+    script = html_or_script("app.js")
+
+    buckets = script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
+    assert '"Присутствие", concepts: ["selling_store_count", "active_store_count", "distribution"]' in buckets
+    assert '"Скорость", concepts: ["velocity", "revenue_velocity", "margin_velocity"]' in buckets
+
+    row_builder = script.split("function salesDriverRows()", 1)[1].split("function salesDriverMetricCells", 1)[0]
+    assert ".filter((concept) => salesDriverDisplayEntry(concept))" in row_builder
+    matrix_renderer = script.split("function renderSalesDriverMatrix()", 1)[1].split("function salesDriverMatrixHeaders()", 1)[0]
+    assert "if (result && salesDriverMetricEntry(concept))" in matrix_renderer
+    assert 'metricCell.className = "limitation-state-cell";' in matrix_renderer
+    summary_grain = script.split("function salesDriverSummaryGrain()", 1)[1].split("function entityIdsForSalesDriverSummary", 1)[0]
+    assert 'const focalOrder = ["sku", "brand", "manufacturer", "category"];' in summary_grain
+    assert "selected[grain]?.length === 1" in summary_grain
+    assert "return focalGrain || state.currentGrain;" in summary_grain
+    assert "function entityIdsForSalesDriverSummary" in script
+    assert 'if (grain === "network") return firstEntityIds("network", 1);' in script
+    assert "if (selected.length === 1) return selected;" in script
+
+    support = script.split("const salesDriverGrainSupport = ", 1)[1].split("};", 1)[0]
+    assert 'active_store_count: ["network", "category", "manufacturer", "brand", "sku"]' in support
+    for concept in ("distribution", "velocity", "revenue_velocity", "margin_velocity"):
+        support_line = next(line for line in support.splitlines() if line.strip().startswith(f"{concept}:"))
+        assert '"store"' not in support_line
+
+    for concept in (
+        "active_store_count",
+        "distribution",
+        "velocity",
+        "revenue_velocity",
+        "margin_velocity",
+    ):
+        neutral_line = script.split("const neutralDirectionalMetrics = new Set([", 1)[1].split("]);", 1)[0]
+        assert f'"{concept}"' in neutral_line
 
 
 def test_sales_drivers_provenance_and_drilldown_keep_view_identity() -> None:

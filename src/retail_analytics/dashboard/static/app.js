@@ -110,8 +110,8 @@ const salesDriverBuckets = [
   { title: "Результат", concepts: ["revenue"] },
   { title: "Объём", concepts: ["units"] },
   { title: "Цена", concepts: ["weighted_shelf_price_vat", "weighted_input_price_vat"] },
-  { title: "Присутствие", concepts: ["selling_store_count", "distribution"] },
-  { title: "Скорость", concepts: ["velocity", "revenue_velocity"] },
+  { title: "Присутствие", concepts: ["selling_store_count", "active_store_count", "distribution"] },
+  { title: "Скорость", concepts: ["velocity", "revenue_velocity", "margin_velocity"] },
   { title: "Экономика", concepts: ["retailer_margin_abs", "retailer_margin_pct"] },
   { title: "Структура", concepts: ["sku_count", "brand_count", "category_count"] }
 ];
@@ -123,9 +123,11 @@ const salesDriverGrainSupport = {
   weighted_shelf_price_vat: ["network", "category", "manufacturer", "brand", "sku", "store"],
   weighted_input_price_vat: ["network", "category", "manufacturer", "brand", "sku", "store"],
   selling_store_count: ["network", "category", "manufacturer", "brand", "sku"],
+  active_store_count: ["network", "category", "manufacturer", "brand", "sku"],
   distribution: ["category", "manufacturer", "brand", "sku"],
   velocity: ["category", "manufacturer", "brand", "sku"],
   revenue_velocity: ["category", "manufacturer", "brand", "sku"],
+  margin_velocity: ["category", "manufacturer", "brand", "sku"],
   sku_count: ["network", "category", "manufacturer", "brand", "store"],
   brand_count: ["network", "category", "manufacturer", "store"],
   category_count: ["network", "manufacturer", "store"]
@@ -1075,7 +1077,8 @@ async function runSalesDriversQuery() {
   setLoading(true, "Запрос к витрине");
   renderSalesDriverSkeletons();
   try {
-    const concepts = salesDriverConcepts();
+    const summaryGrain = salesDriverSummaryGrain();
+    const concepts = salesDriverConcepts(summaryGrain);
     if (!concepts.length) {
       renderSalesDriversUnavailable("Для выбранного среза нет поддержанных показателей.");
       state.loadedViews.sales_drivers = true;
@@ -1083,7 +1086,7 @@ async function runSalesDriversQuery() {
       return;
     }
     if (!concepts.includes(state.salesDriverMetric)) state.salesDriverMetric = concepts[0];
-    const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts);
+    const summaryPayload = buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), concepts);
     const chartPayload = buildSalesDriverChartQueryPayload();
     const detailPayload = buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts());
     const salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);
@@ -1234,8 +1237,9 @@ function buildSalesDriverChartQueryPayload() {
   const periods = state.options.periods.map((period) => period.value);
   const dateFrom = state.periodMode === "DATE_RANGE" ? selectedDateFrom() : periods[0] || selectedDateFrom();
   const dateTo = state.periodMode === "DATE_RANGE" ? selectedDateTo() : periods[periods.length - 1] || selectedDateTo();
+  const summaryGrain = salesDriverSummaryGrain();
   return {
-    ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), [state.salesDriverMetric]),
+    ...buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), [state.salesDriverMetric]),
     date_from: dateFrom,
     date_to: dateTo,
     period_mode: "DATE_RANGE",
@@ -1351,9 +1355,9 @@ function overviewConcepts() {
     .filter((concept) => catalogEntry(concept));
 }
 
-function salesDriverConcepts() {
+function salesDriverConcepts(grain = salesDriverSummaryGrain()) {
   return [...new Set(salesDriverBuckets.flatMap((group) => group.concepts))]
-    .filter((concept) => salesDriverMetricEntry(concept));
+    .filter((concept) => salesDriverMetricEntry(concept, grain));
 }
 
 function storeConcepts() {
@@ -1699,16 +1703,21 @@ function renderSalesDriverMatrix() {
     groupCell.textContent = group;
     tr.appendChild(groupCell);
     const metricCell = document.createElement("td");
-    const metricButton = document.createElement("button");
-    metricButton.type = "button";
-    metricButton.className = "table-link";
-    metricButton.textContent = displayLabel(concept);
-    metricButton.setAttribute("aria-pressed", concept === state.salesDriverMetric ? "true" : "false");
-    metricButton.addEventListener("click", async () => {
-      state.salesDriverMetric = concept;
-      await runSalesDriversQuery();
-    });
-    metricCell.appendChild(metricButton);
+    if (result && salesDriverMetricEntry(concept)) {
+      const metricButton = document.createElement("button");
+      metricButton.type = "button";
+      metricButton.className = "table-link";
+      metricButton.textContent = displayLabel(concept);
+      metricButton.setAttribute("aria-pressed", concept === state.salesDriverMetric ? "true" : "false");
+      metricButton.addEventListener("click", async () => {
+        state.salesDriverMetric = concept;
+        await runSalesDriversQuery();
+      });
+      metricCell.appendChild(metricButton);
+    } else {
+      metricCell.textContent = displayLabel(concept);
+      metricCell.className = "limitation-state-cell";
+    }
     tr.appendChild(metricCell);
     salesDriverMetricCells(result, entry).forEach((cell) => {
       const td = document.createElement("td");
@@ -1766,13 +1775,13 @@ function salesDriverRows() {
   const rows = [];
   salesDriverBuckets.forEach((bucket) => {
     bucket.concepts
-      .filter((concept) => salesDriverMetricEntry(concept))
+      .filter((concept) => salesDriverDisplayEntry(concept))
       .forEach((concept) => {
         rows.push({
           group: bucket.title,
           concept,
           result: salesDriverResultFor(concept),
-          entry: catalogEntry(concept)
+          entry: salesDriverDisplayEntry(concept)
         });
       });
   });
@@ -3987,8 +3996,23 @@ function hasNonDrilldownFilters() {
   return Object.keys(selectedFilterValues()).some((grain) => !drilldownGrains.has(grain));
 }
 
+function salesDriverSummaryGrain() {
+  const selected = selectedFilterValues();
+  const focalOrder = ["sku", "brand", "manufacturer", "category"];
+  const focalGrain = focalOrder.find((grain) => selected[grain]?.length === 1);
+  return focalGrain || state.currentGrain;
+}
+
+function entityIdsForSalesDriverSummary(grain = salesDriverSummaryGrain()) {
+  if (grain === "network") return firstEntityIds("network", 1);
+  const selected = selectedValuesForFilter(grain);
+  if (selected.length === 1) return selected;
+  if (grain === state.currentGrain) return entityIdsForSummary();
+  return firstEntityIds(grain, 1);
+}
+
 function salesDriverDetailGrain() {
-  return previewByGrain[state.currentGrain] || "store";
+  return previewByGrain[salesDriverSummaryGrain()] || "store";
 }
 
 function entityIdsForSummary() {
@@ -4035,8 +4059,12 @@ function catalogEntries(concept) {
   return state.catalog.filter((entry) => entry.metric_concept === concept);
 }
 
-function salesDriverMetricEntry(concept) {
-  return metricEntryForGrain(concept, state.currentGrain);
+function salesDriverMetricEntry(concept, grain = salesDriverSummaryGrain()) {
+  return metricEntryForGrain(concept, grain);
+}
+
+function salesDriverDisplayEntry(concept) {
+  return salesDriverMetricEntry(concept) || catalogEntry(concept);
 }
 
 function metricEntryForGrain(concept, grain) {
