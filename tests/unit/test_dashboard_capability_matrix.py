@@ -98,7 +98,7 @@ def test_comparison_support_uses_machine_modes_with_display_labels_at_header() -
     payload = _matrix_payload()
     comparison_modes = set(payload["comparison_labels"])
 
-    assert comparison_modes == {"YOY", "MOM", "PREVIOUS_AVAILABLE", "NONE"}
+    assert comparison_modes == {"YOY", "MOM", "PREVIOUS_AVAILABLE", "AVAILABLE_MONTH_SET", "NONE"}
     for row in payload["capabilities"]:
         assert set(row["comparison_support"]) <= comparison_modes
 

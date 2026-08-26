@@ -85,6 +85,7 @@ Comparison labels:
 | `YOY` | Год к году |
 | `MOM` | Месяц к месяцу |
 | `PREVIOUS_AVAILABLE` | Предыдущий доступный период |
+| `AVAILABLE_MONTH_SET` | Среднее за сопоставимые месяцы |
 | `NONE` | Без сравнения |
 
 Private-label terminology:

@@ -86,6 +86,7 @@ enums:
   period_modes:
   - SINGLE_PERIOD
   - COMPARE
+  - AVAILABLE_MONTH_SET
   - DATE_RANGE
   grains:
   - network

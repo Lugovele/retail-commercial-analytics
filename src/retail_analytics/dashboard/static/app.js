@@ -375,6 +375,7 @@ const comparisonLabels = {
   YOY: "Год к году",
   MOM: "Месяц к месяцу",
   PREVIOUS_AVAILABLE: "Предыдущий доступный период",
+  AVAILABLE_MONTH_SET: "Среднее за сопоставимые месяцы",
   NONE: "Без сравнения"
 };
 const filterConfig = {
@@ -952,7 +953,7 @@ function bindDynamicControls() {
     if (event.key === "Escape") closeAllFilterPopovers();
   });
 
-  ["period-single", "period-a", "date-from", "date-to"].forEach((id) => {
+  ["period-single", "period-a", "period-available-end", "date-from", "date-to"].forEach((id) => {
     document.getElementById(id).addEventListener("change", async () => {
       await applyScopeChange(async () => {
         updatePeriodSummary();
@@ -1005,6 +1006,7 @@ function populatePeriodSelects(resetPeriods) {
   const earliest = periods[0];
   setupPeriodSelect("period-single", latest, resetPeriods);
   setupPeriodSelect("period-a", latest, resetPeriods);
+  setupPeriodSelect("period-available-end", latest, resetPeriods);
   setupPeriodSelect("date-from", earliest, resetPeriods);
   setupPeriodSelect("date-to", latest, resetPeriods);
   updatePeriodSummary();
@@ -1205,15 +1207,15 @@ function buildQueryPayload(grain, entityIds, metricConcepts) {
   return {
     retailer_id: retailer.retailer_id,
     source_id: retailer.source_id,
-    date_from: selectedDateFrom(),
-    date_to: selectedDateTo(),
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
     period_mode: periodMode,
     period_grain: "month",
     grain_id: grain,
     entity_ids: entityIds,
     entity_filters: selectedParentFiltersForGrain(grain),
     metric_concepts: metricConcepts,
-    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    comparison_mode: selectedComparisonMode(),
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value
@@ -1280,8 +1282,8 @@ function buildPortfolioMarketPayload() {
   return {
     retailer_id: retailer.retailer_id,
     source_id: retailer.source_id,
-    date_from: selectedDateFrom(),
-    date_to: selectedDateTo(),
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
     period_mode: backendPeriodMode(),
     period_grain: "month",
     grain_id: grain,
@@ -1289,7 +1291,7 @@ function buildPortfolioMarketPayload() {
     entity_filters: selectedPortfolioExecutionFilters(grain),
     user_entity_filters: selectedFilterValuesForPortfolio(),
     concept_ids: portfolioMarketConcepts,
-    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    comparison_mode: state.periodMode === "AVAILABLE_MONTH_SET" ? "NONE" : selectedComparisonMode(),
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value
@@ -1305,14 +1307,14 @@ function buildSignalsPayload() {
   return {
     retailer_id: retailer.retailer_id,
     source_id: retailer.source_id,
-    date_from: selectedDateFrom(),
-    date_to: selectedDateTo(),
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
     period_mode: backendPeriodMode(),
     period_grain: "month",
     grain_id: state.currentGrain,
     entity_ids: entityIdsForSummary(),
     entity_filters: selectedFilterValuesForPortfolio(),
-    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    comparison_mode: selectedComparisonMode(),
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value,
@@ -1326,14 +1328,14 @@ function buildDataPayload() {
   return {
     retailer_id: retailer.retailer_id,
     source_id: retailer.source_id,
-    date_from: selectedDateFrom(),
-    date_to: selectedDateTo(),
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
     period_mode: backendPeriodMode(),
     period_grain: "month",
     grain_id: state.currentGrain,
     entity_ids: entityIdsForSummary(),
     entity_filters: selectedFilterValuesForPortfolio(),
-    comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
+    comparison_mode: selectedComparisonMode(),
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value,
     limit: state.tablePageSize,
@@ -1342,7 +1344,9 @@ function buildDataPayload() {
 }
 
 function backendPeriodMode() {
-  return state.periodMode === "DATE_RANGE" ? "DATE_RANGE" : "SINGLE_PERIOD";
+  if (state.periodMode === "DATE_RANGE") return "DATE_RANGE";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "AVAILABLE_MONTH_SET";
+  return "SINGLE_PERIOD";
 }
 
 function overviewConcepts() {
@@ -1423,7 +1427,7 @@ function renderKpis() {
     card.appendChild(valueWrap);
     const meta = document.createElement("span");
     meta.className = "kpi-meta";
-    if (state.periodMode === "COMPARE" && comparison) {
+    if (isComparisonDisplayMode() && comparison) {
       meta.appendChild(metricDeltaButton({
         concept,
         text: kpiContextText(comparison, entry),
@@ -1764,7 +1768,7 @@ function renderSalesDriverMatrix() {
 }
 
 function salesDriverMatrixHeaders() {
-  if (state.periodMode === "COMPARE") {
+  if (isComparisonDisplayMode()) {
     return ["Группа", "Показатель", "Сейчас", "Сравнение", "Изменение", "Доказательство"];
   }
   if (state.periodMode === "DATE_RANGE") return ["Группа", "Показатель", "Диапазон", "Статус", "Доказательство"];
@@ -1793,19 +1797,22 @@ function salesDriverMetricCells(result, entry) {
   const valueCell = (text, role = "current") => ({ text, inspectable: true, isDelta: false, role });
   const deltaCell = (text, deltaValue) => ({ text, inspectable: true, isDelta: true, deltaValue, role: "delta" });
   if (!result || !entry) {
-    return state.periodMode === "COMPARE"
+    return isComparisonDisplayMode()
       ? [staticCell("Недоступно"), staticCell("Недоступно"), staticCell("Недоступно")]
       : [staticCell("Недоступно"), staticCell("Показатель недоступен для выбранного среза.")];
   }
   const limitation = limitationText(result);
   if (state.periodMode === "DATE_RANGE") {
     if (entry.range_aggregation_strategy === "period_only" || result.limitations?.includes("range_aggregation_period_only")) {
-      return [staticCell("Недоступно"), staticCell("Показатель доступен только по отдельным периодам.")];
+      return [staticCell("Недоступно"), staticCell(periodOnlyLimitationText())];
     }
     return [valueCell(compactMetricText(result, entry)), staticCell(limitation || "Показано за доступные периоды диапазона.")];
   }
   if (state.periodMode === "SINGLE_PERIOD") {
     return [valueCell(formatValue(result.value, entry.format)), staticCell(limitation || "Состояние за выбранный период.")];
+  }
+  if (state.periodMode === "AVAILABLE_MONTH_SET" && result.limitations?.includes("range_aggregation_period_only")) {
+    return [staticCell("Недоступно"), staticCell("Недоступно"), staticCell(periodOnlyLimitationText())];
   }
   const comparison = comparisonFor(state.salesDriversResponse, result);
   if (!comparison) {
@@ -2160,6 +2167,7 @@ function signalContextText() {
 function signalPeriodContextText() {
   if (state.periodMode === "DATE_RANGE") return `${formatPeriod(selectedDateFrom())} — ${formatPeriod(selectedDateTo())}`;
   if (state.periodMode === "SINGLE_PERIOD") return formatPeriod(selectedDateFrom());
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return `Сопоставимые месяцы · ${availableMonthSummaryText(state.summaryResponse || state.signalsResponse)}`;
   return `${formatPeriod(selectedDateFrom())} · ${comparisonLabels[state.comparisonMode]}`;
 }
 
@@ -2489,7 +2497,7 @@ function renderStoreRanking() {
     node.appendChild(valueWrap);
     return node;
   }));
-  document.getElementById("stores-ranking-context").textContent = state.periodMode === "COMPARE"
+  document.getElementById("stores-ranking-context").textContent = isComparisonDisplayMode()
     ? "Показан текущий уровень и изменение к периоду сравнения. Это не вклад в изменение."
     : "Показан текущий уровень по выбранному показателю.";
 }
@@ -2550,7 +2558,7 @@ function renderStoresTable() {
   });
   const caption = table.createCaption();
   caption.textContent = `Показаны ${Math.min(tableRows.length, state.tablePageSize)} из ${tableRows.length} ТТ · сортировка по выбранному показателю`;
-  document.getElementById("stores-table-context").textContent = state.periodMode === "COMPARE"
+  document.getElementById("stores-table-context").textContent = isComparisonDisplayMode()
     ? "Δ показывает изменение к периоду сравнения; вклад по ТТ не рассчитывается в этом разделе."
     : "Таблица ранжирована по выбранному показателю.";
 }
@@ -2576,7 +2584,7 @@ function storeKpiCard(result) {
 
 function storeRankingValueNode(result, entry, response) {
   const comparison = comparisonFor(response, result);
-  if (state.periodMode === "COMPARE" && comparison) {
+  if (isComparisonDisplayMode() && comparison) {
     const wrap = document.createElement("span");
     wrap.className = "store-value-stack";
     wrap.appendChild(metricComparisonCell({
@@ -2643,7 +2651,7 @@ function storeTableInspectableCell(concept, entityId) {
 }
 
 function storeTableDelta(concept, entityId) {
-  if (state.periodMode !== "COMPARE") return "—";
+  if (!isComparisonDisplayMode()) return "—";
   const result = storeResultFor(concept, entityId);
   const entry = catalogEntry(concept);
   const comparison = comparisonFor(state.storesResponse, result);
@@ -2670,7 +2678,7 @@ function storeMetricWithDelta(result, entry, response) {
   if (!result || !entry) return "Недоступно";
   const value = formatValue(result.value, entry.format);
   const comparison = comparisonFor(response, result);
-  if (state.periodMode === "COMPARE" && comparison) {
+  if (isComparisonDisplayMode() && comparison) {
     return `${value} · ${formatDeltaValue(comparison.delta, deltaFormatFor(entry.format))}`;
   }
   if (result.limitations?.includes("range_aggregation_period_only")) return "только по периодам";
@@ -2805,7 +2813,9 @@ function portfolioPositionSummaryTiles(rows) {
   const first = rows[0] || {};
   const grain = portfolioAnalysisGrain();
   const universeSize = first.shareRow?.universe_size ?? first.rankRow?.universe_size ?? first.shareRow?.current_universe_size;
-  const period = state.periodMode === "COMPARE" ? "сравнение периодов" : state.periodMode === "DATE_RANGE" ? "диапазон" : "один период";
+  const period = state.periodMode === "AVAILABLE_MONTH_SET"
+    ? "сопоставимые месяцы"
+    : state.periodMode === "COMPARE" ? "сравнение периодов" : state.periodMode === "DATE_RANGE" ? "диапазон" : "один период";
   return [
     portfolioSummaryTile("Уровень", grainLabels[grain] || grain, hasSingleCategoryScope() ? "внутри выбранной категории" : "обзор рынка по категориям"),
     portfolioSummaryTile("Показатель", portfolioBasisLabel(state.portfolioBasis), period),
@@ -3475,7 +3485,9 @@ function attentionItems() {
 function updatePeriodPanels() {
   document.getElementById("single-fields").classList.toggle("is-hidden", state.periodMode !== "SINGLE_PERIOD");
   document.getElementById("compare-fields").classList.toggle("is-hidden", state.periodMode !== "COMPARE");
+  document.getElementById("available-month-fields").classList.toggle("is-hidden", state.periodMode !== "AVAILABLE_MONTH_SET");
   document.getElementById("range-fields").classList.toggle("is-hidden", state.periodMode !== "DATE_RANGE");
+  updateAvailableMonthDisclosure();
   updatePeriodSummary();
 }
 
@@ -3491,6 +3503,13 @@ function updatePeriodSummary() {
   if (state.periodMode === "SINGLE_PERIOD") {
     summary.textContent = formatCompactPeriod(selectedDateFrom()) || "Выберите период";
     detail.textContent = "Один период";
+    return;
+  }
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    const end = selectedDateTo();
+    const year = end ? new Date(`${end}T00:00:00`).getFullYear() : null;
+    summary.textContent = year ? `${year} vs ${year - 1}` : "Выберите период";
+    detail.textContent = "Сопоставимые месяцы";
     return;
   }
   const reference = derivedComparisonPeriodLabel();
@@ -3530,16 +3549,51 @@ function shiftMonth(value, offset) {
 
 function updateComparisonPeriodDisplay(response) {
   const target = document.getElementById("period-b-derived");
+  if (target && state.periodMode !== "COMPARE") {
+    target.textContent = "Не используется";
+  } else if (target) {
+    const comparison = response?.comparisons?.[0];
+    target.textContent = comparison?.comparison_period_start
+      ? formatPeriod(comparison.comparison_period_start)
+      : "Нет подходящего периода";
+  }
+  updateAvailableMonthDisclosure(response);
+  updatePeriodSummary();
+}
+
+function updateAvailableMonthDisclosure(response) {
+  const target = document.getElementById("available-months-derived");
   if (!target) return;
-  if (state.periodMode !== "COMPARE") {
+  if (state.periodMode !== "AVAILABLE_MONTH_SET") {
     target.textContent = "Не используется";
     return;
   }
-  const comparison = response?.comparisons?.[0];
-  target.textContent = comparison?.comparison_period_start
-    ? formatPeriod(comparison.comparison_period_start)
-    : "Нет подходящего периода";
-  updatePeriodSummary();
+  target.textContent = availableMonthSummaryText(response);
+}
+
+function availableMonthSummaryText(response) {
+  const comparisonSet = availableMonthComparisonSet(response);
+  const current = formatPeriodList(comparisonSet?.current_included_periods);
+  const reference = formatPeriodList(comparisonSet?.comparison_included_periods);
+  if (current && reference) return `${current} vs ${reference}`;
+  const resultSet = availableMonthResultSet(response);
+  const included = formatPeriodList(resultSet?.included_periods);
+  return included || "Определяются витриной";
+}
+
+function availableMonthComparisonSet(response) {
+  const comparison = response?.comparisons?.find((item) => item.current_included_periods?.length);
+  if (comparison) return comparison;
+  const provenanceSet = response?.metric_results
+    ?.map((item) => item.provenance?.comparison?.period_set)
+    .find((periodSet) => periodSet?.current_included_periods?.length);
+  return provenanceSet || null;
+}
+
+function availableMonthResultSet(response) {
+  return response?.metric_results
+    ?.map((item) => item.provenance?.current_analytical_scope?.period_set)
+    .find((periodSet) => periodSet?.included_periods?.length) || null;
 }
 
 function updatePreviewGrain() {
@@ -3927,17 +3981,36 @@ function selectedRetailer() {
 function selectedDateFrom() {
   if (state.periodMode === "DATE_RANGE") return document.getElementById("date-from")?.value || "";
   if (state.periodMode === "SINGLE_PERIOD") return document.getElementById("period-single")?.value || "";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return document.getElementById("period-available-end")?.value || "";
   return document.getElementById("period-a")?.value || "";
 }
 
 function selectedDateTo() {
   if (state.periodMode === "DATE_RANGE") return document.getElementById("date-to")?.value || "";
   if (state.periodMode === "SINGLE_PERIOD") return document.getElementById("period-single")?.value || "";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return document.getElementById("period-available-end")?.value || "";
   return document.getElementById("period-a")?.value || "";
 }
 
 function selectedComparisonMode() {
-  return state.periodMode === "COMPARE" ? state.comparisonMode : "NONE";
+  if (state.periodMode === "COMPARE") return state.comparisonMode;
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "YOY";
+  return "NONE";
+}
+
+function queryDateFrom() {
+  if (state.periodMode !== "AVAILABLE_MONTH_SET") return selectedDateFrom();
+  const end = selectedDateTo();
+  if (!end) return "";
+  return `${new Date(`${end}T00:00:00`).getFullYear()}-01-01`;
+}
+
+function queryDateTo() {
+  return selectedDateTo();
+}
+
+function isComparisonDisplayMode() {
+  return state.periodMode === "COMPARE" || state.periodMode === "AVAILABLE_MONTH_SET";
 }
 
 function selectedValuesForFilter(id) {
@@ -4142,13 +4215,13 @@ function portfolioItemDetailText(item) {
   const entry = catalogEntry(item.concept_id) || portfolioPresentationFallback[item.concept_id];
   const format = entry?.format || (item.unit === "percentage_points" ? "percentage_points" : item.unit || "decimal");
   const pieces = [];
-  if (state.periodMode === "COMPARE" && item.current_value !== null && item.current_value !== undefined) {
+  if (isComparisonDisplayMode() && item.current_value !== null && item.current_value !== undefined) {
     pieces.push(`${formatValue(item.current_value, format)} сейчас`);
   }
-  if (state.periodMode === "COMPARE" && item.reference_value !== null && item.reference_value !== undefined) {
+  if (isComparisonDisplayMode() && item.reference_value !== null && item.reference_value !== undefined) {
     pieces.push(`${formatValue(item.reference_value, format)} сравнение`);
   }
-  if (state.periodMode === "COMPARE" && item.delta !== null && item.delta !== undefined) {
+  if (isComparisonDisplayMode() && item.delta !== null && item.delta !== undefined) {
     const deltaFormat = format === "percent" ? "percentage_points" : format;
     pieces.push(`${formatDeltaValue(item.delta, deltaFormat)} изменение`);
   }
@@ -4361,7 +4434,7 @@ function comparisonFor(response, result) {
 
 function metricCellTextForResponse(result, entry, response) {
   const comparison = comparisonFor(response, result);
-  if (state.periodMode === "COMPARE" && comparison) {
+  if (isComparisonDisplayMode() && comparison) {
     const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
     return `${formatValue(result.value, entry.format)} (${formatDeltaValue(comparison.delta, deltaFormat)})`;
   }
@@ -4478,18 +4551,19 @@ function comparisonMarkerPeriods() {
 }
 
 function kpiContextText(comparison, entry) {
-  if (state.periodMode === "COMPARE" && comparison) {
+  if (isComparisonDisplayMode() && comparison) {
     const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
     return `${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`;
   }
   if (state.periodMode === "DATE_RANGE") return "За доступные периоды диапазона";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "Среднее за сопоставимые месяцы";
   return "За выбранный период";
 }
 
 function compactMetricText(result, entry) {
   if (!result || !entry) return "Недоступно";
   const comparison = comparisonFor(state.summaryResponse, result);
-  if (state.periodMode === "COMPARE" && comparison) {
+  if (isComparisonDisplayMode() && comparison) {
     const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
     return `${formatValue(result.value, entry.format)} · ${formatDeltaValue(comparison.delta, deltaFormat)}`;
   }
@@ -4500,6 +4574,7 @@ function compactMetricText(result, entry) {
 function movementText(result, entry) {
   if (!result || !entry) return "Показатель недоступен для выбранного среза.";
   if (state.periodMode === "DATE_RANGE") return "Показано за доступные периоды диапазона.";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "Сравнение по сопоставимым доступным месяцам.";
   if (state.periodMode === "SINGLE_PERIOD") return "Состояние за выбранный период.";
   const comparison = comparisonFor(state.summaryResponse, result);
   if (!comparison) return "Нет подходящего периода сравнения.";
@@ -4515,8 +4590,15 @@ function metricCellText(result, entry, response) {
 
 function limitationText(result) {
   if (!result?.limitations?.length) return "";
-  if (result.limitations.includes("range_aggregation_period_only")) return "Показатель доступен только по отдельным периодам.";
+  if (result.limitations.includes("range_aggregation_period_only")) return periodOnlyLimitationText();
   return "Есть ограничения для выбранного среза.";
+}
+
+function periodOnlyLimitationText() {
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    return "Для этого показателя сравнение по сопоставимым месяцам пока не поддерживается.";
+  }
+  return "Показатель доступен только по отдельным периодам.";
 }
 
 function periodContextText() {
@@ -4524,6 +4606,9 @@ function periodContextText() {
     return `${formatPeriod(selectedDateFrom())} — ${formatPeriod(selectedDateTo())}`;
   }
   if (state.periodMode === "SINGLE_PERIOD") return formatPeriod(selectedDateFrom());
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    return `Среднее за сопоставимые месяцы · ${availableMonthSummaryText(state.summaryResponse)}`;
+  }
   const comparison = state.summaryResponse?.comparisons?.[0];
   const ref = comparison?.comparison_period_start ? formatPeriod(comparison.comparison_period_start) : "нет периода";
   return `${formatPeriod(selectedDateFrom())} vs ${ref} · ${comparisonLabels[state.comparisonMode]}`;
@@ -4594,13 +4679,14 @@ function tableContextText(count, reason = "") {
 
 function salesDriversContextText() {
   if (state.periodMode === "COMPARE") return "Показатели сравниваются без вывода о том, что одно изменение объясняет другое.";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "Поддержанные показатели пересчитаны backend по сопоставимым доступным месяцам; периодические показатели ограничены.";
   if (state.periodMode === "DATE_RANGE") return "Диапазон используется для динамики; периодические показатели не показываются как агрегат.";
   return "Текущее состояние показателей и историческая динамика.";
 }
 
 function salesDriverMatrixCaption() {
   const unavailable = salesDriverRows().filter(({ result }) => result?.limitations?.includes("range_aggregation_period_only")).length;
-  if (state.periodMode === "DATE_RANGE" && unavailable) {
+  if ((state.periodMode === "DATE_RANGE" || state.periodMode === "AVAILABLE_MONTH_SET") && unavailable) {
     return `${unavailable} ${pluralRu(unavailable, "показатель доступен", "показателя доступны", "показателей доступны")} только по отдельным периодам.`;
   }
   return "Строка матрицы переключает динамику выбранного показателя.";
@@ -4947,6 +5033,8 @@ function provenanceSections(provenance, result, options = {}) {
   const quality = provenance.quality || {};
   const concept = metric.metric_concept || result.metric_concept;
   const definition = metricInspectorDefinition(concept);
+  const periodSet = scope.period_set || {};
+  const comparisonSet = comparison.period_set || {};
   const sections = [
     section("Что это за показатель", [
       ["\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c", displayLabel(concept)],
@@ -4960,6 +5048,8 @@ function provenanceSections(provenance, result, options = {}) {
     section("Срез", [
       ["Сеть / источник", [selectedRetailer().display_label, selectedRetailer().source_label].filter(Boolean).join(" / ") || "н/д"],
       ["Периоды", compactList((scope.requested_periods || []).map(formatPeriod))],
+      ...(periodSet.scope_type ? [["Режим периода", "Среднее за сопоставимые месяцы"]] : []),
+      ...(periodSet.included_periods?.length ? [["Включённые месяцы", formatPeriodList(periodSet.included_periods)]] : []),
       ["Объект", [grainLabels[scope.grain_id] || scope.grain_id, entityDisplayLabel(scope.grain_id, scope.entity_id)].filter(Boolean).join(" / ") || "н/д"],
       ["Учёт ассортимента", privateLabelScopeText(scope.private_label_scope)]
     ]),
@@ -4967,11 +5057,15 @@ function provenanceSections(provenance, result, options = {}) {
       ["Числитель", value.numerator_value ?? "н/д"],
       ["Знаменатель", value.denominator_value ?? "н/д"],
       ["Формула", definition.formula_summary],
-      ["Стратегия диапазона", rangeStrategyLabel(value.range_aggregation_strategy)]
+      ["Стратегия диапазона", rangeStrategyLabel(value.range_aggregation_strategy)],
+      ...(value.available_month_aggregation_method ? [["Метод сопоставимых месяцев", availableMonthAggregationLabel(value.available_month_aggregation_method)]] : [])
     ]),
     section("Сравнение", [
       ["Тип", comparisonLabels[comparison.comparison_mode] || comparison.comparison_mode || "н/д"],
       ["Периоды", compactList((comparison.periods || []).map((item) => `${item.current_period_start} vs ${item.comparison_period_start}`))],
+      ...(comparisonSet.current_included_periods?.length ? [["Текущие месяцы", formatPeriodList(comparisonSet.current_included_periods)]] : []),
+      ...(comparisonSet.comparison_included_periods?.length ? [["Месяцы сравнения", formatPeriodList(comparisonSet.comparison_included_periods)]] : []),
+      ...(comparisonSet.comparison_policy ? [["Политика сопоставления", comparisonSet.comparison_policy]] : []),
       ["Качество", compactList(comparison.quality_statuses)],
       ["Семантика изменения", deltaSemanticsText(concept)],
       ["Режим проверки", options.mode === "comparison" ? "изменение показателя" : "значение показателя"]
@@ -5182,6 +5276,11 @@ function compactList(value) {
   return value.join(", ");
 }
 
+function formatPeriodList(periods) {
+  if (!periods?.length) return "";
+  return periods.map(formatPeriod).join(", ");
+}
+
 function rangeStrategyLabel(strategy) {
   return {
     sum_available_periods: "сумма доступных периодов",
@@ -5191,6 +5290,15 @@ function rangeStrategyLabel(strategy) {
     period_only: "только по периодам",
     projection_defined: "определено проекцией"
   }[strategy] || strategy || "н/д";
+}
+
+function availableMonthAggregationLabel(method) {
+  return {
+    ARITHMETIC_MEAN_OF_MONTHLY_TOTALS: "средний доступный месяц по месячным итогам",
+    RECOMPUTE_FROM_AVAILABLE_MONTH_COMPONENTS: "пересчёт из компонентов за включённые месяцы",
+    POINT_IN_TIME_ONLY_UNSUPPORTED_FOR_AVAILABLE_MONTH_SET: "не поддерживается для сопоставимых месяцев",
+    UNSUPPORTED: "не поддерживается"
+  }[method] || method || "н/д";
 }
 
 function unitLabel(format) {

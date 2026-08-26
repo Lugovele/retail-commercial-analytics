@@ -50,6 +50,7 @@
                 <div class="period-mode" role="group" aria-label="Режим периода">
                   <button type="button" class="mode-button" data-period-mode="SINGLE_PERIOD">Один период</button>
                   <button type="button" class="mode-button is-active" data-period-mode="COMPARE">Сравнение</button>
+                  <button type="button" class="mode-button" data-period-mode="AVAILABLE_MONTH_SET">Сопоставимые месяцы</button>
                   <button type="button" class="mode-button" data-period-mode="DATE_RANGE">Весь диапазон</button>
                 </div>
                 <div class="period-fields is-hidden" id="single-fields">
@@ -75,6 +76,20 @@
                       <option value="MOM">Месяц к месяцу</option>
                     </select>
                   </label>
+                </div>
+                <div class="period-fields period-fields--available is-hidden" id="available-month-fields">
+                  <label>
+                    <span>До периода</span>
+                    <select id="period-available-end"></select>
+                  </label>
+                  <div class="derived-field">
+                    <span>Политика</span>
+                    <strong>MATCHED_AVAILABLE_MONTHS</strong>
+                  </div>
+                  <div class="derived-field">
+                    <span>Месяцы</span>
+                    <strong id="available-months-derived">Определяются витриной</strong>
+                  </div>
                 </div>
                 <div class="period-fields is-hidden" id="range-fields">
                   <label>

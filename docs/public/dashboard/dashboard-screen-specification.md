@@ -59,6 +59,7 @@ The period control is collapsed in the row and opens a popover for:
 
 - `Один период`;
 - `Сравнение`;
+- `Среднее за сопоставимые месяцы`;
 - `Весь диапазон`.
 
 Network/report identity must use runtime display metadata in the primary UI,

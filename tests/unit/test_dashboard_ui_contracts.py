@@ -428,17 +428,58 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "Откуда эта цифра?" not in html
     assert "Один период" in html
     assert "Сравнение" in html
+    assert "Сопоставимые месяцы" in html
     assert "Весь диапазон" in html
     assert "Год к году" in html
     assert "Месяц к месяцу" in html
     assert "Предыдущий доступный период" in html
     assert "period-b-derived" in html
+    assert "period-available-end" in html
+    assert "available-months-derived" in html
     assert "private-label-scope" in html
     assert "Картина изменений" in html
     assert "Где произошло изменение?" in html
     assert "Объекты с наибольшим вкладом в изменение" in html
     assert "Что проверить" in html
     assert 'id="period-b"' not in html
+
+
+def test_available_month_comparison_is_visible_and_backend_driven() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    assert 'data-period-mode="AVAILABLE_MONTH_SET"' in html
+    assert "Сопоставимые месяцы" in html
+    assert "MATCHED_AVAILABLE_MONTHS" in html
+    assert "Среднее за сопоставимые месяцы" in script
+    assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "AVAILABLE_MONTH_SET";' in script
+    assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "YOY";' in script
+    assert "function queryDateFrom()" in script
+    assert "function queryDateTo()" in script
+    assert "function availableMonthSummaryText(response)" in script
+    assert "current_included_periods" in script
+    assert "comparison_included_periods" in script
+    assert "available_month_aggregation_method" in script
+    assert "availableMonthAggregationLabel(value.available_month_aggregation_method)" in script
+    assert "frontend" not in script.split("function availableMonthSummaryText(response)", 1)[1].split("function availableMonthResultSet", 1)[0].lower()
+    assert "YTD" not in html
+    assert "6M" not in html
+    assert "6М" not in html
+    assert "H1" not in html
+
+
+def test_available_month_mode_keeps_unsupported_metrics_row_level_limited() -> None:
+    script = html_or_script("app.js")
+
+    assert "function periodOnlyLimitationText()" in script
+    assert "Для этого показателя сравнение по сопоставимым месяцам пока не поддерживается." in script
+    assert 'state.periodMode === "AVAILABLE_MONTH_SET" && result.limitations?.includes("range_aggregation_period_only")' in script
+    assert "return [staticCell(\"Недоступно\"), staticCell(\"Недоступно\"), staticCell(periodOnlyLimitationText())];" in script
+    assert "range_aggregation_period_only" in script
+    assert "period_only" in script
+    assert "velocity" in script
+    assert "distribution" in script
+    assert "isComparisonDisplayMode()" in script
 
 
 def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content() -> None:
@@ -693,7 +734,7 @@ def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() ->
     assert "function salesDriverDisplayEntry(concept)" in script
     assert "const salesDriverGrainSupport = {" in script
     assert "period_only" in script
-    assert 'return [staticCell("Недоступно"), staticCell("Показатель доступен только по отдельным периодам.")];' in script
+    assert "periodOnlyLimitationText()" in script
     assert "Показатель доступен только по отдельным периодам." in script
     assert "Для выбранного среза нет поддержанных показателей." in script
     assert "сортировка доступна по столбцам таблицы" in script
@@ -1399,7 +1440,7 @@ def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -
 def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:
     script = html_or_script("app.js")
 
-    period_handler = script.split('["period-single", "period-a", "date-from", "date-to"].forEach((id) => {', 1)[1].split('document.getElementById("sales-drivers-provenance")', 1)[0]
+    period_handler = script.split('["period-single", "period-a", "period-available-end", "date-from", "date-to"].forEach((id) => {', 1)[1].split('document.getElementById("sales-drivers-provenance")', 1)[0]
     assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("chart-metric")', 1)[0]
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-signal-kind]")', 1)[0]
 
@@ -1451,9 +1492,11 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
 
     assert "private_label_scope" in script
     assert "comparison_mode" in script
-    assert 'comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE"' in script
+    assert "comparison_mode: selectedComparisonMode()" in script
+    assert 'comparison_mode: state.periodMode === "AVAILABLE_MONTH_SET" ? "NONE" : selectedComparisonMode()' in script
     assert "period_mode" in script
-    assert 'return state.periodMode === "DATE_RANGE" ? "DATE_RANGE" : "SINGLE_PERIOD";' in script
+    assert 'if (state.periodMode === "DATE_RANGE") return "DATE_RANGE";' in script
+    assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "AVAILABLE_MONTH_SET";' in script
     assert "grain_id" in script
     assert "metric_concepts" in script
     assert "entity_ids: entityIds" in script
