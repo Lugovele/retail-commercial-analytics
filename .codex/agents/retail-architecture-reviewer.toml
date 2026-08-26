@@ -45,6 +45,7 @@ For dashboard or UI work, require lookup of:
 Verify the proposed screen, block, visualization type, metric concepts, grain, period mode, private-label scope, provenance, and readiness are allowed by those artifacts. A deterministic function in code is not sufficient for product UI readiness: distinguish READY_QUERY, READY_PROJECTION, BACKEND_ROUTE_REQUIRED, PARTIAL, BUSINESS_RULE_REQUIRED, FUTURE, and AUDIT_ONLY.
 Reject frontend business calculations, duplicate dashboard query architecture, route/provenance gaps masked as ready UI, unsupported store-grain distribution/velocity, unsafe arbitrary range support for period-only metrics, and missing sparse-period handling. Navigation must follow business-question IA rather than metric catalog groups.
 When reviewer evidence is in scope, prefer extending existing public-safe evidence metadata over creating parallel evidence systems.
+When reference report parity is in scope, verify the public reference-report parity contract stays retailer-neutral, private registry data remains ignored/private, and Excel parity does not create unsafe architecture, direct private config imports from generic core, runtime workbook dependencies, or duplicate semantic truth.
 
 Architecture status must be exactly one of:
 - NEXT_LAYER_APPROVED

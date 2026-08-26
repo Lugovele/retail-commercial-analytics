@@ -1,0 +1,117 @@
+reference_report_parity_contract:
+  schema_version: reference-report-parity-v1
+  purpose: Retailer-neutral governance for private analytical reference reports.
+  registry:
+    private_registry_path: config/private/reference_reports.yaml
+    tracked_registry_allowed: false
+    retailer_specific_values_allowed_only_in_private_registry: true
+    required_fields:
+      - reference_report_id
+      - path
+      - role
+      - status
+      - parity_required
+      - inventory_path
+      - parity_matrix_path
+      - metric_explanation_gap_path
+      - purposes
+      - evidence_for
+      - not_authoritative_for
+  parity_rule:
+    analytical_content_parity_required: true
+    layout_parity_required: false
+    allowed_web_improvements:
+      - visualization
+      - dynamic_scopes
+      - drilldown
+      - progressive_disclosure
+      - grouped_or_optional_columns
+      - interactive_comparison
+      - metric_inspector
+    unresolved_gap_reasons:
+      - business_rules_explicitly_reject
+      - source_cannot_support
+      - semantic_reconciliation_unresolved
+  parity_statuses:
+    - EXACT_PARITY
+    - PARTIAL_PARITY
+    - BACKEND_READY_UI_MISSING
+    - BACKEND_MISSING
+    - SEMANTIC_RECONCILIATION_REQUIRED
+    - BUSINESS_RULE_REQUIRED
+    - SOURCE_MAPPING_REQUIRED
+    - NOT_APPLICABLE
+    - INTENTIONALLY_IMPROVED_PRESENTATION
+  excel_authority_boundary:
+    role: evidence_of_business_usage
+    not_executable_calculation_authority: true
+    requires_explicit_deterministic_business_rule_contract_for:
+      - formulas
+      - thresholds
+      - labels
+      - classifications
+      - vpo_semantics
+      - distribution_semantics
+      - ranking_universe
+      - abc_formula
+      - averaging_rules
+      - causal_claims
+  registered_report_purposes:
+    - analytical_content_parity
+    - business_terminology_reference
+    - comparison_pattern_reference
+    - reconciliation_reference
+    - acceptance_reference
+  evidence_for:
+    - existing_business_analytical_content
+    - familiar_business_terminology
+    - existing_comparison_patterns
+    - expected_analytical_dimensions
+    - parity_acceptance_evidence
+  not_authoritative_for:
+    - formulas_until_reconciled
+    - technical_architecture
+    - causal_claims
+    - unsupported_semantic_assumptions
+    - production_calculation_logic
+  parity_impact_lifecycle:
+    applies_when_private_reference_report_registered: true
+    required_questions:
+      - is_private_reference_analytical_report_registered
+      - which_parity_concepts_are_affected
+      - does_change_remove_or_degrade_existing_analytical_access
+      - does_change_introduce_or_reinterpret_semantics_needing_reconciliation
+      - is_any_parity_gap_intentionally_unresolved_and_correctly_surfaced
+    meaningful_change_types:
+      - metric_addition
+      - metric_removal
+      - metric_semantics
+      - comparison_semantics
+      - dashboard_screen_capability
+      - filter_dimension
+      - portfolio
+      - sales_drivers
+      - table_capability
+      - ranking
+      - share
+      - abc
+      - metric_inspector_definition
+    visual_only_change_types_exempt_from_full_reference_audit:
+      - css_only
+      - spacing_only
+      - color_token_only
+      - typography_only
+      - visual_polish_only
+  reviewer_responsibilities:
+    senior_fmcg_business:
+      - commercial_analytical_content_parity
+    product_information_architecture:
+      - every_approved_concept_has_clear_web_home
+    bi_ui:
+      - improved_presentation_without_lost_analytical_access
+    architecture:
+      - no_unsafe_architecture_or_duplicate_semantic_truth
+    business_rules:
+      - excel_evidence_never_substitutes_for_confirmed_calculation_semantics
+    change:
+      - silent_parity_regression_detection

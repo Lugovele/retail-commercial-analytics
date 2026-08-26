@@ -31,6 +31,12 @@ The public schema lives at:
 config/public/review_lifecycle_evidence_schema.yaml
 ```
 
+Reference report parity governance lives at:
+
+```text
+config/public/reference_report_parity_contract.yaml
+```
+
 The validation API lives at:
 
 ```text
@@ -101,3 +107,17 @@ private_context_descriptor: private business-rule/config context inspected; deta
 ## Agent Responsibilities
 
 The lifecycle orchestrator is responsible for requiring or writing final public-safe evidence after approval. Read-only reviewers remain read-only and report statuses only. The change reviewer verifies evidence shape and publication safety when evidence files are in scope. The business-rules reviewer may say whether private context was used, but must not place private payloads into tracked evidence. The remediation agent may update remediation metadata but cannot mark reviewer approval.
+
+## Reference Report Parity
+
+When a private analytical reference report is registered, meaningful analytical
+or product-semantic changes must include parity-impact consideration. This asks
+whether registered reference content exists, which parity concepts are affected,
+whether analytical access is removed or degraded, whether semantics are
+introduced or reinterpreted, and whether any unresolved gap is explicitly
+surfaced.
+
+This applies to metric additions or removals, comparison semantics, dashboard
+screen capability, filters and dimensions, Portfolio, Sales Drivers, tables,
+ranking, share, ABC, and Metric Inspector definitions. Trivial CSS or purely
+cosmetic work does not require a full workbook re-audit.

@@ -53,6 +53,22 @@ review_lifecycle_evidence_schema:
     - architecture_status
     - business_rules_status
     - private_rendered_acceptance_status
+  optional_reference_report_parity_fields:
+    - private_reference_report_registered
+    - affected_parity_concepts
+    - parity_access_removed_or_degraded
+    - semantics_introduced_or_reinterpreted
+    - unresolved_parity_gap_surfaced
+    - parity_impact_status
+  reference_report_parity:
+    contract_path: config/public/reference_report_parity_contract.yaml
+    applies_to_meaningful_analytical_or_product_semantic_changes: true
+    full_reference_audit_required_for_visual_only_changes: false
+    parity_impact_statuses:
+      - NOT_APPLICABLE
+      - REVIEWED_NO_IMPACT
+      - REVIEWED_IMPACT_ACCEPTED
+      - CHANGES_REQUIRED
   finding_fields:
     - finding_id
     - severity

@@ -50,6 +50,11 @@ architecture reviewer -> implementation -> tests -> change reviewer -> business-
 
 The business-rules reviewer is a read-only semantic reviewer. It does not replace the architecture reviewer, change reviewer, test planner, or remediation agent.
 
+Reference report parity lifecycle:
+When an ignored private analytical reference report is registered, meaningful analytical or product-semantic changes must consider the public reference-report parity contract in config/public/reference_report_parity_contract.yaml. Ask whether a private reference report is registered, which parity concepts are affected, whether the change removes or degrades analytical access, whether it introduces or reinterprets semantics needing reconciliation, and whether any unresolved parity gap is intentionally surfaced. Apply this to metric additions/removals, comparison semantics, dashboard screen capability, filters/dimensions, Portfolio, Sales Drivers, tables, ranking/share/ABC, and Metric Inspector definitions. Do not require a full workbook re-audit for trivial CSS or purely cosmetic changes.
+
+Reference reports are evidence of business usage and parity acceptance, not executable calculation authority. Do not parse workbook formulas, thresholds, labels, classifications, VPO/distribution semantics, ranking universes, ABC formulas, averaging rules, or causal claims into production logic without explicit deterministic business-rule contracts.
+
 Before starting, if a Git repository exists, inspect: git status --short, git log --oneline -n 12, git show --stat HEAD, and git diff --check. If Git is not initialized, do not treat that as an error and do not initialize it.
 
 Do not run without direct user request: git add, git commit, git commit --amend, git push, git reset, git restore, git clean, git checkout, git switch, discarding user changes, or history rewrites.
