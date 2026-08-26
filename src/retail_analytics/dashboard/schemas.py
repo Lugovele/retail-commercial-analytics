@@ -99,6 +99,7 @@ class DashboardUiPortfolioMarketPayload:
     date_to: date | str | None = None
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
+    user_entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: str = "NONE"
     private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
@@ -196,7 +197,7 @@ def build_portfolio_market_request(
         concept_ids=tuple(data.concept_ids),
         entity_ids=tuple(data.entity_ids),
         entity_filters=data.entity_filters,
-        user_entity_filters=data.entity_filters,
+        user_entity_filters=data.user_entity_filters or data.entity_filters,
         comparison_mode=ComparisonMode(data.comparison_mode),
         private_label_scope=PrivateLabelScope(data.private_label_scope),
         mart_build_id=data.mart_build_id,
@@ -514,6 +515,12 @@ def _coerce_portfolio_market_payload(
         if isinstance(raw_filters, dict)
         else None
     )
+    raw_user_filters = payload.get("user_entity_filters")
+    user_filters = (
+        {str(key): tuple(str(item) for item in values) for key, values in raw_user_filters.items()}
+        if isinstance(raw_user_filters, dict)
+        else None
+    )
     return DashboardUiPortfolioMarketPayload(
         retailer_id=str(payload["retailer_id"]),
         source_id=str(payload["source_id"]),
@@ -525,6 +532,7 @@ def _coerce_portfolio_market_payload(
         concept_ids=tuple(str(item) for item in payload.get("concept_ids", ())),
         entity_ids=tuple(str(item) for item in payload.get("entity_ids", ())),
         entity_filters=filters,
+        user_entity_filters=user_filters,
         comparison_mode=str(payload.get("comparison_mode", "NONE")),
         private_label_scope=payload.get("private_label_scope", PrivateLabelScope.INCLUDE),
         mart_build_id=payload.get("mart_build_id"),

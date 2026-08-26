@@ -35,6 +35,8 @@ const state = {
   chartMetric: "revenue",
   salesDriverMetric: "revenue",
   storesMetric: "revenue",
+  portfolioEntityLevel: "manufacturer",
+  portfolioBasis: "revenue",
   previewGrain: "category",
   tablePageSize: 40,
   overviewPreviewRowLimit: 8,
@@ -138,8 +140,18 @@ const portfolioMarketConcepts = [
   "entity_cumulative_revenue_share",
   "entity_cumulative_units_share",
   "entity_cumulative_margin_share",
+  "category_rank_revenue",
+  "category_rank_units",
+  "category_rank_margin_abs",
   "manufacturer_rank_revenue",
   "manufacturer_rank_units",
+  "manufacturer_rank_margin_abs",
+  "brand_rank_revenue",
+  "brand_rank_units",
+  "brand_rank_margin_abs",
+  "sku_rank_revenue",
+  "sku_rank_units",
+  "sku_rank_margin_abs",
   "manufacturer_abc_revenue",
   "manufacturer_abc_units",
   "manufacturer_abc_margin_abs",
@@ -163,7 +175,20 @@ const portfolioCumulativeShareConcepts = [
   "entity_cumulative_units_share",
   "entity_cumulative_margin_share"
 ];
-const portfolioRankConcepts = ["manufacturer_rank_revenue", "manufacturer_rank_units"];
+const portfolioRankConcepts = [
+  "category_rank_revenue",
+  "category_rank_units",
+  "category_rank_margin_abs",
+  "manufacturer_rank_revenue",
+  "manufacturer_rank_units",
+  "manufacturer_rank_margin_abs",
+  "brand_rank_revenue",
+  "brand_rank_units",
+  "brand_rank_margin_abs",
+  "sku_rank_revenue",
+  "sku_rank_units",
+  "sku_rank_margin_abs"
+];
 const portfolioAbcConcepts = [
   "manufacturer_abc_revenue",
   "manufacturer_abc_units",
@@ -421,6 +446,20 @@ function bindStaticControls() {
       state.signalGrainFilter = button.dataset.signalGrain || "all";
       updatePressedGroup("[data-signal-grain]", "signalGrain", state.signalGrainFilter);
       renderSignals();
+    });
+  });
+  document.getElementById("portfolio-entity-level")?.addEventListener("change", async (event) => {
+    await applyScopeChange(async () => {
+      state.portfolioEntityLevel = event.target.value || "manufacturer";
+      invalidateLoadedViews();
+      await runActiveViewQuery();
+    });
+  });
+  document.getElementById("portfolio-basis")?.addEventListener("change", async (event) => {
+    await applyScopeChange(async () => {
+      state.portfolioBasis = event.target.value || "revenue";
+      invalidateLoadedViews();
+      await runActiveViewQuery();
     });
   });
   document.getElementById("data-prev-page")?.addEventListener("click", async () => {
@@ -1214,6 +1253,7 @@ function buildContributionPayload(summaryResponse = state.summaryResponse) {
 
 function buildPortfolioMarketPayload() {
   const retailer = selectedRetailer();
+  const grain = portfolioAnalysisGrain();
   return {
     retailer_id: retailer.retailer_id,
     source_id: retailer.source_id,
@@ -1221,9 +1261,10 @@ function buildPortfolioMarketPayload() {
     date_to: selectedDateTo(),
     period_mode: backendPeriodMode(),
     period_grain: "month",
-    grain_id: state.currentGrain,
-    entity_ids: entityIdsForSummary(),
-    entity_filters: selectedFilterValuesForPortfolio(),
+    grain_id: grain,
+    entity_ids: [],
+    entity_filters: selectedPortfolioExecutionFilters(grain),
+    user_entity_filters: selectedFilterValuesForPortfolio(),
     concept_ids: portfolioMarketConcepts,
     comparison_mode: state.periodMode === "COMPARE" ? selectedComparisonMode() : "NONE",
     include_lineage: true,
@@ -1833,6 +1874,7 @@ function renderSalesDriversUnavailable(message) {
 function renderPortfolioMarket() {
   renderPortfolioContextStripForResponse(state.portfolioMarketResponse);
   renderBreadcrumb();
+  syncPortfolioControls();
   document.getElementById("portfolio-market-context").textContent = portfolioContextText();
   document.getElementById("portfolio-market-private-label-title").textContent = `Рынок и ${privateLabelDisplayName()}`;
   renderPortfolioPosition();
@@ -2605,12 +2647,14 @@ function renderPortfolioPosition() {
   const rankList = document.getElementById("portfolio-rank-list");
   const shareItems = portfolioItems(portfolioShareConcepts).filter(isDisplayablePortfolioItem);
   const contributionRows = portfolioContributionRows();
-  const rank = portfolioItem("manufacturer_rank_revenue");
+  const rank = portfolioItem(portfolioBasisConcept("rank"));
   const rows = rank?.rows || [];
   const selectedManufacturer =
     selectedFilterValues().manufacturer?.[0] || (state.currentGrain === "manufacturer" ? entityIdsForSummary()[0] : "");
 
-  if (shareItems.length) {
+  if (contributionRows.length) {
+    shareStrip.replaceChildren(...portfolioPositionSummaryTiles(contributionRows));
+  } else if (shareItems.length) {
     shareStrip.replaceChildren(...shareItems.map((item) => portfolioMetricTile(item)));
   } else {
     replaceWithMessage(shareStrip, "empty-state compact", portfolioShareUnavailableText());
@@ -2666,16 +2710,11 @@ function renderPortfolioPosition() {
 }
 
 function portfolioContributionRows() {
-  const abcItem = portfolioItems(portfolioAbcConcepts)
-    .find((item) => item.rows?.length);
-  const shareItem = portfolioItems(portfolioContributionConcepts)
-    .find((item) => item.rows?.length && (!abcItem || portfolioBasisMetric(item) === portfolioBasisMetric(abcItem)));
-  const basis = portfolioBasisMetric(abcItem) || portfolioBasisMetric(shareItem);
-  const cumulativeItem = portfolioItems(portfolioCumulativeShareConcepts)
-    .find((item) => item.rows?.length && portfolioBasisMetric(item) === basis);
-  const rankItem = portfolioItems(portfolioRankConcepts)
-    .find((item) => item.rows?.length && portfolioBasisMetric(item) === basis);
-  const baseItem = abcItem || shareItem || rankItem;
+  const shareItem = portfolioItem(portfolioBasisConcept("share"));
+  const cumulativeItem = portfolioItem(portfolioBasisConcept("cumulative"));
+  const rankItem = portfolioItem(portfolioBasisConcept("rank"));
+  const abcItem = portfolioItem(portfolioBasisConcept("abc"));
+  const baseItem = [shareItem, abcItem, rankItem].find((item) => item?.rows?.length);
   if (!baseItem?.rows?.length) return [];
   const cumulativeByEntity = rowsByEntityId(cumulativeItem?.rows || []);
   const rankByEntity = rowsByEntityId(rankItem?.rows || []);
@@ -2702,16 +2741,43 @@ function portfolioContributionRows() {
   });
 }
 
+function portfolioPositionSummaryTiles(rows) {
+  const first = rows[0] || {};
+  const grain = portfolioAnalysisGrain();
+  const universeSize = first.shareRow?.universe_size ?? first.rankRow?.universe_size ?? first.shareRow?.current_universe_size;
+  const period = state.periodMode === "COMPARE" ? "сравнение периодов" : state.periodMode === "DATE_RANGE" ? "диапазон" : "один период";
+  return [
+    portfolioSummaryTile("Уровень", grainLabels[grain] || grain, hasSingleCategoryScope() ? "внутри выбранной категории" : "обзор рынка по категориям"),
+    portfolioSummaryTile("Показатель", portfolioBasisLabel(state.portfolioBasis), period),
+    portfolioSummaryTile("Вселенная", universeSize ? `${formatValue(universeSize, "integer")} объектов` : `${rows.length} строк`, ownershipLabel(first.abcRow || first.shareRow) || privateLabelScopeText(document.getElementById("private-label-scope").value))
+  ];
+}
+
+function portfolioSummaryTile(label, value, detail) {
+  const node = document.createElement("article");
+  node.className = "portfolio-metric";
+  appendText(node, "span", label);
+  appendText(node, "strong", value);
+  appendText(node, "small", detail);
+  return node;
+}
+
 function portfolioDecisionRow(model) {
   const node = document.createElement("article");
   const ownershipClass = portfolioOwnershipClass(model.abcRow || model.shareRow);
-  node.className = ["portfolio-decision-row", ownershipClass].filter(Boolean).join(" ");
+  const selectedClass = selectedValuesForFilter(model.entityType).includes(model.entityId) ? "is-selected" : "";
+  node.className = ["portfolio-decision-row", ownershipClass, selectedClass].filter(Boolean).join(" ");
 
   const entity = document.createElement("div");
   entity.className = "portfolio-entity-cell";
   appendText(entity, "span", grainLabels[model.entityType] || model.entityType || "Объект");
-  const title = document.createElement("strong");
+  const title = document.createElement("button");
+  title.type = "button";
+  title.className = "portfolio-entity-link";
   title.textContent = model.label;
+  title.addEventListener("click", () => {
+    void selectPortfolioEntity(model.entityType, model.entityId);
+  });
   entity.appendChild(title);
   const ownership = ownershipBadge(model.abcRow || model.shareRow);
   if (ownership) entity.appendChild(ownership);
@@ -2728,19 +2794,21 @@ function portfolioCurrentReferenceCell(model) {
   const cell = document.createElement("div");
   cell.className = "portfolio-current-cell";
   appendText(cell, "span", "Текущий вклад");
+  const row = model.valueRow || model.shareRow || model.abcRow;
+  const currentValue = row?.current_metric_value ?? row?.metric_value;
   const current = document.createElement("strong");
   current.className = "metric-current";
   current.appendChild(metricValueButton({
-    concept: model.valueRow?.basis_metric_id || model.valueItem?.concept_id || model.shareItem?.concept_id || model.abcItem?.concept_id,
-    text: formatValue(model.valueRow?.metric_value, catalogEntry(model.valueRow?.basis_metric_id)?.format || "decimal"),
-    result: portfolioRowResultForInspector(model.valueItem || model.shareItem || model.abcItem, model.valueRow || model.shareRow || model.abcRow),
+    concept: row?.basis_metric_id || model.valueItem?.concept_id || model.shareItem?.concept_id || model.abcItem?.concept_id,
+    text: formatValue(currentValue, catalogEntry(row?.basis_metric_id)?.format || "decimal"),
+    result: portfolioRowResultForInspector(model.valueItem || model.shareItem || model.abcItem, row),
     response: state.portfolioMarketResponse,
-    sections: portfolioRowProvenanceSections(model.valueItem || model.abcItem || model.shareItem, model.valueRow || model.abcRow || model.shareRow, model)
+    sections: portfolioRowProvenanceSections(model.valueItem || model.abcItem || model.shareItem, row, model)
   }));
   cell.appendChild(current);
   const reference = document.createElement("small");
   reference.className = "metric-reference";
-  reference.textContent = portfolioReferenceText(model.valueRow || model.shareRow || model.abcRow);
+  reference.textContent = portfolioReferenceText(row);
   cell.appendChild(reference);
   return cell;
 }
@@ -2754,7 +2822,7 @@ function portfolioRankCell(model) {
   rank.className = "rank-value";
   rank.appendChild(metricValueButton({
     concept: model.rankItem?.concept_id || "manufacturer_rank_revenue",
-    text: row.rank ? `№${row.rank}` : "н/д",
+    text: row.rank !== null && row.rank !== undefined ? `№${row.rank}` : "н/д",
     result: portfolioRowResultForInspector(model.rankItem || model.shareItem, row),
     response: state.portfolioMarketResponse,
     sections: portfolioRowProvenanceSections(model.rankItem || model.abcItem || model.shareItem, row, model)
@@ -2842,7 +2910,7 @@ function portfolioReferenceText(row) {
 
 function rankMovementBadge(row) {
   const stateValue = row.rank_movement_state || row.movement_state;
-  const movement = row.rank_movement ?? row.rank_delta;
+  const movement = row.rank_movement_positions ?? row.rank_movement ?? row.rank_delta;
   if (!stateValue && (movement === null || movement === undefined)) return null;
   const badge = document.createElement("small");
   const normalized = stateValue || (movement < 0 ? "IMPROVED" : movement > 0 ? "DECLINED" : "UNCHANGED");
@@ -2866,8 +2934,8 @@ function rankMovementText(stateValue, movement) {
   if (stateValue === "NEW_IN_RANK_UNIVERSE") return "Новый";
   if (stateValue === "EXITED_RANK_UNIVERSE") return "Вышел";
   const amount = Math.abs(Number(movement) || 0);
-  if (stateValue === "IMPROVED") return `↑ ${formatValue(amount, "integer")}`;
-  if (stateValue === "DECLINED") return `↓ ${formatValue(amount, "integer")}`;
+  if (stateValue === "IMPROVED") return `↑ ${formatValue(amount, "integer")} поз.`;
+  if (stateValue === "DECLINED") return `↓ ${formatValue(amount, "integer")} поз.`;
   return "→";
 }
 
@@ -2919,6 +2987,9 @@ function portfolioDecisionContextText() {
     : "";
   const ownership = ownershipLabel(row?.abcRow || row?.shareRow) || privateLabelScopeText(document.getElementById("private-label-scope").value);
   const basis = portfolioBasisLabel(row?.shareRow?.basis_metric_id);
+  if (portfolioAnalysisGrain() === "category") {
+    return `Категории рынка · вклад ${basis} · нажмите категорию, чтобы открыть производителей, бренды и SKU`;
+  }
   return [
     category ? `Категория: ${category}` : "Категория задана срезом",
     ownership,
@@ -3752,6 +3823,25 @@ async function drillIntoEntity(entityId) {
   await runActiveViewQuery();
 }
 
+async function selectPortfolioEntity(grain, entityId) {
+  if (!entityId || !document.getElementById(`${grain}-filter`)) return;
+  await applyScopeChange(async () => {
+    state.filters[grain] = [entityId];
+    state.pendingFilters[grain] = [entityId];
+    syncFilterControl(grain);
+    resetChildFilters(grain);
+    state.currentGrain = grain;
+    setExplicitDrilldown(grain, entityId);
+    if (grain === "category") state.portfolioEntityLevel = "manufacturer";
+    renderBreadcrumb();
+    updatePreviewGrain();
+    updateFilterCount();
+    await refreshRuntimeOptions();
+    invalidateLoadedViews();
+    await runActiveViewQuery();
+  });
+}
+
 async function selectStore(entityId) {
   if (!document.getElementById("store-filter")) return;
   state.filters.store = [entityId];
@@ -3993,29 +4083,97 @@ function selectedFilterValuesForPortfolio() {
   );
 }
 
+function selectedPortfolioExecutionFilters(grain) {
+  const selected = selectedFilterValuesForPortfolio();
+  const executionFilters = Object.create(null);
+  if (selected.category?.length) executionFilters.category = selected.category;
+  if (selected.store?.length) executionFilters.store = selected.store;
+  const focalGrains = ["manufacturer", "brand", "sku"];
+  focalGrains.forEach((candidate) => {
+    if (candidate !== grain && selected[candidate]?.length) executionFilters[candidate] = selected[candidate];
+  });
+  return executionFilters;
+}
+
+function selectedCategoryCount() {
+  return selectedFilterValues().category?.length || 0;
+}
+
+function hasSingleCategoryScope() {
+  return selectedCategoryCount() === 1;
+}
+
+function portfolioAnalysisGrain() {
+  if (!hasSingleCategoryScope()) return "category";
+  if (["manufacturer", "brand", "sku"].includes(state.portfolioEntityLevel)) return state.portfolioEntityLevel;
+  return "manufacturer";
+}
+
+function portfolioBasisConcept(prefix) {
+  const suffix = {
+    revenue: "revenue",
+    units: "units",
+    retailer_margin_abs: "margin_abs"
+  }[state.portfolioBasis] || "revenue";
+  if (prefix === "share") {
+    return {
+      revenue: "entity_revenue_share",
+      units: "entity_units_share",
+      retailer_margin_abs: "entity_margin_share"
+    }[state.portfolioBasis] || "entity_revenue_share";
+  }
+  if (prefix === "cumulative") {
+    return {
+      revenue: "entity_cumulative_revenue_share",
+      units: "entity_cumulative_units_share",
+      retailer_margin_abs: "entity_cumulative_margin_share"
+    }[state.portfolioBasis] || "entity_cumulative_revenue_share";
+  }
+  return `${portfolioAnalysisGrain()}_${prefix}_${suffix}`;
+}
+
+function syncPortfolioControls() {
+  const entityLevel = document.getElementById("portfolio-entity-level");
+  const basis = document.getElementById("portfolio-basis");
+  if (entityLevel) {
+    const effectiveGrain = portfolioAnalysisGrain();
+    Array.from(entityLevel.options).forEach((item) => {
+      item.disabled = item.value !== "category" && !hasSingleCategoryScope();
+    });
+    entityLevel.value = effectiveGrain;
+    entityLevel.disabled = !hasSingleCategoryScope();
+    entityLevel.title = hasSingleCategoryScope()
+      ? "Выберите уровень объектов внутри категории"
+      : "Выберите одну категорию, чтобы перейти к производителям, брендам или SKU";
+  }
+  if (basis) {
+    basis.value = state.portfolioBasis;
+  }
+}
+
 function privateLabelDisplayName() {
   return selectedRetailer().private_label_display_name || "выбранный ассортимент";
 }
 
 function portfolioContextText() {
-  if (state.periodMode === "COMPARE") return "Показывает долю, место, ассортимент и относительную динамику там, где это готово для выбранного сравнения.";
+  if (state.periodMode === "COMPARE") return "Показывает вклад, место и движение позиции; ABC остаётся текущей классификацией там, где она поддержана.";
   if (state.periodMode === "DATE_RANGE") return "Диапазон используется только для тех портфельных показателей, где маршрут явно поддерживает такой режим.";
-  return "Показывает позицию и состав портфеля за выбранный период.";
+  return "Показывает вклад, место, накопленную долю и ABC там, где это поддержано выбранным срезом.";
 }
 
 function portfolioShareUnavailableText() {
-  if (state.currentGrain === "network" || state.currentGrain === "category") {
-    return "Доля показывается для производителя, бренда или SKU внутри выбранной категории.";
+  if (!hasSingleCategoryScope()) {
+    return "Нет строк категорий для текущего рынка; проверьте период или фильтры.";
   }
   return "Для выбранного среза долевые показатели не рассчитаны.";
 }
 
 function portfolioRankUnavailableText(item) {
-  if (!selectedFilterValues().category?.length && state.currentGrain !== "category") {
-    return "Выберите категорию, чтобы увидеть рейтинг производителей.";
+  if (!hasSingleCategoryScope() && portfolioAnalysisGrain() !== "category") {
+    return "Выберите одну категорию, чтобы открыть рейтинг производителей, брендов или SKU.";
   }
   if (item?.limitations?.length) return portfolioLimitationText(item.limitations[0]);
-  return "Рейтинг производителей недоступен для выбранного среза.";
+  return "Портфельная аналитика недоступна для выбранного среза.";
 }
 
 function portfolioAssortmentUnavailableText(item) {
@@ -4041,8 +4199,25 @@ function portfolioLimitationText(code) {
   return {
     category_share_requires_child_grain: "Доля применима только к объектам внутри категории.",
     share_range_requires_recompute_share_scope: "Доля не показывается за диапазон без пересчёта числителя и знаменателя.",
+    share_entity_grain_unsupported: "Доля поддержана для категорий, производителей, брендов и SKU.",
+    share_range_semantics_unsupported: "Доля не усредняется по месяцам; выберите один период или поддержанное сравнение.",
+    cumulative_share_comparison_semantics_unsupported: "Накопленная доля показывается для текущего периода без сравнения строк между периодами.",
+    manufacturer_share_requires_category_scope: "Доля производителя рассчитывается внутри одной категории.",
+    brand_share_requires_category_scope: "Доля бренда рассчитывается внутри одной категории.",
+    sku_share_requires_category_scope: "Доля SKU рассчитывается внутри одной категории.",
+    rank_scope_filter_unsupported: "Рейтинг не поддержан для выбранного фильтра ТТ или территории.",
+    share_scope_filter_unsupported: "Доля не поддержана для выбранного фильтра ТТ или территории.",
+    abc_scope_filter_unsupported: "ABC не поддержана для выбранного фильтра ТТ или территории.",
+    rank_range_semantics_unsupported: "Рейтинг не показывается как агрегат за произвольный диапазон.",
     manufacturer_rank_requires_category_scope: "Место производителя рассчитывается только внутри категории.",
+    brand_rank_requires_category_scope: "Место бренда рассчитывается только внутри категории.",
+    sku_rank_requires_category_scope: "Место SKU рассчитывается только внутри категории.",
     manufacturer_population_requires_category_scope: "Размер рейтинга доступен только внутри категории.",
+    abc_range_semantics_unsupported: "ABC не рассчитывается для произвольного диапазона.",
+    abc_comparison_semantics_unsupported: "ABC показывается как классификация текущего периода, не как сравнение классов.",
+    abc_ownership_universe_required: "ABC доступна для отдельной вселенной: Без СТМ или Только СТМ.",
+    abc_requires_single_category_scope: "ABC рассчитывается только внутри одной категории.",
+    no_abc_rows_after_focal_selection: "Для выбранного объекта нет строки ABC в текущей вселенной.",
     active_sku_scalar_not_defined_for_range: "Активные SKU показываются по отдельному периоду.",
     active_sku_requires_current_period: "Выберите период для расчёта активных SKU.",
     brand_vs_category_requires_compare_mode: "Сравнение бренда с категорией доступно только в режиме сравнения.",

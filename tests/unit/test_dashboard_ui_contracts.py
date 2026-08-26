@@ -20,6 +20,7 @@ from retail_analytics.dashboard import (
     serialize_dashboard_query_response,
 )
 from retail_analytics.dashboard.app import _asset_version, _parent_filters, _template_text
+from retail_analytics.dashboard.schemas import build_portfolio_market_request
 from retail_analytics.history import write_source_ledger
 from retail_analytics.mart import (
     ComparisonMode,
@@ -758,6 +759,8 @@ def test_portfolio_market_screen_uses_product_route_without_fake_semantics() -> 
     portfolio_panel = html.split('data-view-panel="portfolio_market"', 1)[1].split('data-view-panel="stores"', 1)[0]
     assert 'id="portfolio-share-strip"' in portfolio_panel
     assert 'id="portfolio-rank-list"' in portfolio_panel
+    assert 'id="portfolio-entity-level"' in portfolio_panel
+    assert 'id="portfolio-basis"' in portfolio_panel
     assert 'id="portfolio-assortment"' in portfolio_panel
     assert 'id="portfolio-brand-category"' in portfolio_panel
     assert 'id="portfolio-market-private-label"' in portfolio_panel
@@ -776,7 +779,9 @@ def test_portfolio_market_screen_uses_product_route_without_fake_semantics() -> 
     assert "state.portfolioMarketResponse = portfolioMarketResponse;" in script
     assert "function buildPortfolioMarketPayload()" in script
     assert "concept_ids: portfolioMarketConcepts" in script
-    assert "entity_filters: selectedFilterValuesForPortfolio()" in script
+    assert "grain_id: grain" in script
+    assert "entity_filters: selectedPortfolioExecutionFilters(grain)" in script
+    assert "user_entity_filters: selectedFilterValuesForPortfolio()" in script
     assert "private_label_scope: document.getElementById(\"private-label-scope\").value" in script
     assert "const portfolioPresentationFallback = {" in script
     assert 'category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" }' in script
@@ -789,6 +794,9 @@ def test_portfolio_market_screen_uses_product_route_without_fake_semantics() -> 
     assert "renderContextStripForResponse(state.portfolioMarketResponse)" not in script
     assert "category_revenue_share" in script
     assert "manufacturer_rank_revenue" in script
+    assert "category_rank_revenue" in script
+    assert "brand_rank_revenue" in script
+    assert "sku_rank_revenue" in script
     assert "active_sku_count" in script
     assert "brand_category_delta_gap_pp" in script
 
@@ -806,6 +814,81 @@ def test_portfolio_market_screen_uses_product_route_without_fake_semantics() -> 
     assert "Делистинг" not in portfolio_panel
     assert "причина" not in portfolio_panel.lower()
     assert "из-за" not in portfolio_panel.lower()
+
+
+def test_portfolio_product_surface_requests_discoverable_analytics_without_test_only_state() -> None:
+    script = html_or_script("app.js")
+
+    assert 'portfolioEntityLevel: "manufacturer"' in script
+    assert 'portfolioBasis: "revenue"' in script
+    assert 'function portfolioAnalysisGrain()' in script
+    assert 'if (!hasSingleCategoryScope()) return "category";' in script
+    assert 'entity_ids: []' in script
+    assert 'portfolioSummaryTile("Уровень"' in script
+    assert 'portfolioDecisionContextText()' in script
+    assert "нажмите категорию, чтобы открыть производителей, бренды и SKU" in script
+    assert 'state.portfolioEntityLevel = "manufacturer";' in script
+    assert "selectPortfolioEntity(model.entityType, model.entityId)" in script
+    assert "portfolioAnalysisGrain() === \"category\"" in script
+    assert "selectedValuesForFilter(model.entityType).includes(model.entityId)" in script
+    assert ".portfolio-decision-row.is-selected" in html_or_script("styles.css")
+
+
+def test_portfolio_brand_rows_do_not_depend_on_abc_support() -> None:
+    script = html_or_script("app.js")
+
+    contribution_body = script.split("function portfolioContributionRows()", 1)[1].split(
+        "function portfolioPositionSummaryTiles", 1
+    )[0]
+    assert 'const shareItem = portfolioItem(portfolioBasisConcept("share"));' in contribution_body
+    assert 'const abcItem = portfolioItem(portfolioBasisConcept("abc"));' in contribution_body
+    assert "[shareItem, abcItem, rankItem]" in contribution_body
+    assert 'return `${portfolioAnalysisGrain()}_${prefix}_${suffix}`;' in script
+    assert "brand_rank_revenue" in script
+    assert "sku_abc_revenue" in script
+    assert "brand_abc_revenue" not in script
+
+
+def test_portfolio_comparison_exposes_rank_movement_and_share_delta() -> None:
+    script = html_or_script("app.js")
+
+    assert "rank_movement_positions" in script
+    assert "rankMovementBadge(row)" in script
+    assert "поз." in script
+    assert "share_delta_pp" in script
+    assert 'formatDeltaValue(row.share_delta_pp, "percentage_points")' in script
+    assert "ABC показывается как классификация текущего периода" in script
+    assert "frontend" not in script.lower()
+
+
+def test_portfolio_schema_preserves_focal_user_filters_separately_from_execution_filters() -> None:
+    request = build_portfolio_market_request(
+        {
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "manufacturer",
+            "entity_ids": [],
+            "entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "user_entity_filters": {
+                "category": ["CATEGORY_STANDARD"],
+                "manufacturer": ["Manufacturer A"],
+            },
+            "concept_ids": ["entity_revenue_share"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "EXCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        }
+    )
+
+    assert request.entity_filters == {"category": ("CATEGORY_STANDARD",)}
+    assert request.user_entity_filters == {
+        "category": ("CATEGORY_STANDARD",),
+        "manufacturer": ("Manufacturer A",),
+    }
 
 
 def test_portfolio_market_visual_policy_and_private_label_guardrails() -> None:

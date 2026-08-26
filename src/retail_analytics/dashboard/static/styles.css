@@ -1420,6 +1420,31 @@ th:first-child {
   gap: var(--space-2);
 }
 
+.portfolio-local-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+.portfolio-local-controls label {
+  display: grid;
+  gap: 4px;
+  min-width: 138px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.portfolio-local-controls select {
+  height: 34px;
+  padding: 0 28px 0 10px;
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+}
+
 .portfolio-metric,
 .bullet-metric {
   display: grid;
@@ -1519,6 +1544,11 @@ th:first-child {
   border-left-color: var(--ownership-competitor);
 }
 
+.portfolio-decision-row.is-selected {
+  border-color: color-mix(in srgb, var(--brand-primary) 36%, var(--border-default));
+  background: color-mix(in srgb, var(--brand-primary) 7%, var(--bg-surface));
+}
+
 .portfolio-entity-cell,
 .portfolio-current-cell,
 .portfolio-rank-cell,
@@ -1538,7 +1568,7 @@ th:first-child {
   font-size: 11px;
 }
 
-.portfolio-entity-cell strong,
+.portfolio-entity-link,
 .portfolio-current-cell strong,
 .portfolio-rank-cell strong,
 .portfolio-share-cell strong {
@@ -1548,6 +1578,22 @@ th:first-child {
   font-variant-numeric: tabular-nums;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.portfolio-entity-link {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.portfolio-entity-link:hover,
+.portfolio-entity-link:focus-visible {
+  color: var(--brand-primary);
+  text-decoration: underline;
 }
 
 .ownership-badge,
