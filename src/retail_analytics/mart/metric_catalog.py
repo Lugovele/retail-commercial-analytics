@@ -95,7 +95,11 @@ class PrivateMetricCatalogOverride:
     metric_definition_version: str
     metric_concept: str
     display_label: str | None = None
+    display_alias: str | None = None
     description_override: str | None = None
+    business_meaning_override: str | None = None
+    formula_summary_override: str | None = None
+    unit_label_override: str | None = None
     format_override: MetricFormat | None = None
     grain_support: tuple[str, ...] = ()
     period_support: tuple[str, ...] = ()
@@ -136,7 +140,11 @@ class EffectiveMetricCatalogEntry:
     metric_definition_version: str
     metric_concept: str
     display_label: str
+    display_alias: str | None
     description: str
+    business_meaning: str
+    formula_summary: str
+    unit_label: str | None
     format: MetricFormat
     dashboard_group: DashboardGroup
     grain_support: tuple[str, ...]
@@ -155,7 +163,6 @@ class EffectiveMetricCatalogEntry:
     private_label_scope_support: tuple[PrivateLabelScope, ...]
     business_question: str
     decision_use: str
-    formula_summary: str
     delta_semantics: str
     default_visible: bool = True
     sort_order: int | None = None
@@ -304,7 +311,11 @@ def _merge_entry(
         metric_definition_version=override.metric_definition_version,
         metric_concept=override.metric_concept,
         display_label=override.display_label or public.default_display_label,
+        display_alias=override.display_alias,
         description=override.description_override or public.description,
+        business_meaning=override.business_meaning_override or override.description_override or public.description,
+        formula_summary=override.formula_summary_override or public.formula_summary,
+        unit_label=override.unit_label_override,
         format=override.format_override or public.format,
         dashboard_group=public.dashboard_group,
         grain_support=override.grain_support,
@@ -325,7 +336,6 @@ def _merge_entry(
         or public.private_label_scope_support,
         business_question=public.business_question,
         decision_use=public.decision_use,
-        formula_summary=public.formula_summary,
         delta_semantics=public.delta_semantics,
     )
 
@@ -429,7 +439,11 @@ def _private_override(row: dict[str, Any]) -> PrivateMetricCatalogOverride:
         metric_definition_version=str(row["metric_definition_version"]),
         metric_concept=str(row["metric_concept"]),
         display_label=_optional_str(row.get("display_label")),
+        display_alias=_optional_str(row.get("display_alias")),
         description_override=_optional_str(row.get("description_override")),
+        business_meaning_override=_optional_str(row.get("business_meaning_override")),
+        formula_summary_override=_optional_str(row.get("formula_summary_override")),
+        unit_label_override=_optional_str(row.get("unit_label_override")),
         format_override=MetricFormat(str(row["format_override"])) if row.get("format_override") else None,
         grain_support=tuple(row.get("grain_support") or ()),
         period_support=tuple(row.get("period_support") or ()),

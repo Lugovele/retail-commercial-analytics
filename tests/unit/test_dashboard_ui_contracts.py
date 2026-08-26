@@ -1712,6 +1712,31 @@ def test_provenance_drawer_uses_russian_presentation_labels() -> None:
     assert "privateLabelScopeText(scope.private_label_scope)" in script
 
 
+
+def test_metric_inspector_supports_private_alias_metadata() -> None:
+    script = html_or_script("app.js")
+
+    assert "display_alias" in script
+    assert "business_alias" in script
+    assert "business_meaning" in script
+    assert "unit_label" in script
+    assert "definition.business_alias" in script
+    assert "unitLabel(entry.format)" in script
+    assert "inventory turnover" not in script.lower()
+
+
+def test_public_tracked_files_do_not_hardcode_private_business_alias() -> None:
+    alias = "V" + "P" + "O"
+    tracked_public_paths = [
+        Path("config/public/dashboard_metric_catalog.yaml"),
+        Path("src/retail_analytics/dashboard/static/app.js"),
+        Path("src/retail_analytics/mart/metric_catalog.py"),
+        Path("src/retail_analytics/dashboard/runtime.py"),
+    ]
+
+    for path in tracked_public_paths:
+        assert alias.casefold() not in path.read_text(encoding="utf-8").casefold()
+
 def html_or_script(name: str) -> str:
     if name.endswith((".js", ".css")):
         return (

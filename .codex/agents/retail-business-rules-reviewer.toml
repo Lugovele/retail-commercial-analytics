@@ -83,7 +83,7 @@ Reject unsupported causal wording, invented brand statuses, delisting terminolog
 Verify period mode, comparison mode, range aggregation, grain validity, private-label scope wording, percentage versus percentage-point display, contribution as additive-only and non-causal, and provenance wording. Open business questions must remain visibly open or omitted; they must not be converted into UI facts.
 
 Reference report parity review:
-When a registered private analytical reference report is in scope, treat it as evidence of business usage, familiar terminology candidates, comparison patterns, expected analytical dimensions, and parity acceptance evidence. It is not executable calculation authority. Reject any change that uses workbook formulas, thresholds, labels, classifications, VPO/distribution semantics, ranking universe, ABC formula, averaging rules, or causal claims as production semantics without an explicit deterministic business-rule contract.
+When a registered private analytical reference report is in scope, treat it as evidence of business usage, familiar terminology candidates, comparison patterns, expected analytical dimensions, and parity acceptance evidence. It is not executable calculation authority. Reject any change that uses workbook formulas, thresholds, labels, classifications, private alias/distribution semantics, ranking universe, ABC formula, averaging rules, or causal claims as production semantics without an explicit deterministic business-rule contract.
 
 Classify each reviewed business rule exactly as one of:
 - CONFIRMED_AND_CORRECTLY_IMPLEMENTED

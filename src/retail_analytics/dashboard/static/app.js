@@ -3577,9 +3577,12 @@ function deltaSemanticsText(concept) {
 function metricInspectorDefinition(concept) {
   const entry = metricPresentation(concept);
   return {
+    business_alias: entry.display_alias || null,
+    business_meaning: entry.business_meaning || entry.description || "н/д",
     business_question: entry.business_question || "н/д",
     decision_use: entry.decision_use || "н/д",
-    formula_summary: entry.formula_summary || "н/д"
+    formula_summary: entry.formula_summary || "н/д",
+    unit_label: entry.unit_label || unitLabel(entry.format)
   };
 }
 
@@ -4017,9 +4020,12 @@ function metricInspectorSections(concept, result, response, mode) {
   const definition = metricInspectorDefinition(concept);
   return [
     section("Что это за показатель", [
-      ["Показатель", displayLabel(concept)],
-      ["Бизнес-вопрос", definition.business_question],
-      ["Для решения", definition.decision_use]
+      ["\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c", displayLabel(concept)],
+      ...(definition.business_alias ? [["Бизнес-название", definition.business_alias]] : []),
+      ["Смысл", definition.business_meaning],
+      ["Единица", definition.unit_label],
+      ["\u0411\u0438\u0437\u043d\u0435\u0441-\u0432\u043e\u043f\u0440\u043e\u0441", definition.business_question],
+      ["\u0414\u043b\u044f \u0440\u0435\u0448\u0435\u043d\u0438\u044f", definition.decision_use]
     ]),
     section("Расчёт", [
       ["Формула", definition.formula_summary],
@@ -4252,10 +4258,13 @@ function provenanceSections(provenance, result, options = {}) {
   const definition = metricInspectorDefinition(concept);
   const sections = [
     section("Что это за показатель", [
-      ["Показатель", displayLabel(concept)],
-      ["Значение", formatValue(value.value ?? result.value, metricPresentation(concept)?.format || "decimal")],
-      ["Бизнес-вопрос", definition.business_question],
-      ["Для решения", definition.decision_use]
+      ["\u041f\u043e\u043a\u0430\u0437\u0430\u0442\u0435\u043b\u044c", displayLabel(concept)],
+      ...(definition.business_alias ? [["Бизнес-название", definition.business_alias]] : []),
+      ["\u0417\u043d\u0430\u0447\u0435\u043d\u0438\u0435", formatValue(value.value ?? result.value, metricPresentation(concept)?.format || "decimal")],
+      ["Смысл", definition.business_meaning],
+      ["Единица", definition.unit_label],
+      ["\u0411\u0438\u0437\u043d\u0435\u0441-\u0432\u043e\u043f\u0440\u043e\u0441", definition.business_question],
+      ["\u0414\u043b\u044f \u0440\u0435\u0448\u0435\u043d\u0438\u044f", definition.decision_use]
     ]),
     section("Срез", [
       ["Сеть / источник", [selectedRetailer().display_label, selectedRetailer().source_label].filter(Boolean).join(" / ") || "н/д"],
@@ -4493,7 +4502,8 @@ function unitLabel(format) {
     currency: "руб.",
     percent: "%",
     decimal: "значение",
-    integer: "кол-во"
+    integer: "кол-во",
+    ratio: "\u0437\u043d\u0430\u0447\u0435\u043d\u0438\u0435"
   }[format] || "";
 }
 

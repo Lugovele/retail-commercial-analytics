@@ -52,7 +52,7 @@ AUTHORITY_BOUNDARY_FORBIDDEN_SEMANTICS = frozenset(
         "thresholds",
         "labels",
         "classifications",
-        "vpo_semantics",
+        "private_alias_semantics",
         "distribution_semantics",
         "ranking_universe",
         "abc_formula",

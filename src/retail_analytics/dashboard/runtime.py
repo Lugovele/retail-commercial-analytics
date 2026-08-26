@@ -892,7 +892,11 @@ def serialize_catalog(entries: tuple[EffectiveMetricCatalogEntry, ...]) -> list[
         {
             "metric_concept": entry.metric_concept,
             "display_label": entry.display_label,
+            "display_alias": entry.display_alias,
             "description": entry.description,
+            "business_meaning": entry.business_meaning,
+            "formula_summary": entry.formula_summary,
+            "unit_label": entry.unit_label,
             "format": entry.format.value,
             "dashboard_group": entry.dashboard_group.value,
             "grain_support": list(entry.grain_support),
@@ -909,7 +913,6 @@ def serialize_catalog(entries: tuple[EffectiveMetricCatalogEntry, ...]) -> list[
             "private_label_scope_support": [scope.value for scope in entry.private_label_scope_support],
             "business_question": entry.business_question,
             "decision_use": entry.decision_use,
-            "formula_summary": entry.formula_summary,
             "delta_semantics": entry.delta_semantics,
         }
         for entry in entries

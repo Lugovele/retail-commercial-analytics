@@ -102,7 +102,7 @@ def test_reference_report_evidence_cannot_override_business_rule_authority() -> 
         "thresholds",
         "labels",
         "classifications",
-        "vpo semantics",
+        "private alias semantics",
         "distribution semantics",
         "ranking universe",
         "abc formula",

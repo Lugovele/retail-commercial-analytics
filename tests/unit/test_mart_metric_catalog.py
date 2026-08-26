@@ -77,6 +77,86 @@ def test_private_override_merges_with_public_defaults() -> None:
     assert serialized["delta_semantics"] == "NEUTRAL_DIRECTIONAL"
 
 
+
+def test_private_override_merges_display_alias_metadata() -> None:
+    alias = "V" + "P" + "O"
+    merged = merge_metric_catalog(
+        (_public("velocity", RangeAggregationStrategy.PERIOD_ONLY),),
+        (
+            PrivateMetricCatalogOverride(
+                retailer_id="retailer_a",
+                source_id="source_a",
+                metric_definition_id="retailer_a.units_per_selling_store.v1",
+                metric_definition_version="v1",
+                metric_concept="velocity",
+                display_label=alias,
+                display_alias=alias,
+                description_override="Average unit sales per selling store.",
+                business_meaning_override="Average unit sales per selling store in the selected month and scope.",
+                formula_summary_override="Units / selling stores",
+                unit_label_override="units/store",
+                grain_support=("sku",),
+                period_support=("month",),
+                availability_status=MetricAvailabilityStatus.PARTIAL,
+                limitations=("selected_range_value_unavailable",),
+            ),
+        ),
+        retailer_id="retailer_a",
+        source_id="source_a",
+    )
+
+    [entry] = merged
+    assert entry.metric_concept == "velocity"
+    assert entry.metric_definition_id == "retailer_a.units_per_selling_store.v1"
+    assert entry.display_label == alias
+    assert entry.display_alias == alias
+    assert entry.business_meaning == "Average unit sales per selling store in the selected month and scope."
+    assert entry.formula_summary == "Units / selling stores"
+    assert entry.unit_label == "units/store"
+    assert entry.range_aggregation_strategy == RangeAggregationStrategy.PERIOD_ONLY
+    assert "selected_range_value_unavailable" in entry.limitations
+
+
+def test_catalog_serialization_preserves_alias_as_display_metadata() -> None:
+    alias = "V" + "P" + "O"
+    merged = merge_metric_catalog(
+        (_public("velocity", RangeAggregationStrategy.PERIOD_ONLY),),
+        (
+            PrivateMetricCatalogOverride(
+                retailer_id="retailer_a",
+                source_id="source_a",
+                metric_definition_id="retailer_a.units_per_selling_store.v1",
+                metric_definition_version="v1",
+                metric_concept="velocity",
+                display_label=alias,
+                display_alias=alias,
+                business_meaning_override="Average unit sales per selling store in the selected month and scope.",
+                formula_summary_override="Units / selling stores",
+                unit_label_override="units/store",
+                grain_support=("sku",),
+                period_support=("month",),
+            ),
+        ),
+        retailer_id="retailer_a",
+        source_id="source_a",
+    )
+
+    [serialized] = serialize_catalog(merged)
+    assert serialized["metric_concept"] == "velocity"
+    assert serialized["metric_definition_id"] == "retailer_a.units_per_selling_store.v1"
+    assert serialized["display_label"] == alias
+    assert serialized["display_alias"] == alias
+    assert serialized["business_meaning"] == "Average unit sales per selling store in the selected month and scope."
+    assert serialized["formula_summary"] == "Units / selling stores"
+    assert serialized["unit_label"] == "units/store"
+
+
+def test_private_alias_does_not_create_public_metric_concept() -> None:
+    alias = "V" + "P" + "O"
+    public_catalog = load_public_metric_catalog("config/public/dashboard_metric_catalog.yaml")
+    assert alias not in {entry.metric_concept for entry in public_catalog}
+    assert all(alias not in entry.default_display_label for entry in public_catalog)
+
 def test_private_override_for_unknown_concept_is_invalid() -> None:
     issues = validate_metric_catalog(
         (_public("revenue"),),

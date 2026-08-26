@@ -50,7 +50,7 @@ reference_report_parity_contract:
       - thresholds
       - labels
       - classifications
-      - vpo_semantics
+      - private_alias_semantics
       - distribution_semantics
       - ranking_universe
       - abc_formula

@@ -52,7 +52,7 @@ business-rule contract.
 
 Presence in a reference report does not automatically approve:
 
-- VPO semantics;
+- private alias semantics;
 - distribution semantics;
 - ranking universe;
 - ABC formula;
