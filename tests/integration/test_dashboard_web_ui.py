@@ -308,6 +308,77 @@ def test_dashboard_query_route_resolves_cascading_source_like_filters(tmp_path: 
 
 
 
+def test_dashboard_product_routes_resolve_and_report_user_execution_filters(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+    base_payload: dict[str, Any] = {
+        "retailer_id": "retailer_a",
+        "source_id": "source_a",
+        "date_from": "2026-06-01",
+        "date_to": "2026-06-01",
+        "period_mode": "SINGLE_PERIOD",
+        "period_grain": "month",
+        "grain_id": "network",
+        "entity_filters": {
+            "category": ["CATEGORY_STANDARD"],
+            "manufacturer": ["Manufacturer A"],
+            "brand": ["Brand A"],
+        },
+        "comparison_mode": "YOY",
+        "private_label_scope": "INCLUDE",
+        "mart_build_id": "build_dashboard_synthetic",
+    }
+    expected_user_filters = {
+        "category": ["CATEGORY_STANDARD"],
+        "manufacturer": ["Manufacturer A"],
+        "brand": ["Brand A"],
+    }
+
+    portfolio_status, _, portfolio_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/portfolio-market",
+        payload={**base_payload, "concept_ids": ["active_sku_count"]},
+    )
+    portfolio = json.loads(portfolio_body)
+
+    assert portfolio_status.startswith("200")
+    assert portfolio["request_scope"]["user_entity_filters"] == expected_user_filters
+    assert portfolio["request_scope"]["execution_entity_filters"] == {"sku": ["SKU_A_001"]}
+    assert portfolio["items"][0]["provenance"]["current_analytical_scope"]["user_entity_filters"] == expected_user_filters
+    assert portfolio["items"][0]["provenance"]["current_analytical_scope"]["execution_entity_filters"] == {
+        "sku": ["SKU_A_001"]
+    }
+
+    signals_status, _, signals_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/signals",
+        payload={**base_payload, "signal_types": ["COMMERCIAL_SIGNAL"]},
+    )
+    signals = json.loads(signals_body)
+
+    assert signals_status.startswith("200")
+    assert signals["request_scope"]["user_entity_filters"] == expected_user_filters
+    assert signals["request_scope"]["execution_entity_filters"] == {"sku": ["SKU_A_001"]}
+
+    data_status, _, data_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/data",
+        payload={**base_payload, "comparison_mode": "NONE", "limit": 10, "offset": 0},
+    )
+    data = json.loads(data_body)
+
+    assert data_status.startswith("200")
+    assert data["request_scope"]["user_entity_filters"] == expected_user_filters
+    assert data["request_scope"]["execution_entity_filters"] == {"sku": ["SKU_A_001"]}
+    assert data["audit"]["user_entity_filters"] == expected_user_filters
+    assert data["audit"]["execution_entity_filters"] == {"sku": ["SKU_A_001"]}
+    assert data["source_like_rows"]["total_count"] == 1
+
+
 def test_dashboard_query_route_uses_product_store_serving_for_store_and_product_filters(tmp_path: Path) -> None:
     source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
     runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")

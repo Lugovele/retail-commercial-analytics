@@ -46,6 +46,7 @@ class PortfolioMarketQueryRequest:
     concept_ids: tuple[str, ...]
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
+    user_entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: ComparisonMode = ComparisonMode.NONE
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
@@ -233,18 +234,21 @@ class PortfolioMarketService:
         return tuple(items) or (_not_applicable(request, concept_id, "category_position", "no_metric_fact_result"),)
 
     def _rank_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
-        category = _category_filter(request)
+        category, category_limitation = _single_category_filter(request)
+        if category_limitation:
+            return _not_applicable(request, concept_id, "category_position", category_limitation)
         if not category:
             return _not_applicable(request, concept_id, "category_position", "manufacturer_rank_requires_category_scope")
         metric_concept = self._RANK_CONCEPTS[concept_id]
+        filters = _projection_entity_filters(request, category=category)
         response = self.query_service.query(
             _metric_request(
                 request,
                 grain_id="manufacturer",
                 metric_concepts=(metric_concept,),
                 comparison_mode=ComparisonMode.NONE,
-                entity_ids=(),
-                entity_filters={"category": (category,)},
+                entity_ids=_semantic_entity_filters(request).get("manufacturer", ()),
+                entity_filters=filters,
             )
         )
         rows = _rank_rows(response.metric_results, category=category)
@@ -272,7 +276,9 @@ class PortfolioMarketService:
         )
 
     def _manufacturer_population_item(self, request: PortfolioMarketQueryRequest) -> PortfolioMarketItem:
-        category = _category_filter(request)
+        category, category_limitation = _single_category_filter(request)
+        if category_limitation:
+            return _not_applicable(request, "manufacturer_population_count", "category_position", category_limitation)
         if not category:
             return _not_applicable(
                 request,
@@ -280,14 +286,15 @@ class PortfolioMarketService:
                 "category_position",
                 "manufacturer_population_requires_category_scope",
             )
+        filters = _projection_entity_filters(request, category=category)
         response = self.query_service.query(
             _metric_request(
                 request,
                 grain_id="manufacturer",
                 metric_concepts=("revenue",),
                 comparison_mode=ComparisonMode.NONE,
-                entity_ids=(),
-                entity_filters={"category": (category,)},
+                entity_ids=_semantic_entity_filters(request).get("manufacturer", ()),
+                entity_filters=filters,
             )
         )
         rows = _rank_rows(response.metric_results, category=category)
@@ -368,10 +375,16 @@ class PortfolioMarketService:
     def _brand_category_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
         if request.comparison_mode == ComparisonMode.NONE or request.period_mode != PeriodMode.SINGLE_PERIOD:
             return _not_applicable(request, concept_id, "brand_vs_category", "brand_vs_category_requires_compare_mode")
-        category = _category_filter(request)
-        brand = _brand_entity(request)
+        category, category_limitation = _single_category_filter(request)
+        if category_limitation:
+            return _not_applicable(request, concept_id, "brand_vs_category", category_limitation)
+        brand, brand_limitation = _single_brand_entity(request)
+        if brand_limitation:
+            return _not_applicable(request, concept_id, "brand_vs_category", brand_limitation)
         if not category or not brand:
             return _not_applicable(request, concept_id, "brand_vs_category", "brand_vs_category_requires_category_and_brand")
+        brand_filters = _projection_entity_filters(request, category=category)
+        category_filters = _projection_entity_filters(request, category=category)
         brand_response = self.query_service.query(
             _metric_request(
                 request,
@@ -379,6 +392,7 @@ class PortfolioMarketService:
                 metric_concepts=("revenue",),
                 comparison_mode=request.comparison_mode,
                 entity_ids=(brand,),
+                entity_filters=brand_filters,
             )
         )
         category_response = self.query_service.query(
@@ -388,7 +402,7 @@ class PortfolioMarketService:
                 metric_concepts=("revenue",),
                 comparison_mode=request.comparison_mode,
                 entity_ids=(category,),
-                entity_filters={"category": (category,)},
+                entity_filters=category_filters,
             )
         )
         brand_comparison = brand_response.comparisons[0] if brand_response.comparisons else None
@@ -453,6 +467,7 @@ class PortfolioMarketService:
                     metric_concepts=("revenue",),
                     comparison_mode=ComparisonMode.NONE,
                     entity_ids=(brand,),
+                    entity_filters=_projection_entity_filters(request, category=category),
                     date_from=period,
                     date_to=period,
                 )
@@ -464,7 +479,7 @@ class PortfolioMarketService:
                     metric_concepts=("revenue",),
                     comparison_mode=ComparisonMode.NONE,
                     entity_ids=(category,),
-                    entity_filters={"category": (category,)},
+                    entity_filters=_projection_entity_filters(request, category=category),
                     date_from=period,
                     date_to=period,
                 )
@@ -631,6 +646,7 @@ def _request_scope(request: PortfolioMarketQueryRequest) -> dict[str, Any]:
         "grain_id": request.grain_id,
         "entity_ids": request.entity_ids,
         "entity_filters": request.entity_filters or {},
+        "user_entity_filters": request.user_entity_filters or request.entity_filters or {},
         "private_label_scope": request.private_label_scope.value,
         "scope_identity_hash": scope_identity_hash(
             private_label_scope=request.private_label_scope,
@@ -689,20 +705,43 @@ def _not_available(
         provenance=item.provenance,
     )
 
+def _projection_entity_filters(request: PortfolioMarketQueryRequest, *, category: str) -> dict[str, tuple[str, ...]]:
+    filters: dict[str, tuple[str, ...]] = {"category": (category,)}
+    store_values = (request.entity_filters or {}).get("store") or _semantic_entity_filters(request).get("store") or ()
+    if store_values:
+        filters["store"] = tuple(store_values)
+    return filters
 
 def _category_filter(request: PortfolioMarketQueryRequest) -> str | None:
-    values = (request.entity_filters or {}).get("category") or ()
+    values = _semantic_entity_filters(request).get("category") or ()
     if values:
         return values[0]
     return request.entity_ids[0] if request.grain_id == "category" and request.entity_ids else None
 
 
+def _single_category_filter(request: PortfolioMarketQueryRequest) -> tuple[str | None, str | None]:
+    values = _semantic_entity_filters(request).get("category") or ()
+    if len(values) > 1:
+        return None, "portfolio_requires_single_category"
+    return _category_filter(request), None
+
+
 def _brand_entity(request: PortfolioMarketQueryRequest) -> str | None:
-    values = (request.entity_filters or {}).get("brand") or ()
+    values = _semantic_entity_filters(request).get("brand") or ()
     if values:
         return values[0]
     return request.entity_ids[0] if request.grain_id == "brand" and request.entity_ids else None
 
+
+def _single_brand_entity(request: PortfolioMarketQueryRequest) -> tuple[str | None, str | None]:
+    values = _semantic_entity_filters(request).get("brand") or ()
+    if len(values) > 1:
+        return None, "brand_vs_category_requires_single_brand"
+    return _brand_entity(request), None
+
+
+def _semantic_entity_filters(request: PortfolioMarketQueryRequest) -> dict[str, tuple[str, ...]]:
+    return request.user_entity_filters or request.entity_filters or {}
 
 
 def _block_for_concept(concept_id: str) -> str:

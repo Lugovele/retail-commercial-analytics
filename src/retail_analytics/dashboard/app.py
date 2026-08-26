@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import mimetypes
+from dataclasses import replace
 from datetime import date
 from hashlib import sha256
 from importlib import resources
@@ -106,20 +107,11 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 )
             if method == "POST" and path == "/api/dashboard/query":
                 payload = _read_json(environ)
-                original_entity_filters = _resolve_query_entity_filters(payload, resolved_runtime)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
                 request = build_backend_query_request(payload)
                 response = resolved_runtime.query_service.query(request)
                 data = serialize_dashboard_query_response(response)
-                if original_entity_filters is not None:
-                    data["request_scope"]["user_entity_filters"] = original_entity_filters
-                    for result in data["metric_results"]:
-                        if result.get("provenance"):
-                            result["provenance"]["current_analytical_scope"][
-                                "user_entity_filters"
-                            ] = original_entity_filters
-                            result["provenance"]["current_analytical_scope"][
-                                "execution_entity_filters"
-                            ] = data["request_scope"]["entity_filters"]
+                _attach_user_execution_filters(data, original_entity_filters)
                 return _json_response(start_response, data)
             if method == "POST" and path == "/api/dashboard/contribution":
                 payload = _read_json(environ)
@@ -128,19 +120,35 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 return _json_response(start_response, serialize_contribution_response(contribution_response))
             if method == "POST" and path == "/api/dashboard/portfolio-market":
                 payload = _read_json(environ)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
                 portfolio_request = build_portfolio_market_request(payload)
+                if original_entity_filters is not None:
+                    portfolio_request = replace(
+                        portfolio_request,
+                        user_entity_filters={
+                            key: tuple(values) for key, values in original_entity_filters.items()
+                        },
+                    )
                 portfolio_response = portfolio_market_service.query(portfolio_request)
-                return _json_response(start_response, serialize_portfolio_market_response(portfolio_response))
+                data = serialize_portfolio_market_response(portfolio_response)
+                _attach_user_execution_filters(data, original_entity_filters)
+                return _json_response(start_response, data)
             if method == "POST" and path == "/api/dashboard/signals":
                 payload = _read_json(environ)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
                 signal_request = build_signal_feed_request(payload)
                 signal_response = signal_feed_service.feed(signal_request)
-                return _json_response(start_response, serialize_signal_feed_response(signal_response))
+                data = serialize_signal_feed_response(signal_response)
+                _attach_user_execution_filters(data, original_entity_filters)
+                return _json_response(start_response, data)
             if method == "POST" and path == "/api/dashboard/data":
                 payload = _read_json(environ)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
                 data_request = build_data_request(payload)
                 data_response = data_service.query(data_request)
-                return _json_response(start_response, data_response_to_dict(data_response))
+                data = data_response_to_dict(data_response)
+                _attach_user_execution_filters(data, original_entity_filters)
+                return _json_response(start_response, data)
             return _json_response(start_response, {"error": "not_found"}, status="404 Not Found")
         except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             return _json_response(
@@ -161,7 +169,7 @@ def _read_json(environ: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
-def _resolve_query_entity_filters(payload: dict[str, Any], runtime: DashboardRuntime) -> dict[str, list[str]] | None:
+def _resolve_payload_entity_filters(payload: dict[str, Any], runtime: DashboardRuntime) -> dict[str, list[str]] | None:
     raw_filters = payload.get("entity_filters")
     if not isinstance(raw_filters, dict):
         return None
@@ -183,6 +191,43 @@ def _resolve_query_entity_filters(payload: dict[str, Any], runtime: DashboardRun
     if resolved is not raw_filters:
         payload["entity_filters"] = {key: list(values) for key, values in (resolved or {}).items()}
     return original_filters
+
+
+def _attach_user_execution_filters(data: dict[str, Any], original_entity_filters: dict[str, list[str]] | None) -> None:
+    if original_entity_filters is None:
+        return
+    request_scope = data.get("request_scope")
+    if not isinstance(request_scope, dict):
+        return
+    execution_filters = request_scope.get("entity_filters") or {}
+    request_scope["user_entity_filters"] = original_entity_filters
+    request_scope["execution_entity_filters"] = execution_filters
+    for result in data.get("metric_results") or ():
+        _attach_filters_to_provenance(result.get("provenance"), original_entity_filters, execution_filters)
+    for item in data.get("items") or ():
+        _attach_filters_to_provenance(item.get("provenance"), original_entity_filters, execution_filters)
+        for row in item.get("rows") or ():
+            _attach_filters_to_provenance(row.get("provenance"), original_entity_filters, execution_filters)
+    for key in ("signals", "deterministic_patterns", "data_quality_alerts"):
+        for row in data.get(key) or ():
+            _attach_filters_to_provenance(row.get("provenance"), original_entity_filters, execution_filters)
+    audit = data.get("audit")
+    if isinstance(audit, dict):
+        audit["user_entity_filters"] = original_entity_filters
+        audit["execution_entity_filters"] = execution_filters
+
+
+def _attach_filters_to_provenance(
+    provenance: object,
+    original_entity_filters: dict[str, list[str]],
+    execution_filters: object,
+) -> None:
+    if not isinstance(provenance, dict):
+        return
+    scope = provenance.get("current_analytical_scope")
+    if isinstance(scope, dict):
+        scope["user_entity_filters"] = original_entity_filters
+        scope["execution_entity_filters"] = execution_filters
 
 
 def _template_text(name: str) -> str:

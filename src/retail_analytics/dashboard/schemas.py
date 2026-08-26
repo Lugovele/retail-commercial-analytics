@@ -196,6 +196,7 @@ def build_portfolio_market_request(
         concept_ids=tuple(data.concept_ids),
         entity_ids=tuple(data.entity_ids),
         entity_filters=data.entity_filters,
+        user_entity_filters=data.entity_filters,
         comparison_mode=ComparisonMode(data.comparison_mode),
         private_label_scope=PrivateLabelScope(data.private_label_scope),
         mart_build_id=data.mart_build_id,

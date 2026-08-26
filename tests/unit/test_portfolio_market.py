@@ -20,6 +20,7 @@ from retail_analytics.mart import (
     RangeAggregationStrategy,
     write_mart_metric_facts,
 )
+from retail_analytics.mart import portfolio_market as portfolio_market_module
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA
 
 _DEFAULT_ENTITY_FILTERS = object()
@@ -62,6 +63,69 @@ def test_manufacturer_rank_rejects_uncategorized_scope(tmp_path) -> None:
     assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
     assert response.items[0].limitations == ("manufacturer_rank_requires_category_scope",)
 
+
+def test_manufacturer_rank_rejects_multi_category_scope(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            concept_ids=("manufacturer_rank_revenue", "manufacturer_population_count"),
+            entity_filters={"category": ("category_a", "category_b")},
+            grain_id="network",
+        )
+    )
+
+    assert {item.status for item in response.items} == {PortfolioConceptStatus.NOT_APPLICABLE}
+    assert {item.limitations for item in response.items} == {("portfolio_requires_single_category",)}
+
+
+def test_manufacturer_rank_uses_user_category_after_execution_filter_resolution(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            concept_ids=("manufacturer_rank_revenue",),
+            entity_filters={"sku": ("sku_a",)},
+            user_entity_filters={"category": ("category_a",), "brand": ("brand_a",)},
+            grain_id="network",
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.rows
+    assert item.provenance is not None
+    assert item.provenance["current_analytical_scope"]["entity_filters"] == {"sku": ("sku_a",)}
+    assert item.provenance["current_analytical_scope"]["user_entity_filters"] == {
+        "category": ("category_a",),
+        "brand": ("brand_a",),
+    }
+
+def test_manufacturer_rank_preserves_store_scope(tmp_path) -> None:
+    service = _service(tmp_path, _store_scope_portfolio_facts())
+    request = _request(
+        concept_ids=("manufacturer_rank_revenue", "manufacturer_population_count"),
+        entity_filters={"category": ("category_a",), "store": ("store_a",)},
+    )
+
+    assert portfolio_market_module._projection_entity_filters(request, category="category_a") == {
+        "category": ("category_a",),
+        "store": ("store_a",),
+    }
+
+    response = service.query(request)
+
+    rank_item = response.items[0]
+    population_item = response.items[1]
+    assert rank_item.status == PortfolioConceptStatus.PARTIAL
+    assert rank_item.rows == ()
+    assert rank_item.limitations == ("no_manufacturer_metric_facts",)
+    assert population_item.status == PortfolioConceptStatus.PARTIAL
+    assert rank_item.provenance is not None
+    assert rank_item.provenance["current_analytical_scope"]["entity_filters"] == {
+        "category": ("category_a",),
+        "store": ("store_a",),
+    }
 
 def test_active_sku_uses_available_history_and_private_label_scope(tmp_path) -> None:
     facts = pl.concat(
@@ -143,6 +207,84 @@ def test_brand_category_delta_gap_is_compare_only(tmp_path) -> None:
     )
     assert response.items[2].provenance["input_metric_facts"]["fact_count"] == 4
 
+
+def test_brand_category_delta_rejects_multi_select_denominators(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    category_response = service.query(
+        _request(
+            grain_id="brand",
+            entity_filters={"category": ("category_a", "category_b"), "brand": ("brand_a",)},
+            concept_ids=("brand_category_delta_gap_pp",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+    brand_response = service.query(
+        _request(
+            grain_id="brand",
+            entity_filters={"category": ("category_a",), "brand": ("brand_a", "brand_b")},
+            concept_ids=("brand_category_delta_gap_pp",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    assert category_response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert category_response.items[0].limitations == ("portfolio_requires_single_category",)
+    assert brand_response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert brand_response.items[0].limitations == ("brand_vs_category_requires_single_brand",)
+
+
+def test_brand_category_delta_uses_user_brand_after_execution_filter_resolution(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            grain_id="network",
+            entity_filters={"sku": ("sku_a",)},
+            user_entity_filters={"category": ("category_a",), "brand": ("brand_a",)},
+            concept_ids=("brand_category_delta_gap_pp",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == pytest.approx(0.1)
+    assert item.provenance is not None
+    assert item.provenance["current_analytical_scope"]["entity_filters"] == {"sku": ("sku_a",)}
+    assert item.provenance["current_analytical_scope"]["user_entity_filters"] == {
+        "category": ("category_a",),
+        "brand": ("brand_a",),
+    }
+
+def test_brand_category_delta_preserves_store_scope(tmp_path) -> None:
+    service = _service(tmp_path, _store_scope_portfolio_facts())
+    request = _request(
+        grain_id="brand",
+        entity_filters={"category": ("category_a",), "brand": ("brand_a",), "store": ("store_a",)},
+        concept_ids=("brand_delta_pct", "category_delta_pct", "brand_category_delta_gap_pp"),
+        comparison_mode=ComparisonMode.YOY,
+    )
+
+    assert portfolio_market_module._projection_entity_filters(request, category="category_a") == {
+        "category": ("category_a",),
+        "store": ("store_a",),
+    }
+
+    response = service.query(request)
+
+    values = {item.concept_id: item.value for item in response.items}
+    assert values["brand_delta_pct"] is None
+    assert values["category_delta_pct"] is None
+    assert values["brand_category_delta_gap_pp"] is None
+    assert response.items[2].status == PortfolioConceptStatus.PARTIAL
+    assert response.items[2].provenance is not None
+    assert response.items[2].provenance["input_metric_facts"]["fact_count"] == 0
+    assert response.items[2].provenance["current_analytical_scope"]["entity_filters"] == {
+        "category": ("category_a",),
+        "brand": ("brand_a",),
+        "store": ("store_a",),
+    }
 
 def test_brand_category_delta_is_not_range_safe(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts())
@@ -290,6 +432,7 @@ def _request(
     grain_id: str = "category",
     entity_ids: tuple[str, ...] = (),
     entity_filters: dict[str, tuple[str, ...]] | object | None = _DEFAULT_ENTITY_FILTERS,
+    user_entity_filters: dict[str, tuple[str, ...]] | None = None,
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE,
 ) -> PortfolioMarketQueryRequest:
     default_filters: dict[str, tuple[str, ...]] = {"category": ("category_a",)}
@@ -307,6 +450,7 @@ def _request(
         grain_id=grain_id,
         entity_ids=entity_ids,
         entity_filters=filters,
+        user_entity_filters=user_entity_filters,
         concept_ids=concept_ids,
         comparison_mode=comparison_mode,
         private_label_scope=private_label_scope,
@@ -457,6 +601,59 @@ def _portfolio_facts(
             )
     return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
 
+
+def _store_scope_portfolio_facts() -> pl.DataFrame:
+    rows: list[dict[str, object]] = []
+    for manufacturer, value in (("manufacturer_a", 500.0), ("manufacturer_b", 50.0)):
+        rows.append(
+            _fact(
+                date(2026, 1, 1),
+                "manufacturer",
+                manufacturer,
+                "revenue",
+                value,
+                "sum",
+                PrivateLabelScope.INCLUDE,
+                parent_entity_ids={
+                    "category": "category_a",
+                    "manufacturer": manufacturer,
+                    "canonical_store_id": "store_a",
+                },
+            )
+        )
+    for period, category_revenue, brand_revenue in (
+        (date(2025, 1, 1), 100.0, 50.0),
+        (date(2026, 1, 1), 50.0, 90.0),
+    ):
+        rows.append(
+            _fact(
+                period,
+                "category",
+                "category_a",
+                "revenue",
+                category_revenue,
+                "sum",
+                PrivateLabelScope.INCLUDE,
+                parent_entity_ids={"category": "category_a", "canonical_store_id": "store_a"},
+            )
+        )
+        rows.append(
+            _fact(
+                period,
+                "brand",
+                "brand_a",
+                "revenue",
+                brand_revenue,
+                "sum",
+                PrivateLabelScope.INCLUDE,
+                parent_entity_ids={
+                    "category": "category_a",
+                    "brand": "brand_a",
+                    "canonical_store_id": "store_a",
+                },
+            )
+        )
+    return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
 
 def _fact(
     period: date,

@@ -512,7 +512,9 @@ def test_signals_screen_uses_product_signal_feed_not_placeholder_or_fake_recomme
     assert "рекомендац" not in signals_panel.lower()
 
     assert 'if (state.activeView === "signals")' in script
-    assert 'state.signalsResponse = await postJson("/api/dashboard/signals", buildSignalsPayload());' in script
+    assert 'const token = sectionRequestToken("signals");' in script
+    assert 'const signalsResponse = await postJson("/api/dashboard/signals", buildSignalsPayload());' in script
+    assert "state.signalsResponse = signalsResponse;" in script
     assert 'signal_types: ["COMMERCIAL_SIGNAL", "DETERMINISTIC_PATTERN", "DATA_QUALITY_ALERT"]' in script
     assert "function renderSignals()" in script
     assert "function renderSignalList()" in script
@@ -623,7 +625,9 @@ def test_data_screen_implements_current_dataset_coverage_quality_rows_and_audit(
     assert "ОТЧЁТЫ" not in data_panel
 
     assert 'if (state.activeView === "data")' in script
-    assert 'state.dataResponse = await postJson("/api/dashboard/data", buildDataPayload());' in script
+    assert 'const token = sectionRequestToken("data");' in script
+    assert 'const dataResponse = await postJson("/api/dashboard/data", buildDataPayload());' in script
+    assert "state.dataResponse = dataResponse;" in script
     assert "function renderDataAvailability()" in script
     assert "function renderDataQuality()" in script
     assert "function renderDataRows()" in script
@@ -705,13 +709,17 @@ def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
     assert "async function runActiveViewQuery()" in script
     assert 'if (state.activeView === "sales_drivers")' in script
     assert "async function runSalesDriversQuery()" in script
-    assert 'state.salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);' in script
-    assert 'state.salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);' in script
+    assert 'const token = sectionRequestToken("sales_drivers");' in script
+    assert 'const salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);' in script
+    assert 'const salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);' in script
+    assert "state.salesDriversResponse = salesDriversResponse;" in script
+    assert "state.salesDriversChartResponse = salesDriversChartResponse;" in script
     assert "renderSalesDriverTrend()" in script
     sales_driver_trend = script.split("function renderSalesDriverTrend()", 1)[1].split("function renderSalesDriverDetailTable()", 1)[0]
     assert "box.replaceChildren(buildSvgChart(points, entry))" in sales_driver_trend
     assert "buildOverviewSvgChart" not in sales_driver_trend
-    assert 'state.salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
+    assert 'const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
+    assert "state.salesDriversTableResponse = salesDriversTableResponse;" in script
     assert "buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts)" in script
     assert "buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts())" in script
     assert "comparisonFor(state.salesDriversResponse, result)" in script
@@ -762,7 +770,10 @@ def test_portfolio_market_screen_uses_product_route_without_fake_semantics() -> 
 
     assert 'if (state.activeView === "portfolio_market")' in script
     assert "async function runPortfolioMarketQuery()" in script
-    assert 'state.portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());' in script
+    assert 'const token = sectionRequestToken("portfolio_market");' in script
+    assert 'const portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());' in script
+    assert "if (!isCurrentSectionRequest(token)) return;" in script
+    assert "state.portfolioMarketResponse = portfolioMarketResponse;" in script
     assert "function buildPortfolioMarketPayload()" in script
     assert "concept_ids: portfolioMarketConcepts" in script
     assert "entity_filters: selectedFilterValuesForPortfolio()" in script
@@ -1270,7 +1281,7 @@ def test_continuous_report_scope_keeps_filters_during_period_and_assortment_chan
     assert "await refreshRuntimeOptions();" in assortment_handler
     assert "resetEntities: true" not in assortment_handler
     assert "async function applyScopeChange(work)" in script
-    assert "const preservedView = state.scopeEditView || viewFromHash() || state.activeView || \"overview\";" in script
+    assert "const preservedView = state.scopeEditView || state.activeView || viewFromHash() || \"overview\";" in script
     assert "state.suppressScrollspyUntil = Date.now() + 1200;" in script
     assert "if (Date.now() < state.suppressScrollspyUntil) return;" in script
     assert "state.scopeEditView = viewFromHash() || state.activeView || \"overview\";" in script
@@ -1281,6 +1292,27 @@ def test_continuous_report_scope_keeps_filters_during_period_and_assortment_chan
     assert "void ensureActiveViewData();" in navigate_body
     assert "ensureReportDataThroughView" not in script
     assert "window.addEventListener(\"scroll\"" in script
+    breadcrumb_body = script.split("async function activateBreadcrumbGrain(grain)", 1)[1].split("function activeBreadcrumbGrainIndex", 1)[0]
+    assert "invalidateLoadedViews();" in breadcrumb_body
+
+
+def test_browser_script_invalidates_stale_cross_section_requests() -> None:
+    script = html_or_script("app.js")
+
+    assert "scopeVersion: 0" in script
+    assert "sectionRequests: {}" in script
+    assert "function sectionRequestToken(view)" in script
+    assert "function isCurrentSectionRequest(token)" in script
+    assert "function markInactiveSectionsPending()" in script
+    invalidate_body = script.split("function invalidateLoadedViews()", 1)[1].split("function updatePressedGroup", 1)[0]
+    assert "state.scopeVersion += 1;" in invalidate_body
+    assert "state.loadedViews = {};" in invalidate_body
+    assert "markInactiveSectionsPending();" in invalidate_body
+
+    for view in ("overview", "sales_drivers", "portfolio_market", "stores", "signals", "data"):
+        assert f'const token = sectionRequestToken("{view}");' in script
+    assert script.count("if (!isCurrentSectionRequest(token)) return;") >= 6
+    assert script.count("if (!isCurrentSectionRequest(token)) return;") >= 12
 
 
 def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> None:
@@ -1303,7 +1335,8 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "state.options.periods" in script
     assert "chartResponse: null" in script
     assert "buildChartQueryPayload()" in script
-    assert "state.chartResponse = await postJson(\"/api/dashboard/query\", chartPayload);" in script
+    assert "const chartResponse = await postJson(\"/api/dashboard/query\", chartPayload);" in script
+    assert "state.chartResponse = chartResponse;" in script
     assert "period_mode: \"DATE_RANGE\"" in script
     assert "comparison_mode: \"NONE\"" in script
     assert "const chartResult = chartResultFor(state.chartMetric);" in script
@@ -1350,6 +1383,7 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "Объекты в выбранном срезе" in script
     assert "Ранжирование по изменению:" in script
     assert "Для выбранного показателя вклад в изменение не рассчитывается." in script
+    assert "Вклад в изменение не рассчитывается для дополнительного фильтра" in script
     assert "Для этой пары уровней вклад пока недоступен." in script
 
 

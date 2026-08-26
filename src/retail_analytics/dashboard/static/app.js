@@ -20,6 +20,8 @@ const state = {
   dataPageOffset: 0,
   activeView: "overview",
   loadedViews: {},
+  scopeVersion: 0,
+  sectionRequests: {},
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
@@ -511,7 +513,7 @@ function updateStickyGeometryVars() {
 }
 
 async function applyScopeChange(work) {
-  const preservedView = state.scopeEditView || viewFromHash() || state.activeView || "overview";
+  const preservedView = state.scopeEditView || state.activeView || viewFromHash() || "overview";
   state.suppressScrollspyUntil = Date.now() + 1200;
   setActiveView(preservedView, { refresh: false, scroll: false });
   await work();
@@ -586,7 +588,44 @@ async function ensureActiveViewData({ force = false } = {}) {
 }
 
 function invalidateLoadedViews() {
+  state.scopeVersion += 1;
   state.loadedViews = {};
+  markInactiveSectionsPending();
+}
+
+function sectionRequestToken(view) {
+  const token = { view, scopeVersion: state.scopeVersion, sequence: (state.sectionRequests[view] || 0) + 1 };
+  state.sectionRequests[view] = token.sequence;
+  return token;
+}
+
+function isCurrentSectionRequest(token) {
+  return state.scopeVersion === token.scopeVersion && state.sectionRequests[token.view] === token.sequence;
+}
+
+function markInactiveSectionsPending() {
+  ["overview", "sales_drivers", "portfolio_market", "stores", "signals", "data"]
+    .filter((view) => view !== state.activeView)
+    .forEach((view) => {
+      if (view === "overview") {
+        renderSkeletons();
+      } else if (view === "sales_drivers") {
+        renderSalesDriverSkeletons();
+      } else if (view === "portfolio_market") {
+        renderPortfolioMarketSkeletons();
+      } else if (view === "stores") {
+        state.storesResponse = null;
+        state.storesScopeStatus = "ready";
+        renderStoresSkeletons();
+      } else if (view === "signals") {
+        state.signalsResponse = null;
+        state.signalsLoadStatus = "idle";
+        renderSignalsSkeletons();
+      } else if (view === "data") {
+        state.dataResponse = null;
+        renderDataSkeletons();
+      }
+    });
 }
 
 function updatePressedGroup(selector, datasetKey, activeValue) {
@@ -855,26 +894,34 @@ async function runActiveViewQuery() {
 }
 
 async function runOverviewQuery() {
+  const token = sectionRequestToken("overview");
   setLoading(true, "Запрос к витрине");
   renderSkeletons();
   try {
     const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), overviewConcepts());
     const chartPayload = buildChartQueryPayload();
     const previewPayload = buildQueryPayload(state.previewGrain, entityIdsForPreview(), tableConcepts());
-    state.summaryResponse = await postJson("/api/dashboard/query", summaryPayload);
-    state.chartResponse = await postJson("/api/dashboard/query", chartPayload);
-    state.contributionResponse = await loadContributionRows();
-    state.tableResponse = await postJson("/api/dashboard/query", previewPayload);
+    const summaryResponse = await postJson("/api/dashboard/query", summaryPayload);
+    const chartResponse = await postJson("/api/dashboard/query", chartPayload);
+    const contributionResponse = await loadContributionRows(summaryResponse);
+    const tableResponse = await postJson("/api/dashboard/query", previewPayload);
+    if (!isCurrentSectionRequest(token)) return;
+    state.summaryResponse = summaryResponse;
+    state.chartResponse = chartResponse;
+    state.contributionResponse = contributionResponse;
+    state.tableResponse = tableResponse;
     renderOverview();
     state.loadedViews.overview = true;
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
 }
 
 async function runSalesDriversQuery() {
+  const token = sectionRequestToken("sales_drivers");
   setLoading(true, "Запрос к витрине");
   renderSalesDriverSkeletons();
   try {
@@ -889,39 +936,49 @@ async function runSalesDriversQuery() {
     const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), concepts);
     const chartPayload = buildSalesDriverChartQueryPayload();
     const detailPayload = buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts());
-    state.salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);
-    state.salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);
-    state.salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);
+    const salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);
+    const salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);
+    const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);
+    if (!isCurrentSectionRequest(token)) return;
+    state.salesDriversResponse = salesDriversResponse;
+    state.salesDriversChartResponse = salesDriversChartResponse;
+    state.salesDriversTableResponse = salesDriversTableResponse;
     renderSalesDrivers();
     state.loadedViews.sales_drivers = true;
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
 }
 
-async function loadContributionRows() {
-  const payload = buildContributionPayload();
+async function loadContributionRows(summaryResponse = state.summaryResponse) {
+  const payload = buildContributionPayload(summaryResponse);
   if (!payload) return null;
   return postJson("/api/dashboard/contribution", payload);
 }
 
 async function runPortfolioMarketQuery() {
+  const token = sectionRequestToken("portfolio_market");
   setLoading(true, "Запрос к витрине");
   renderPortfolioMarketSkeletons();
   try {
-    state.portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());
+    const portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());
+    if (!isCurrentSectionRequest(token)) return;
+    state.portfolioMarketResponse = portfolioMarketResponse;
     renderPortfolioMarket();
     state.loadedViews.portfolio_market = true;
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
 }
 
 async function runStoresQuery() {
+  const token = sectionRequestToken("stores");
   setLoading(true, "Запрос к витрине");
   renderStoresSkeletons();
   if (!storeConcepts().length) {
@@ -934,28 +991,35 @@ async function runStoresQuery() {
   }
   state.storesScopeStatus = "ready";
   try {
-    state.storesResponse = await postJson("/api/dashboard/query", buildStoresPayload());
+    const storesResponse = await postJson("/api/dashboard/query", buildStoresPayload());
+    if (!isCurrentSectionRequest(token)) return;
+    state.storesResponse = storesResponse;
     renderStores();
     state.loadedViews.stores = true;
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
 }
 
 async function runSignalsQuery() {
+  const token = sectionRequestToken("signals");
   setLoading(true, "Запрос к ленте сигналов");
   state.signalsResponse = null;
   state.signalsLoadStatus = "loading";
   renderSignalsSkeletons();
   try {
-    state.signalsResponse = await postJson("/api/dashboard/signals", buildSignalsPayload());
+    const signalsResponse = await postJson("/api/dashboard/signals", buildSignalsPayload());
+    if (!isCurrentSectionRequest(token)) return;
+    state.signalsResponse = signalsResponse;
     state.signalsLoadStatus = "loaded";
     renderSignals();
     state.loadedViews.signals = true;
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
     state.signalsResponse = null;
     state.signalsLoadStatus = "error";
     setLoading(false, "Не удалось загрузить данные.");
@@ -964,14 +1028,18 @@ async function runSignalsQuery() {
 }
 
 async function runDataQuery() {
+  const token = sectionRequestToken("data");
   setLoading(true, "Запрос к данным");
   renderDataSkeletons();
   try {
-    state.dataResponse = await postJson("/api/dashboard/data", buildDataPayload());
+    const dataResponse = await postJson("/api/dashboard/data", buildDataPayload());
+    if (!isCurrentSectionRequest(token)) return;
+    state.dataResponse = dataResponse;
     renderDataScreen();
     state.loadedViews.data = true;
     setLoading(false, "Данные обновлены");
   } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
     state.dataResponse = null;
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
@@ -1025,12 +1093,12 @@ function buildSalesDriverChartQueryPayload() {
   };
 }
 
-function buildContributionPayload() {
+function buildContributionPayload(summaryResponse = state.summaryResponse) {
   if (state.periodMode !== "COMPARE") return null;
   if (hasNonDrilldownFilters()) return null;
   const metricConcept = contributionMetricForOverview();
   if (!metricConcept) return null;
-  const comparison = state.summaryResponse?.comparisons?.[0];
+  const comparison = summaryResponse?.comparisons?.[0];
   if (!comparison?.comparison_period_start) return null;
   const parentEntityIds = entityIdsForSummary();
   const parentEntityId = parentEntityIds[0] || null;
@@ -2861,6 +2929,7 @@ async function activateBreadcrumbGrain(grain) {
   updatePreviewGrain();
   resetDataPagination();
   await refreshRuntimeOptions();
+  invalidateLoadedViews();
   await runActiveViewQuery();
 }
 
@@ -3613,6 +3682,8 @@ function portfolioLimitationText(code) {
     active_sku_requires_current_period: "Выберите период для расчёта активных SKU.",
     brand_vs_category_requires_compare_mode: "Сравнение бренда с категорией доступно только в режиме сравнения.",
     brand_vs_category_requires_category_and_brand: "Нужны выбранные категория и бренд.",
+    portfolio_requires_single_category: "Выберите одну категорию, чтобы показатель имел однозначную базу сравнения.",
+    brand_vs_category_requires_single_brand: "Выберите один бренд, чтобы сравнение с категорией было однозначным.",
     market_universe_identity_not_materialized: "Сравнительная рыночная вселенная ещё не подготовлена для пользовательского экрана.",
     broad_competitor_projection_not_route_ready: "Широкое конкурентное окружение ещё не подключено к пользовательскому маршруту.",
     comparison_period_unavailable: "Нет подходящего периода сравнения.",
@@ -3844,6 +3915,7 @@ function salesDriverMatrixCaption() {
 function contributionFallbackReason() {
   const status = state.contributionResponse?.status;
   if (state.periodMode !== "COMPARE") return "Вклад в изменение доступен только в режиме сравнения.";
+  if (hasNonDrilldownFilters()) return "Вклад в изменение не рассчитывается для дополнительного фильтра; показаны объекты выбранного среза.";
   if (!additiveContributionMetrics.includes(state.chartMetric)) return "Для выбранного показателя вклад в изменение не рассчитывается.";
   if (status === "NOT_APPLICABLE_PARENT_CHILD_SCOPE") return "Для этой пары уровней вклад пока недоступен.";
   if (status === "NOT_APPLICABLE") return "Для выбранного показателя вклад не применим.";
