@@ -680,6 +680,216 @@ capabilities:
   provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
+- concept_id: entity_revenue_share
+  ui_label_ru: Entity revenue share
+  ui_description_ru: Entity revenue divided by the additive revenue total of the declared analytical universe.
+  tab: Business analytics
+  group: Shares
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.portfolio_market.share_projection
+  availability_status: READY
+  limitations:
+  - additive_basis_only
+  - child_entity_share_requires_single_category
+  - focal_selection_does_not_shrink_denominator
+  - share_delta_percentage_points
+  - share_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: entity_units_share
+  ui_label_ru: Entity units share
+  ui_description_ru: Entity units divided by the additive units total of the declared analytical universe.
+  tab: Business analytics
+  group: Shares
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.portfolio_market.share_projection
+  availability_status: READY
+  limitations:
+  - additive_basis_only
+  - child_entity_share_requires_single_category
+  - focal_selection_does_not_shrink_denominator
+  - share_delta_percentage_points
+  - share_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: entity_margin_share
+  ui_label_ru: Entity absolute margin share
+  ui_description_ru: Entity absolute margin divided by the additive absolute-margin total of the declared analytical universe.
+  tab: Business analytics
+  group: Shares
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.portfolio_market.share_projection
+  availability_status: READY
+  limitations:
+  - additive_basis_only
+  - child_entity_share_requires_single_category
+  - focal_selection_does_not_shrink_denominator
+  - share_delta_percentage_points
+  - share_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: entity_cumulative_revenue_share
+  ui_label_ru: Entity cumulative revenue share
+  ui_description_ru: Cumulative share after deterministic revenue ranking within the declared analytical universe.
+  tab: Business analytics
+  group: Shares
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.portfolio_market.share_projection
+  availability_status: READY
+  limitations:
+  - additive_basis_only
+  - child_entity_share_requires_single_category
+  - cumulative_share_uses_rank_order
+  - deterministic_entity_id_tie_break
+  - cumulative_share_comparison_semantics_unsupported
+  - share_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: entity_cumulative_units_share
+  ui_label_ru: Entity cumulative units share
+  ui_description_ru: Cumulative share after deterministic units ranking within the declared analytical universe.
+  tab: Business analytics
+  group: Shares
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.portfolio_market.share_projection
+  availability_status: READY
+  limitations:
+  - additive_basis_only
+  - child_entity_share_requires_single_category
+  - cumulative_share_uses_rank_order
+  - deterministic_entity_id_tie_break
+  - cumulative_share_comparison_semantics_unsupported
+  - share_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: entity_cumulative_margin_share
+  ui_label_ru: Entity cumulative absolute margin share
+  ui_description_ru: Cumulative share after deterministic absolute-margin ranking within the declared analytical universe.
+  tab: Business analytics
+  group: Shares
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.portfolio_market.share_projection
+  availability_status: READY
+  limitations:
+  - additive_basis_only
+  - child_entity_share_requires_single_category
+  - cumulative_share_uses_rank_order
+  - deterministic_entity_id_tie_break
+  - cumulative_share_comparison_semantics_unsupported
+  - share_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
 - concept_id: manufacturer_rank_revenue
   ui_label_ru: Место производителя по обороту
   ui_description_ru: Место производителя по суммарному обороту внутри категории.

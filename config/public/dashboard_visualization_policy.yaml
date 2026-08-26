@@ -516,6 +516,8 @@ business_concept_rules:
     guardrails:
     - recompute_from_numerator_denominator
     - do_not_average_monthly_shares
+    - focal_selection_does_not_shrink_denominator
+    - share_delta_uses_percentage_points
   ranking:
     preferred_visualization: RANKED_BAR
     alternative_visualizations:
@@ -525,6 +527,7 @@ business_concept_rules:
     guardrails:
     - show_ranking_universe
     - show_tie_policy_where_relevant
+    - cumulative_share_uses_rank_order_when_requested
   brand_vs_category:
     preferred_visualization: DUMBBELL
     alternative_visualizations:
@@ -1121,6 +1124,129 @@ metric_rules:
   period_modes:
   - SINGLE_PERIOD
   - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: entity_revenue_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: entity_units_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: entity_margin_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: entity_cumulative_revenue_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: entity_cumulative_units_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_QUERY
+- concept_id: entity_cumulative_margin_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
   readiness_requirement: READY_QUERY
 - concept_id: manufacturer_rank_revenue
   allowed_screens:

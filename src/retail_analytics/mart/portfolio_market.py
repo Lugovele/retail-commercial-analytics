@@ -116,6 +116,14 @@ class PortfolioMarketService:
         "sku_rank_units": ("sku", "units"),
         "sku_rank_margin_abs": ("sku", "retailer_margin_abs"),
     }
+    _SHARE_PROJECTION_CONCEPTS: ClassVar[dict[str, tuple[str, bool]]] = {
+        "entity_revenue_share": ("revenue", False),
+        "entity_units_share": ("units", False),
+        "entity_margin_share": ("retailer_margin_abs", False),
+        "entity_cumulative_revenue_share": ("revenue", True),
+        "entity_cumulative_units_share": ("units", True),
+        "entity_cumulative_margin_share": ("retailer_margin_abs", True),
+    }
     _ACTIVE_SKU_CONCEPTS: ClassVar[set[str]] = {
         "active_sku_count",
         "historical_peak_active_sku_count",
@@ -164,6 +172,8 @@ class PortfolioMarketService:
         for concept_id in effective_request.concept_ids:
             if concept_id in self._SHARE_CONCEPTS:
                 items.extend(self._share_items(effective_request, concept_id))
+            elif concept_id in self._SHARE_PROJECTION_CONCEPTS:
+                items.append(self._share_projection_item(effective_request, concept_id))
             elif concept_id in self._RANK_CONCEPTS:
                 items.append(self._rank_item(effective_request, concept_id))
             elif concept_id == "manufacturer_population_count":
@@ -243,11 +253,153 @@ class PortfolioMarketService:
             )
         return tuple(items) or (_not_applicable(request, concept_id, "category_position", "no_metric_fact_result"),)
 
+    def _share_projection_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
+        basis_metric, include_cumulative = self._SHARE_PROJECTION_CONCEPTS[concept_id]
+        share_grain = request.grain_id
+        if share_grain not in {"category", "manufacturer", "brand", "sku"}:
+            return _not_applicable(request, concept_id, "category_position", "share_entity_grain_unsupported")
+        if request.period_mode != PeriodMode.SINGLE_PERIOD:
+            return _not_applicable(request, concept_id, "category_position", "share_range_semantics_unsupported")
+        if include_cumulative and request.comparison_mode != ComparisonMode.NONE:
+            return _not_applicable(
+                request,
+                concept_id,
+                "category_position",
+                "cumulative_share_comparison_semantics_unsupported",
+            )
+        unsupported_scope = _scope_filter_unsupported_limitation(request, prefix="share")
+        if unsupported_scope:
+            return _not_applicable(request, concept_id, "category_position", unsupported_scope)
+        category, category_limitation = _share_category_scope(request, share_grain)
+        if category_limitation:
+            return _not_applicable(request, concept_id, "category_position", category_limitation)
+        filters = _rank_universe_filters(share_grain, category)
+        current_response = self.query_service.query(
+            _metric_request(
+                request,
+                grain_id=share_grain,
+                metric_concepts=(basis_metric,),
+                comparison_mode=ComparisonMode.NONE,
+                entity_ids=(),
+                entity_filters=filters,
+            )
+        )
+        current_rank_rows = _rank_rows(
+            current_response.metric_results,
+            rank_grain=share_grain,
+            metric_concept=basis_metric,
+            category=category,
+        )
+        current_rows = _share_rows(
+            current_rank_rows,
+            share_grain=share_grain,
+            basis_metric=basis_metric,
+            category=category,
+            include_cumulative=include_cumulative,
+        )
+        focal_entities = _rank_focal_entities(request, share_grain)
+        rows = _filter_rank_rows(current_rows, focal_entities=focal_entities)
+        limitations = tuple(item.issue_code for item in current_response.limitations)
+        input_results = current_response.metric_results
+        evaluated_periods = tuple(current_response.available_periods)
+        reference_period: date | None = None
+        if request.comparison_mode != ComparisonMode.NONE:
+            reference_period, reference_limitations = self._rank_reference_period(
+                request,
+                rank_grain=share_grain,
+                metric_concept=basis_metric,
+                entity_filters=filters,
+            )
+            limitations = (*limitations, *reference_limitations)
+            if reference_period is None:
+                return _not_applicable(request, concept_id, "category_position", "comparison_period_unavailable")
+            reference_response = self.query_service.query(
+                _metric_request(
+                    request,
+                    grain_id=share_grain,
+                    metric_concepts=(basis_metric,),
+                    comparison_mode=ComparisonMode.NONE,
+                    entity_ids=(),
+                    entity_filters=filters,
+                    date_from=reference_period,
+                    date_to=reference_period,
+                )
+            )
+            reference_rank_rows = _rank_rows(
+                reference_response.metric_results,
+                rank_grain=share_grain,
+                metric_concept=basis_metric,
+                category=category,
+            )
+            reference_rows = _share_rows(
+                reference_rank_rows,
+                share_grain=share_grain,
+                basis_metric=basis_metric,
+                category=category,
+                include_cumulative=False,
+            )
+            rows = _share_movement_rows(current_rows, reference_rows, focal_entities=focal_entities)
+            limitations = (*limitations, *tuple(item.issue_code for item in reference_response.limitations))
+            input_results = (*input_results, *reference_response.metric_results)
+            evaluated_periods = tuple(dict.fromkeys((*evaluated_periods, *reference_response.available_periods)))
+        denominator_zero = any(row.get("share_status") == "ZERO_DENOMINATOR" for row in rows)
+        if denominator_zero:
+            limitations = (*limitations, "zero_share_universe_denominator")
+        if not rows:
+            limitations = (*limitations, "no_share_metric_facts")
+        status = PortfolioConceptStatus.READY if rows and not limitations else PortfolioConceptStatus.PARTIAL
+        universe_total = _share_universe_metric_value(current_rows)
+        reference_universe_total = (
+            _share_universe_metric_value(rows, key="reference_universe_metric_value")
+            if request.comparison_mode != ComparisonMode.NONE
+            else None
+        )
+        return PortfolioMarketItem(
+            concept_id=concept_id,
+            status=status,
+            block_id="category_position",
+            grain_id=share_grain,
+            entity_id=None,
+            label=None,
+            value=None,
+            unit="percent",
+            rows=rows,
+            limitations=tuple(dict.fromkeys(limitations)),
+            provenance=_projection_provenance(
+                request,
+                concept_id=concept_id,
+                projection_semantics="cumulative_share_after_ranked_additive_metric"
+                if include_cumulative
+                else "share_of_defined_universe_from_additive_metric",
+                component_metric_concepts=(basis_metric,),
+                input_results=input_results,
+                population_scope={
+                    "share_entity_type": share_grain,
+                    "share_basis_metric": basis_metric,
+                    "universe_type": "selected_category_entities" if category is not None else "network_entities",
+                    "universe_value": category if category is not None else "NETWORK",
+                    "universe_metric_value": universe_total,
+                    "reference_universe_metric_value": reference_universe_total,
+                    "universe_size": _rank_universe_size(current_rows),
+                    "category": category,
+                    "focal_entity_ids": focal_entities,
+                    "private_label_scope_applies_to": "numerator_and_denominator",
+                    "share_delta_unit": "percentage_points" if request.comparison_mode != ComparisonMode.NONE else None,
+                    "sum_to_100_invariant": "complete_mutually_exclusive_universe_only",
+                    "calculation_precision": "float64_underlying_metric_values",
+                },
+                tie_policy="competition_rank" if include_cumulative else None,
+                evaluated_periods=evaluated_periods,
+                deterministic_secondary_sort="entity_id_ascending" if include_cumulative else None,
+                reference_period=reference_period,
+            ),
+        )
+
     def _rank_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
         rank_grain, metric_concept = self._RANK_CONCEPTS[concept_id]
         if request.period_mode != PeriodMode.SINGLE_PERIOD:
             return _not_applicable(request, concept_id, "category_position", "rank_range_semantics_unsupported")
-        unsupported_scope = _rank_unsupported_scope_limitation(request)
+        unsupported_scope = _scope_filter_unsupported_limitation(request, prefix="rank")
         if unsupported_scope:
             return _not_applicable(request, concept_id, "category_position", unsupported_scope)
         category, category_limitation = _rank_category_scope(request, rank_grain)
@@ -686,6 +838,46 @@ def _rank_rows(
     return tuple(rows)
 
 
+def _share_rows(
+    rank_rows: tuple[dict[str, Any], ...],
+    *,
+    share_grain: str,
+    basis_metric: str,
+    category: str | None,
+    include_cumulative: bool,
+) -> tuple[dict[str, Any], ...]:
+    denominator = sum(cast(float, row["metric_value"]) for row in rank_rows)
+    denominator_is_zero = denominator == 0
+    running_value = 0.0
+    rows: list[dict[str, Any]] = []
+    for rank_row in rank_rows:
+        metric_value = cast(float, rank_row["metric_value"])
+        running_value += metric_value
+        share = None if denominator_is_zero else metric_value / denominator
+        row = dict(rank_row)
+        row.update(
+            {
+                "share_entity_type": share_grain,
+                "basis_metric_id": basis_metric,
+                "share_basis_metric": basis_metric,
+                "universe_type": "selected_category_entities" if category is not None else "network_entities",
+                "universe_value": category if category is not None else "NETWORK",
+                "universe_metric_value": denominator,
+                "share": share,
+                "share_status": "ZERO_DENOMINATOR" if denominator_is_zero else "READY",
+            }
+        )
+        if include_cumulative:
+            row.update(
+                {
+                    "cumulative_metric_value": running_value,
+                    "cumulative_share": None if denominator_is_zero else running_value / denominator,
+                }
+            )
+        rows.append(row)
+    return tuple(rows)
+
+
 def _filter_rank_rows(
     rows: tuple[dict[str, Any], ...],
     *,
@@ -695,6 +887,66 @@ def _filter_rank_rows(
         return rows
     allowed = set(focal_entities)
     return tuple(row for row in rows if str(row["entity_id"]) in allowed)
+
+
+def _share_movement_rows(
+    current_rows: tuple[dict[str, Any], ...],
+    reference_rows: tuple[dict[str, Any], ...],
+    *,
+    focal_entities: tuple[str, ...],
+) -> tuple[dict[str, Any], ...]:
+    current_by_entity = {str(row["entity_id"]): row for row in current_rows}
+    reference_by_entity = {str(row["entity_id"]): row for row in reference_rows}
+    entity_ids = tuple(sorted(set(current_by_entity) | set(reference_by_entity)))
+    movement_rows: list[dict[str, Any]] = []
+    for entity_id in entity_ids:
+        if focal_entities and entity_id not in focal_entities:
+            continue
+        current = current_by_entity.get(entity_id)
+        reference = reference_by_entity.get(entity_id)
+        if current is not None:
+            row = dict(current)
+        else:
+            reference_row = cast(dict[str, Any], reference)
+            row = dict(reference_row)
+            row.update(
+                {
+                    "metric_value": None,
+                    "rank": None,
+                    "share": None,
+                    "universe_metric_value": _share_universe_metric_value(current_rows),
+                    "share_status": "EXITED_SHARE_UNIVERSE",
+                }
+            )
+        reference_share = cast(float | None, reference.get("share")) if reference is not None else None
+        current_share = cast(float | None, current.get("share")) if current is not None else None
+        current_value = cast(float | None, current.get("metric_value")) if current is not None else None
+        reference_value = cast(float | None, reference.get("metric_value")) if reference is not None else None
+        row.update(
+            {
+                "current_share": current_share,
+                "reference_share": reference_share,
+                "share_delta_pp": None
+                if current_share is None or reference_share is None
+                else current_share - reference_share,
+                "current_metric_value": current_value,
+                "reference_metric_value": reference_value,
+                "current_universe_metric_value": _share_universe_metric_value(current_rows),
+                "reference_universe_metric_value": _share_universe_metric_value(reference_rows),
+                "current_universe_size": _rank_universe_size(current_rows),
+                "reference_universe_size": _rank_universe_size(reference_rows),
+            }
+        )
+        if current is None:
+            row["share_movement_state"] = "EXITED_SHARE_UNIVERSE"
+        elif reference is None:
+            row["share_movement_state"] = "NEW_IN_SHARE_UNIVERSE"
+        elif row["share_delta_pp"] == 0:
+            row["share_movement_state"] = "UNCHANGED"
+        else:
+            row["share_movement_state"] = "CHANGED"
+        movement_rows.append(row)
+    return tuple(sorted(movement_rows, key=lambda row: (row["rank"] is None, row["rank"] or 999999, str(row["entity_id"]))))
 
 
 def _rank_movement_rows(
@@ -778,6 +1030,13 @@ def _rank_universe_size(rows: tuple[dict[str, Any], ...], *, key: str = "univers
     return None
 
 
+def _share_universe_metric_value(rows: tuple[dict[str, Any], ...], *, key: str = "universe_metric_value") -> float | None:
+    values = {row.get(key) for row in rows if row.get(key) is not None}
+    if len(values) == 1:
+        return float(cast(float | int | str, next(iter(values))))
+    return None
+
+
 def _rank_category_scope(request: PortfolioMarketQueryRequest, rank_grain: str) -> tuple[str | None, str | None]:
     if rank_grain == "category":
         return None, None
@@ -786,6 +1045,17 @@ def _rank_category_scope(request: PortfolioMarketQueryRequest, rank_grain: str) 
         return None, category_limitation
     if not category:
         return None, f"{rank_grain}_rank_requires_category_scope"
+    return category, None
+
+
+def _share_category_scope(request: PortfolioMarketQueryRequest, share_grain: str) -> tuple[str | None, str | None]:
+    if share_grain == "category":
+        return None, None
+    category, category_limitation = _single_category_filter(request)
+    if category_limitation:
+        return None, category_limitation
+    if not category:
+        return None, f"{share_grain}_share_requires_category_scope"
     return category, None
 
 
@@ -808,7 +1078,7 @@ def _rank_focal_entities(request: PortfolioMarketQueryRequest, rank_grain: str) 
     return tuple(dict.fromkeys(entities))
 
 
-def _rank_unsupported_scope_limitation(request: PortfolioMarketQueryRequest) -> str | None:
+def _scope_filter_unsupported_limitation(request: PortfolioMarketQueryRequest, *, prefix: str) -> str | None:
     filters = {
         **(request.entity_filters or {}),
         **(request.user_entity_filters or {}),
@@ -817,7 +1087,7 @@ def _rank_unsupported_scope_limitation(request: PortfolioMarketQueryRequest) -> 
         column for column in ("store", "store_format", "territory", "fo", "fo2", "region") if filters.get(column)
     )
     if unsupported:
-        return "rank_scope_filter_unsupported"
+        return f"{prefix}_scope_filter_unsupported"
     return None
 
 

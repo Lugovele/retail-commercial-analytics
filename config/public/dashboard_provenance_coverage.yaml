@@ -540,6 +540,150 @@ coverage:
     - manufacturer
     - brand
     - sku
+- concept_id: entity_revenue_share
+  fact_type: mart.portfolio_market.share_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Shares
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: entity_units_share
+  fact_type: mart.portfolio_market.share_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Shares
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: entity_margin_share
+  fact_type: mart.portfolio_market.share_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Shares
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: entity_cumulative_revenue_share
+  fact_type: mart.portfolio_market.share_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Shares
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: entity_cumulative_units_share
+  fact_type: mart.portfolio_market.share_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Shares
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
+- concept_id: entity_cumulative_margin_share
+  fact_type: mart.portfolio_market.share_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: NOT_APPLICABLE
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Shares
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
 - concept_id: manufacturer_rank_revenue
   fact_type: mart.portfolio_market.rank_projection
   coverage_status: PARTIAL

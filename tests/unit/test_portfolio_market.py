@@ -256,6 +256,277 @@ def test_rank_null_metric_value_is_not_zero_filled(tmp_path) -> None:
     assert "manufacturer_c" not in {row["entity_id"] for row in response.items[0].rows}
 
 
+def test_entity_share_recomputes_denominator_from_additive_metric_values(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(_request(grain_id="manufacturer", concept_ids=("entity_revenue_share",)))
+
+    item = response.items[0]
+    rows = {row["entity_id"]: row for row in item.rows}
+    assert item.status == PortfolioConceptStatus.READY
+    assert rows["manufacturer_b"]["share"] == pytest.approx(250.0 / 450.0)
+    assert rows["manufacturer_a"]["share"] == pytest.approx(150.0 / 450.0)
+    assert {row["universe_metric_value"] for row in item.rows} == {450.0}
+    assert item.provenance is not None
+    assert item.provenance["projection"]["projection_semantics"] == "share_of_defined_universe_from_additive_metric"
+    assert item.provenance["projection"]["component_metric_concepts"] == ("revenue",)
+    assert item.provenance["projection"]["population_scope"]["share_entity_type"] == "manufacturer"
+    assert item.provenance["projection"]["population_scope"]["universe_type"] == "selected_category_entities"
+
+
+def test_entity_share_supports_units_and_absolute_margin_bases(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    sku_response = service.query(_request(grain_id="sku", concept_ids=("entity_units_share",)))
+    brand_response = service.query(_request(grain_id="brand", concept_ids=("entity_margin_share",)))
+
+    sku_rows = {row["entity_id"]: row for row in sku_response.items[0].rows}
+    brand_rows = {row["entity_id"]: row for row in brand_response.items[0].rows}
+    assert sku_rows["sku_a"]["share"] == pytest.approx(0.5)
+    assert sku_rows["sku_b"]["share"] == pytest.approx(0.5)
+    assert brand_rows["brand_a"]["share"] == pytest.approx(40.0 / 120.0)
+    assert brand_rows["brand_b"]["share"] == pytest.approx(80.0 / 120.0)
+    assert brand_response.items[0].provenance is not None
+    assert brand_response.items[0].provenance["projection"]["component_metric_concepts"] == ("retailer_margin_abs",)
+
+
+def test_entity_share_does_not_query_precomputed_share_metric_facts(tmp_path, monkeypatch) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+    requested_metric_concepts: list[tuple[str, ...]] = []
+    original_query = service.query_service.query
+
+    def capture_query(request):
+        requested_metric_concepts.append(request.metric_concepts)
+        return original_query(request)
+
+    monkeypatch.setattr(service.query_service, "query", capture_query)
+
+    service.query(_request(grain_id="manufacturer", concept_ids=("entity_revenue_share",)))
+
+    assert requested_metric_concepts == [("revenue",)]
+    assert all(
+        "share" not in metric_concept
+        for metric_concepts in requested_metric_concepts
+        for metric_concept in metric_concepts
+    )
+
+
+def test_category_entity_share_uses_network_universe(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(grain_id="category", entity_filters={}, concept_ids=("entity_revenue_share",))
+    )
+
+    rows = {row["entity_id"]: row for row in response.items[0].rows}
+    assert rows["category_a"]["share"] == pytest.approx(440.0 / 940.0)
+    assert rows["category_b"]["share"] == pytest.approx(500.0 / 940.0)
+    assert {row["universe_type"] for row in response.items[0].rows} == {"network_entities"}
+
+
+def test_entity_share_applies_focal_selection_after_universe_calculation(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a",), "manufacturer": ("manufacturer_a",)},
+            concept_ids=("entity_revenue_share",),
+        )
+    )
+
+    assert [row["entity_id"] for row in response.items[0].rows] == ["manufacturer_a"]
+    assert response.items[0].rows[0]["share"] == pytest.approx(150.0 / 450.0)
+    assert response.items[0].rows[0]["universe_metric_value"] == pytest.approx(450.0)
+
+
+def test_entity_share_supports_multi_select_focal_entities_with_common_denominator(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a",), "manufacturer": ("manufacturer_a", "manufacturer_b")},
+            concept_ids=("entity_revenue_share",),
+        )
+    )
+
+    assert [row["entity_id"] for row in response.items[0].rows] == ["manufacturer_b", "manufacturer_a"]
+    assert {row["universe_metric_value"] for row in response.items[0].rows} == {450.0}
+
+
+def test_entity_share_uses_stm_scope_for_numerator_and_denominator(tmp_path) -> None:
+    facts = pl.concat(
+        [
+            _portfolio_facts(private_label_scope=PrivateLabelScope.INCLUDE),
+            _portfolio_facts(private_label_scope=PrivateLabelScope.EXCLUDE).with_columns(
+                pl.when(
+                    (pl.col("metric_concept") == "revenue")
+                    & (pl.col("grain_id") == "manufacturer")
+                    & (pl.col("period_start") == date(2026, 1, 1))
+                )
+                .then(pl.col("value") * 2.0)
+                .otherwise(pl.col("value"))
+                .alias("value")
+            ),
+        ]
+    )
+    service = _service(tmp_path, facts)
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("entity_revenue_share",),
+            private_label_scope=PrivateLabelScope.EXCLUDE,
+        )
+    )
+
+    assert {row["universe_metric_value"] for row in response.items[0].rows} == {900.0}
+    assert response.items[0].provenance is not None
+    assert response.items[0].provenance["projection"]["population_scope"]["private_label_scope_applies_to"] == (
+        "numerator_and_denominator"
+    )
+
+
+def test_entity_cumulative_share_reuses_rank_order_and_underlying_values(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    rank_response = service.query(_request(grain_id="manufacturer", concept_ids=("manufacturer_rank_revenue",)))
+    share_response = service.query(
+        _request(grain_id="manufacturer", concept_ids=("entity_cumulative_revenue_share",))
+    )
+
+    rank_rows = rank_response.items[0].rows
+    share_rows = share_response.items[0].rows
+    assert [row["entity_id"] for row in share_rows] == [row["entity_id"] for row in rank_rows]
+    assert [row["rank"] for row in share_rows] == [row["rank"] for row in rank_rows]
+    assert share_rows[0]["cumulative_share"] == pytest.approx(250.0 / 450.0)
+    assert share_rows[-1]["cumulative_share"] == pytest.approx(1.0)
+    assert share_response.items[0].provenance is not None
+    assert share_response.items[0].provenance["projection"]["tie_policy"] == "competition_rank"
+
+
+def test_cumulative_share_ties_are_deterministic_by_entity_id(tmp_path) -> None:
+    facts = _portfolio_facts().with_columns(
+        pl.when(
+            (pl.col("metric_concept") == "revenue")
+            & (pl.col("grain_id") == "manufacturer")
+            & (pl.col("period_start") == date(2026, 1, 1))
+            & (pl.col("entity_id").is_in(["manufacturer_a", "manufacturer_b"]))
+        )
+        .then(pl.lit(200.0))
+        .otherwise(pl.col("value"))
+        .alias("value")
+    )
+    service = _service(tmp_path, facts)
+
+    response = service.query(
+        _request(grain_id="manufacturer", concept_ids=("entity_cumulative_revenue_share",))
+    )
+
+    rows = response.items[0].rows
+    assert [row["entity_id"] for row in rows[:2]] == ["manufacturer_a", "manufacturer_b"]
+    assert rows[0]["rank"] == rows[1]["rank"] == 1
+    assert rows[0]["tie_count"] == rows[1]["tie_count"] == 2
+    assert rows[0]["cumulative_share"] == pytest.approx(200.0 / 450.0)
+    assert rows[1]["cumulative_share"] == pytest.approx(400.0 / 450.0)
+
+
+def test_share_movement_uses_percentage_points_not_relative_percent(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a",), "manufacturer": ("manufacturer_a",)},
+            concept_ids=("entity_revenue_share",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    row = response.items[0].rows[0]
+    assert row["current_share"] == pytest.approx(150.0 / 450.0)
+    assert row["reference_share"] == pytest.approx(300.0 / 600.0)
+    assert row["share_delta_pp"] == pytest.approx((150.0 / 450.0) - (300.0 / 600.0))
+    assert "pct_delta" not in row
+    assert response.items[0].provenance is not None
+    assert response.items[0].provenance["projection"]["population_scope"]["share_delta_unit"] == "percentage_points"
+
+
+def test_entity_share_zero_denominator_returns_null_with_limitation(tmp_path) -> None:
+    facts = _portfolio_facts().with_columns(
+        pl.when(
+            (pl.col("metric_concept") == "revenue")
+            & (pl.col("grain_id") == "manufacturer")
+            & (pl.col("period_start") == date(2026, 1, 1))
+        )
+        .then(pl.lit(0.0))
+        .otherwise(pl.col("value"))
+        .alias("value")
+    )
+    service = _service(tmp_path, facts)
+
+    response = service.query(_request(grain_id="manufacturer", concept_ids=("entity_revenue_share",)))
+
+    assert response.items[0].status == PortfolioConceptStatus.PARTIAL
+    assert {row["share"] for row in response.items[0].rows} == {None}
+    assert "zero_share_universe_denominator" in response.items[0].limitations
+
+
+def test_entity_share_range_and_multi_category_scopes_fail_closed(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    range_response = service.query(
+        _request(
+            grain_id="manufacturer",
+            period_mode=PeriodMode.DATE_RANGE,
+            concept_ids=("entity_revenue_share",),
+        )
+    )
+    multi_category_response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a", "category_b")},
+            concept_ids=("entity_revenue_share",),
+        )
+    )
+
+    assert range_response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert range_response.items[0].limitations == ("share_range_semantics_unsupported",)
+    assert multi_category_response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert multi_category_response.items[0].limitations == ("portfolio_requires_single_category",)
+
+
+def test_entity_share_rejects_store_scope_without_denominator_contract(tmp_path) -> None:
+    service = _service(tmp_path, _store_scope_portfolio_facts())
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            entity_filters={"category": ("category_a",), "store": ("store_a",)},
+            concept_ids=("entity_revenue_share",),
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("share_scope_filter_unsupported",)
+
+
+def test_cumulative_share_comparison_fails_closed(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            grain_id="manufacturer",
+            concept_ids=("entity_cumulative_revenue_share",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("cumulative_share_comparison_semantics_unsupported",)
+
+
 def test_category_rank_uses_network_universe(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts())
 
