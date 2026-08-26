@@ -53,6 +53,11 @@ MART_METRIC_FACT_SCHEMA = {
     "value": pl.Float64,
     "numerator_value": pl.Float64,
     "denominator_value": pl.Float64,
+    "business_rule_id": pl.Utf8,
+    "denominator_universe_type": pl.Utf8,
+    "store_alias_mapping_version": pl.Utf8,
+    "numerator_metric_name": pl.Utf8,
+    "denominator_metric_name": pl.Utf8,
     "aggregation": pl.Utf8,
     "range_aggregation_strategy": pl.Utf8,
     "share_scope": pl.Utf8,
@@ -192,7 +197,7 @@ def write_mart_metric_facts(frame: pl.DataFrame, path: str | Path) -> Path:
 
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    frame.select([pl.col(column).cast(dtype) for column, dtype in MART_METRIC_FACT_SCHEMA.items()]).write_parquet(target)
+    _with_optional_columns(frame).select([pl.col(column).cast(dtype) for column, dtype in MART_METRIC_FACT_SCHEMA.items()]).write_parquet(target)
     return target
 
 
@@ -216,7 +221,9 @@ def write_mart_metric_fact_dataset(frame: pl.DataFrame, storage_root: str | Path
 def read_mart_metric_facts(path: str | Path) -> pl.DataFrame:
     """Read mart metric facts from Parquet with deterministic column order."""
 
-    return pl.read_parquet(Path(path)).select([pl.col(column).cast(dtype) for column, dtype in MART_METRIC_FACT_SCHEMA.items()])
+    return _with_optional_columns(pl.read_parquet(Path(path))).select(
+        [pl.col(column).cast(dtype) for column, dtype in MART_METRIC_FACT_SCHEMA.items()]
+    )
 
 
 _REQUIRED_SOURCE_COLUMNS = (
@@ -254,6 +261,15 @@ def _with_optional_columns(frame: pl.DataFrame) -> pl.DataFrame:
         result = result.with_columns(pl.lit(None, dtype=pl.Utf8).alias("share_scope"))
     if "business_period_id" not in result.columns:
         result = result.with_columns(pl.lit(None, dtype=pl.Utf8).alias("business_period_id"))
+    for column in (
+        "business_rule_id",
+        "denominator_universe_type",
+        "store_alias_mapping_version",
+        "numerator_metric_name",
+        "denominator_metric_name",
+    ):
+        if column not in result.columns:
+            result = result.with_columns(pl.lit(None, dtype=pl.Utf8).alias(column))
     return result
 
 

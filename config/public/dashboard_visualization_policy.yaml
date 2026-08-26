@@ -187,6 +187,7 @@ interaction_model:
       - selling_store_count
       - active_store_count
       - distribution
+      - numeric_distribution_store_format
       - velocity
       - revenue_velocity
       - margin_velocity
@@ -475,7 +476,7 @@ period_rules:
     DATE_RANGE: READY_QUERY
     range_strategy: weighted_ratio_of_sums
   period_only_metrics:
-    concepts: [selling_store_count, active_store_count, distribution, velocity, revenue_velocity, margin_velocity, sku_count, brand_count, category_count, category_revenue_share, category_units_share, category_margin_share]
+    concepts: [selling_store_count, active_store_count, distribution, numeric_distribution_store_format, velocity, revenue_velocity, margin_velocity, sku_count, brand_count, category_count, category_revenue_share, category_units_share, category_margin_share]
     SINGLE_PERIOD: READY_QUERY
     COMPARE: READY_QUERY
     DATE_RANGE: PARTIAL
@@ -601,6 +602,15 @@ metric_rules:
     grain_support: [category, manufacturer, brand, sku]
     period_modes: [SINGLE_PERIOD, COMPARE]
     readiness_requirement: READY_QUERY
+  - concept_id: numeric_distribution_store_format
+    allowed_screens: [data]
+    preferred_visualization: PROVENANCE_DRAWER
+    alternative_visualizations: [DETAIL_TABLE]
+    forbidden_visualizations: [KPI, PIE, DONUT, GAUGE]
+    presentation_priority: AUDIT
+    grain_support: [category, manufacturer, brand, sku]
+    period_modes: [SINGLE_PERIOD, COMPARE]
+    readiness_requirement: AUDIT_ONLY
   - concept_id: velocity
     allowed_screens: [sales_drivers]
     preferred_visualization: COMPARISON_STRIP

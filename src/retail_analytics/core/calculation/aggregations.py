@@ -259,6 +259,10 @@ def _add_metadata(
         pl.lit(definition.entity_type).alias("entity_type"),
         pl.lit(definition.grain_id or _default_grain_id(definition)).alias("grain_id"),
         pl.lit(_share_denominator_scope(definition), dtype=pl.Utf8).alias("share_denominator_scope"),
+        pl.lit(_business_rule_id(definition), dtype=pl.Utf8).alias("business_rule_id"),
+        pl.lit(_denominator_universe_type(definition), dtype=pl.Utf8).alias("denominator_universe_type"),
+        pl.lit(definition.numerator, dtype=pl.Utf8).alias("numerator_metric_name"),
+        pl.lit(definition.denominator, dtype=pl.Utf8).alias("denominator_metric_name"),
     )
     if "canonical_product_id" in result.columns:
         result = result.with_columns(pl.col("canonical_product_id").alias("entity_id"))
@@ -284,8 +288,22 @@ def _default_grain_id(definition: MetricDefinition) -> str:
 def _share_denominator_scope(definition: MetricDefinition) -> str | None:
     if definition.share_denominator_scope is not None:
         return definition.share_denominator_scope
+    if definition.concept == "distribution":
+        return "monthly_file_store_universe"
     if definition.entity_type in {"sku", "brand", "manufacturer"}:
         return "category"
+    return None
+
+
+def _business_rule_id(definition: MetricDefinition) -> str | None:
+    if definition.concept == "distribution":
+        return "BR-009"
+    return None
+
+
+def _denominator_universe_type(definition: MetricDefinition) -> str | None:
+    if definition.concept == "distribution":
+        return "monthly_file_store_universe"
     return None
 
 

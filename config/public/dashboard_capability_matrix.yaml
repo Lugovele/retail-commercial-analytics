@@ -351,6 +351,43 @@ capabilities:
   provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
+- concept_id: numeric_distribution_store_format
+  ui_label_ru: Дистрибуция в формате ТТ
+  ui_description_ru: Дистрибуция в месячном universe выбранного формата ТТ; selected-range
+    recomputation не объявлен.
+  tab: Показатели
+  group: Присутствие
+  presentation_level: AUDIT_ONLY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: period_only
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: mart.store_universe + mart_product_store_metric_facts
+  availability_status: READY
+  limitations:
+  - requires_store_format_universe
+  - selected_range_value_unavailable
+  - store_filter_not_supported
+  - territory_not_supported
+  - do_not_average_periods
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: false
 - concept_id: velocity
   ui_label_ru: Продажи на ТТ
   ui_description_ru: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation

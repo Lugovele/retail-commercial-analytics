@@ -294,6 +294,30 @@ coverage:
     - manufacturer
     - brand
     - sku
+- concept_id: numeric_distribution_store_format
+  fact_type: mart.store_universe + mart_product_store_metric_facts
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: AUDIT_ONLY
+    grain_support:
+    - category
+    - manufacturer
+    - brand
+    - sku
 - concept_id: velocity
   fact_type: mart_metric_facts
   coverage_status: PARTIAL

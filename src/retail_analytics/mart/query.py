@@ -23,8 +23,12 @@ from retail_analytics.mart.metric_catalog import (
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA, RangeAggregationStrategy
 from retail_analytics.mart.product_store_facts import PRODUCT_STORE_SUPPORTED_CONCEPTS
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
+from retail_analytics.mart.store_universe import MONTHLY_STORE_FORMAT_UNIVERSE
 
 FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
+STORE_FORMAT_DISTRIBUTION_CONCEPT = "numeric_distribution_store_format"
+STORE_FORMAT_DISTRIBUTION_RULE_ID = "BR-009B"
+STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS = frozenset({"category", "manufacturer", "brand", "sku"})
 SCOPED_ROLLUP_SAFE_CONCEPTS = {
     "revenue_vat",
     "revenue",
@@ -115,6 +119,11 @@ class PeriodValue:
     value: float | None
     numerator_value: float | None
     denominator_value: float | None
+    business_rule_id: str | None
+    denominator_universe_type: str | None
+    store_alias_mapping_version: str | None
+    numerator_metric_name: str | None
+    denominator_metric_name: str | None
     source_revision_id: str
     analysis_run_id: str
     quality_status: str
@@ -222,9 +231,11 @@ class DashboardMartQueryService:
         mart_builds: tuple[MartBuildMetadata, ...] = (),
         source_ledger: tuple[SourceLedgerEntry, ...] = (),
         product_store_facts_path: str | Path | None = None,
+        store_universe_path: str | Path | None = None,
     ) -> None:
         self.metric_facts_path = Path(metric_facts_path)
         self.product_store_facts_path = Path(product_store_facts_path) if product_store_facts_path is not None else None
+        self.store_universe_path = Path(store_universe_path) if store_universe_path is not None else None
         self.catalog = catalog
         self.mart_builds = mart_builds
         self.source_ledger = source_ledger
@@ -239,7 +250,18 @@ class DashboardMartQueryService:
         limitations = list(self._private_label_scope_materialization_limitations(request))
         scoped_rollup_grain: str | None = None
         serving_fact_grain: str | None = None
-        if _has_product_store_intersection(request):
+        unsupported_distribution_scope = _unsupported_distribution_scope_limitations(request)
+        if unsupported_distribution_scope:
+            raw = pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
+            limitations.extend(unsupported_distribution_scope)
+        elif _requests_store_format_distribution(request):
+            raw, serving_fact_grain, product_store_limitations = self._read_store_format_distribution_facts(
+                request,
+                mart_build_id=mart_build_id,
+                period_start=fetch_start,
+            )
+            limitations.extend(product_store_limitations)
+        elif _has_product_store_intersection(request):
             raw, serving_fact_grain, product_store_limitations = self._read_product_store_rollup_facts(
                 request,
                 mart_build_id=mart_build_id,
@@ -565,6 +587,168 @@ class DashboardMartQueryService:
                 )
             )
         return _roll_up_product_store_facts(source, request, self._metric_templates(request, mart_build_id)), "sku_store", tuple(limitations)
+
+    def _read_store_format_distribution_facts(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        mart_build_id: str,
+        period_start: date | None,
+    ) -> tuple[pl.DataFrame, str | None, tuple[QueryLimitation, ...]]:
+        limitations = list(_store_format_distribution_request_limitations(request))
+        if limitations:
+            return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), None, tuple(limitations)
+        if self.product_store_facts_path is None or not self.product_store_facts_path.exists():
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                None,
+                (
+                    QueryLimitation(
+                        "store_format_distribution_product_store_facts_missing",
+                        "Store-format distribution requires materialized SKU x store facts for numerator recomposition.",
+                        metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+                    ),
+                ),
+            )
+        if self.store_universe_path is None or not self.store_universe_path.exists():
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                None,
+                (
+                    QueryLimitation(
+                        "store_format_distribution_universe_missing",
+                        "Store-format distribution requires a materialized monthly store-universe artifact.",
+                        metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+                    ),
+                ),
+            )
+
+        store_format = (request.entity_filters or {})["store_format"][0]
+        product_store = self._store_format_distribution_source_rows(
+            request,
+            mart_build_id=mart_build_id,
+            period_start=period_start,
+            store_format=store_format,
+        )
+        universe = self._store_format_universe_rows(
+            request,
+            mart_build_id=mart_build_id,
+            period_start=period_start,
+            store_format=store_format,
+        )
+        if product_store.is_empty():
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                "store_universe",
+                (
+                    QueryLimitation(
+                        "store_format_distribution_entity_scope_not_observed",
+                        "Selected entity scope is not present in the store-format source rows, so a zero-selling numerator cannot be proven.",
+                        metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+                    ),
+                ),
+            )
+        if universe.is_empty():
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                "store_universe",
+                (
+                    QueryLimitation(
+                        "store_format_distribution_universe_empty",
+                        "No monthly store-format universe membership matches the selected scope.",
+                        metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+                    ),
+                ),
+            )
+        return (
+            _store_format_distribution_metric_rows(product_store, universe, request, mart_build_id, store_format),
+            "store_universe",
+            (),
+        )
+
+    def _store_format_distribution_source_rows(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        mart_build_id: str,
+        period_start: date | None,
+        store_format: str,
+    ) -> pl.DataFrame:
+        product_store_facts_path = self.product_store_facts_path
+        if product_store_facts_path is None:
+            raise ValueError("store-format distribution product-store facts path is not configured")
+        clauses = [
+            "retailer_id = ?",
+            "source_id = ?",
+            "period_grain = ?",
+            "mart_build_id = ?",
+            "private_label_scope = ?",
+            "metric_concept = ?",
+            "store_format = ?",
+        ]
+        params: list[Any] = [
+            request.retailer_id,
+            request.source_id,
+            request.period_grain,
+            mart_build_id,
+            request.private_label_scope.value,
+            "units",
+            store_format,
+        ]
+        if period_start is not None:
+            clauses.append("period_start >= CAST(? AS DATE)")
+            params.append(period_start.isoformat())
+        if request.date_to is not None:
+            clauses.append("period_start <= CAST(? AS DATE)")
+            params.append(request.date_to.isoformat())
+        for column, values in (request.entity_filters or {}).items():
+            if column == "store_format":
+                continue
+            _add_in_filter(clauses, params, _product_store_filter_column(column), values)
+        _add_product_store_entity_id_filter(clauses, params, request.grain_id, request.entity_ids)
+        if request.quality_policy == QualityPolicy.VALID_ONLY:
+            clauses.append("quality_status = ?")
+            params.append("valid")
+        sql = f"""
+            SELECT *
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            ORDER BY period_start, canonical_store_id, canonical_product_id
+        """
+        return duckdb.sql(sql, params=[_duckdb_path(product_store_facts_path), *params]).pl()
+
+    def _store_format_universe_rows(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        mart_build_id: str,
+        period_start: date | None,
+        store_format: str,
+    ) -> pl.DataFrame:
+        store_universe_path = self.store_universe_path
+        if store_universe_path is None:
+            raise ValueError("store-format distribution store-universe path is not configured")
+        clauses = [
+            "retailer_id = ?",
+            "source_id = ?",
+            "period_grain = ?",
+            "mart_build_id = ?",
+            "store_format = ?",
+        ]
+        params: list[Any] = [request.retailer_id, request.source_id, request.period_grain, mart_build_id, store_format]
+        if period_start is not None:
+            clauses.append("period_start >= CAST(? AS DATE)")
+            params.append(period_start.isoformat())
+        if request.date_to is not None:
+            clauses.append("period_start <= CAST(? AS DATE)")
+            params.append(request.date_to.isoformat())
+        sql = f"""
+            SELECT *
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            ORDER BY period_start, canonical_store_id
+        """
+        return duckdb.sql(sql, params=[_duckdb_path(store_universe_path), *params]).pl()
 
     def _metric_templates(
         self,
@@ -1097,12 +1281,27 @@ def _provenance_payload(
             for item in result_comparisons
         ),
     }
+    business_rule_id = _result_business_rule_id(result)
+    denominator_universe_type = _result_denominator_universe_type(result)
+    store_alias_versions = tuple(
+        sorted({period.store_alias_mapping_version for period in result.period_values if period.store_alias_mapping_version})
+    )
+    numerator_metric_names = tuple(sorted({period.numerator_metric_name for period in result.period_values if period.numerator_metric_name}))
+    denominator_metric_names = tuple(
+        sorted({period.denominator_metric_name for period in result.period_values if period.denominator_metric_name})
+    )
     missing_fields = list(_lineage_missing_fields(lineage))
     if not result_comparisons and request.comparison_mode != ComparisonMode.NONE:
         missing_fields.extend(("comparison_periods", "comparison_quality"))
     if lineage is None or not lineage.rule_version:
         missing_fields.append("business_rule_version")
-    missing_fields.extend(("business_rule_id", "source_row_ids"))
+    if business_rule_id is None:
+        missing_fields.append("business_rule_id")
+    if denominator_universe_type is None:
+        missing_fields.append("denominator_universe_type")
+    if result.metric_concept in {"distribution", STORE_FORMAT_DISTRIBUTION_CONCEPT} and not store_alias_versions:
+        missing_fields.append("store_alias_mapping_version")
+    missing_fields.append("source_row_ids")
 
     return {
         "current_analytical_scope": {
@@ -1155,7 +1354,7 @@ def _provenance_payload(
         },
         "comparison": comparison_payload,
         "business_rule": {
-            "business_rule_id": None,
+            "business_rule_id": business_rule_id,
             "business_rule_version": lineage.rule_version if lineage is not None else None,
         },
         "run_lineage": {
@@ -1168,6 +1367,10 @@ def _provenance_payload(
             "period_fact_count": len(result.period_values),
             "source_revision_ids": period_source_revisions,
             "source_row_ids": (),
+            "denominator_universe_type": denominator_universe_type,
+            "store_alias_mapping_versions": store_alias_versions,
+            "numerator_metric_names": numerator_metric_names,
+            "denominator_metric_names": denominator_metric_names,
         },
         "scoped_rollup": {
             "status": _rollup_provenance_status(scoped_rollup_grain, serving_fact_grain),
@@ -1208,6 +1411,265 @@ def _lineage_missing_fields(lineage: MetricDefinitionLineage | None) -> tuple[st
         "semantic_family",
         "semantic_compatibility_version",
     )
+
+
+def _requests_store_format_distribution(request: DashboardMetricQueryRequest) -> bool:
+    if STORE_FORMAT_DISTRIBUTION_CONCEPT in request.metric_concepts:
+        return True
+    return any(STORE_FORMAT_DISTRIBUTION_CONCEPT in item for item in request.metric_definition_ids)
+
+
+def _unsupported_distribution_scope_limitations(
+    request: DashboardMetricQueryRequest,
+) -> tuple[QueryLimitation, ...]:
+    if _requests_store_format_distribution(request):
+        return ()
+    requested_distribution = "distribution" in request.metric_concepts or any(
+        ".numeric_distribution." in item or item.endswith(".numeric_distribution.v1")
+        for item in request.metric_definition_ids
+    )
+    if not requested_distribution:
+        return ()
+    filters = request.entity_filters or {}
+    limitations: list[QueryLimitation] = []
+    if filters.get("store_format"):
+        limitations.append(
+            QueryLimitation(
+                "global_distribution_store_format_filter_unsupported",
+                "Global BR-009 distribution is not reinterpreted under store-format filters; request numeric_distribution_store_format instead.",
+                metric_concept="distribution",
+            )
+        )
+    for column in ("territory", "fo", "fo2", "region"):
+        if filters.get(column):
+            limitations.append(
+                QueryLimitation(
+                    "territory_distribution_unsupported",
+                    "Territory, FO2, and region distribution semantics are not approved.",
+                    metric_concept="distribution",
+                )
+            )
+    return tuple(_dedupe_limitations(limitations))
+
+
+def _store_format_distribution_request_limitations(
+    request: DashboardMetricQueryRequest,
+) -> tuple[QueryLimitation, ...]:
+    limitations: list[QueryLimitation] = []
+    filters = request.entity_filters or {}
+    store_formats = filters.get("store_format", ())
+    extra_concepts = tuple(concept for concept in request.metric_concepts if concept != STORE_FORMAT_DISTRIBUTION_CONCEPT)
+    if extra_concepts:
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_mixed_metric_request_unsupported",
+                "Store-format distribution requests must not silently mix with other metric concepts.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    if request.metric_definition_ids:
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_metric_definition_ids_unsupported",
+                "Store-format distribution backend recomposition does not accept explicit metric_definition_ids.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    if request.grain_id not in STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS:
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_grain_unsupported",
+                "Store-format distribution is supported only for category, manufacturer, brand, and SKU entity grains.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    if request.period_grain != "month":
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_period_grain_unsupported",
+                "Store-format distribution is currently defined only for monthly periods.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    if request.period_mode not in {PeriodMode.SINGLE_PERIOD, PeriodMode.DATE_RANGE, PeriodMode.FULL_AVAILABLE_HISTORY}:
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_period_mode_unsupported",
+                "Store-format distribution only supports monthly period series and point-in-time values.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    if len(store_formats) != 1:
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_requires_single_format",
+                "Store-format distribution requires exactly one selected store_format universe.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    if filters.get("store"):
+        limitations.append(
+            QueryLimitation(
+                "store_filter_distribution_unsupported",
+                "Store-filtered distribution is not an approved denominator semantics.",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    unsupported = sorted(set(filters) - {"category", "manufacturer", "brand", "sku", "store_format", "store"})
+    for column in unsupported:
+        limitations.append(
+            QueryLimitation(
+                "store_format_distribution_filter_unsupported",
+                f"Store-format distribution does not support filter column: {column}",
+                metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
+            )
+        )
+    return tuple(_dedupe_limitations(limitations))
+
+
+def _store_format_distribution_metric_rows(
+    product_store: pl.DataFrame,
+    universe: pl.DataFrame,
+    request: DashboardMetricQueryRequest,
+    mart_build_id: str,
+    store_format: str,
+) -> pl.DataFrame:
+    entity_column = _product_store_filter_column(request.grain_id)
+    entity_parent_columns = {
+        "category": (),
+        "manufacturer": ("category",),
+        "brand": ("category", "manufacturer"),
+        "sku": ("category", "manufacturer", "brand"),
+    }[request.grain_id]
+    denominator_rows = (
+        universe.group_by(
+            [
+                "retailer_id",
+                "source_id",
+                "source_revision_id",
+                "mart_build_id",
+                "period_grain",
+                "period_start",
+                "period_end",
+                "business_period_id",
+            ]
+        )
+        .agg(
+            pl.col("canonical_store_id").n_unique().cast(pl.Float64).alias("denominator_value"),
+            pl.col("analysis_run_id").drop_nulls().first().alias("analysis_run_id"),
+            pl.col("store_alias_mapping_version").drop_nulls().first().alias("store_alias_mapping_version"),
+            pl.col("created_at").max().alias("created_at"),
+        )
+    )
+    identity_groups = [
+        "retailer_id",
+        "source_id",
+        "source_revision_id",
+        "analysis_run_id",
+        "mart_build_id",
+        "period_grain",
+        "period_start",
+        "period_end",
+        "business_period_id",
+        entity_column,
+        *entity_parent_columns,
+    ]
+    entity_scope = product_store.group_by(identity_groups).agg(
+        pl.col("metric_config_hash").drop_nulls().first().alias("metric_config_hash"),
+        pl.col("rule_version").drop_nulls().first().alias("rule_version"),
+        pl.col("created_at").max().alias("created_at"),
+    )
+    selling = (
+        product_store.filter(pl.col("value") > 0)
+        .group_by(identity_groups)
+        .agg(pl.col("canonical_store_id").n_unique().cast(pl.Float64).alias("numerator_value"))
+    )
+    rows = entity_scope.join(selling, on=identity_groups, how="left").with_columns(
+        pl.col("numerator_value").fill_null(0.0)
+    )
+    rows = rows.join(
+        denominator_rows,
+        on=[
+            "retailer_id",
+            "source_id",
+            "source_revision_id",
+            "mart_build_id",
+            "period_grain",
+            "period_start",
+            "period_end",
+            "business_period_id",
+        ],
+        how="inner",
+        suffix="_universe",
+    )
+    rows = rows.with_columns(
+        pl.when((pl.col("denominator_value") == 0) | pl.col("denominator_value").is_null())
+        .then(None)
+        .otherwise(pl.col("numerator_value") / pl.col("denominator_value"))
+        .alias("value"),
+        pl.col(entity_column).cast(pl.Utf8).alias("entity_id"),
+        pl.struct(
+            [
+                *[pl.col(column).cast(pl.Utf8).alias(column) for column in entity_parent_columns],
+                pl.lit(store_format).alias("store_format"),
+            ]
+        ).map_elements(
+            lambda row: _json_parent_ids({key: value for key, value in row.items() if value is not None}),
+            return_dtype=pl.Utf8,
+        ).alias("parent_entity_ids"),
+        pl.lit(STORE_FORMAT_DISTRIBUTION_CONCEPT).alias("metric_concept"),
+        pl.lit(STORE_FORMAT_DISTRIBUTION_CONCEPT).alias("metric_name"),
+        (
+            pl.col("retailer_id")
+            + pl.lit(".")
+            + pl.lit(request.grain_id)
+            + pl.lit(".")
+            + pl.lit(STORE_FORMAT_DISTRIBUTION_CONCEPT)
+            + pl.lit(".v1")
+        ).alias("metric_definition_id"),
+        pl.lit("v1").alias("metric_definition_version"),
+        pl.lit(None, dtype=pl.Utf8).alias("semantic_family"),
+        pl.lit(None, dtype=pl.Utf8).alias("semantic_compatibility_version"),
+        pl.lit(False).alias("cross_retailer_comparable"),
+        pl.lit("ratio_of_sums").alias("aggregation"),
+        pl.lit(RangeAggregationStrategy.PERIOD_ONLY.value).alias("range_aggregation_strategy"),
+        pl.lit(MONTHLY_STORE_FORMAT_UNIVERSE).alias("share_scope"),
+        pl.lit(STORE_FORMAT_DISTRIBUTION_RULE_ID).alias("business_rule_id"),
+        pl.lit(MONTHLY_STORE_FORMAT_UNIVERSE).alias("denominator_universe_type"),
+        pl.lit("selling_store_count").alias("numerator_metric_name"),
+        pl.lit("monthly_store_format_universe_count").alias("denominator_metric_name"),
+        pl.lit("valid").alias("quality_status"),
+        pl.lit(None, dtype=pl.Utf8).alias("quality_flags"),
+        pl.lit(request.private_label_scope.value).alias("private_label_scope"),
+        pl.lit(request.grain_id).alias("grain_id"),
+    )
+    return rows.select([pl.col(column).cast(dtype) for column, dtype in MART_METRIC_FACT_SCHEMA.items()])
+
+
+def _result_business_rule_id(result: MetricQueryResult) -> str | None:
+    period_values = {period.business_rule_id for period in result.period_values if period.business_rule_id}
+    if len(period_values) == 1:
+        return next(iter(period_values))
+    if result.metric_concept == STORE_FORMAT_DISTRIBUTION_CONCEPT:
+        return STORE_FORMAT_DISTRIBUTION_RULE_ID
+    if result.metric_concept == "distribution":
+        return "BR-009"
+    return None
+
+
+def _result_denominator_universe_type(result: MetricQueryResult) -> str | None:
+    period_values = {
+        period.denominator_universe_type
+        for period in result.period_values
+        if period.denominator_universe_type
+    }
+    if len(period_values) == 1:
+        return next(iter(period_values))
+    if result.metric_concept == STORE_FORMAT_DISTRIBUTION_CONCEPT:
+        return MONTHLY_STORE_FORMAT_UNIVERSE
+    if result.metric_concept == "distribution":
+        return "monthly_file_store_universe"
+    return None
 
 
 def _comparison_target(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> date | None:
@@ -1321,6 +1783,11 @@ def _roll_up_product_store_facts(
                 "value": value,
                 "numerator_value": numerator_value,
                 "denominator_value": denominator_value,
+                "business_rule_id": template.get("business_rule_id"),
+                "denominator_universe_type": template.get("denominator_universe_type"),
+                "store_alias_mapping_version": template.get("store_alias_mapping_version"),
+                "numerator_metric_name": template.get("numerator_metric_name"),
+                "denominator_metric_name": template.get("denominator_metric_name"),
                 "aggregation": template["aggregation"],
                 "range_aggregation_strategy": template["range_aggregation_strategy"],
                 "share_scope": template["share_scope"],
@@ -1647,6 +2114,11 @@ def _period_value(row: dict[str, Any]) -> PeriodValue:
         value=_float_or_none(row["value"]),
         numerator_value=_float_or_none(row["numerator_value"]),
         denominator_value=_float_or_none(row["denominator_value"]),
+        business_rule_id=str(row["business_rule_id"]) if row.get("business_rule_id") is not None else None,
+        denominator_universe_type=str(row["denominator_universe_type"]) if row.get("denominator_universe_type") is not None else None,
+        store_alias_mapping_version=str(row["store_alias_mapping_version"]) if row.get("store_alias_mapping_version") is not None else None,
+        numerator_metric_name=str(row["numerator_metric_name"]) if row.get("numerator_metric_name") is not None else None,
+        denominator_metric_name=str(row["denominator_metric_name"]) if row.get("denominator_metric_name") is not None else None,
         source_revision_id=str(row["source_revision_id"]),
         analysis_run_id=str(row["analysis_run_id"]),
         quality_status=str(row["quality_status"]),

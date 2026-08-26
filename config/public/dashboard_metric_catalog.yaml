@@ -112,6 +112,18 @@ metrics:
     decision_use: Оценить ширину присутствия без причинной интерпретации.
     formula_summary: Отношение ТТ с продажами к активным ТТ в периоде.
     delta_semantics: NEUTRAL_DIRECTIONAL
+  - metric_concept: numeric_distribution_store_format
+    default_display_label: Дистрибуция в формате ТТ
+    description: Дистрибуция в месячном universe выбранного формата ТТ; selected-range recomputation не объявлен.
+    format: percent
+    dashboard_group: distribution
+    default_range_aggregation_strategy: period_only
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    generic_limitations: [selected_range_value_unavailable, requires_store_format_universe]
+    business_question: Какая доля ТТ выбранного формата продаёт выбранный срез?
+    decision_use: Оценить ширину присутствия внутри утверждённого формата ТТ без причинной интерпретации.
+    formula_summary: ТТ с продажами выбранного среза в формате, делённые на все ТТ месячного universe этого формата.
+    delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: velocity
     default_display_label: Продажи на ТТ
     description: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
