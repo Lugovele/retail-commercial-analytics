@@ -268,8 +268,15 @@ class PortfolioMarketService:
         share_grain = request.grain_id
         if share_grain not in {"category", "manufacturer", "brand", "sku"}:
             return _not_applicable(request, concept_id, "category_position", "share_entity_grain_unsupported")
-        if request.period_mode != PeriodMode.SINGLE_PERIOD:
+        if request.period_mode not in {PeriodMode.SINGLE_PERIOD, PeriodMode.AVAILABLE_MONTH_SET}:
             return _not_applicable(request, concept_id, "category_position", "share_range_semantics_unsupported")
+        if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET and request.comparison_mode != ComparisonMode.NONE:
+            return _not_applicable(
+                request,
+                concept_id,
+                "category_position",
+                "available_month_share_movement_not_implemented",
+            )
         if include_cumulative and request.comparison_mode != ComparisonMode.NONE:
             return _not_applicable(
                 request,
@@ -407,7 +414,7 @@ class PortfolioMarketService:
 
     def _abc_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
         abc_grain, basis_metric = self._ABC_CONCEPTS[concept_id]
-        if request.period_mode != PeriodMode.SINGLE_PERIOD:
+        if request.period_mode not in {PeriodMode.SINGLE_PERIOD, PeriodMode.AVAILABLE_MONTH_SET}:
             return _not_applicable(request, concept_id, "category_position", "abc_range_semantics_unsupported")
         if request.comparison_mode != ComparisonMode.NONE:
             return _not_applicable(request, concept_id, "category_position", "abc_comparison_semantics_unsupported")
@@ -460,7 +467,13 @@ class PortfolioMarketService:
         universe_total = _share_universe_metric_value(share_rows)
         if universe_total is None or universe_total <= 0:
             return _not_applicable(request, concept_id, "category_position", "abc_positive_universe_required")
-        rows = _abc_rows(share_rows, ownership_universe=ownership_universe)
+        rows = _abc_rows(
+            share_rows,
+            ownership_universe=ownership_universe,
+            period_scope="AVAILABLE_MONTH_YEAR"
+            if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET
+            else "MONTH",
+        )
         focal_entities = _rank_focal_entities(request, abc_grain)
         rows = _filter_rank_rows(rows, focal_entities=focal_entities)
         limitations = tuple(item.issue_code for item in response.limitations)
@@ -493,7 +506,9 @@ class PortfolioMarketService:
                     "universe_metric_value": universe_total,
                     "universe_size": _rank_universe_size(share_rows),
                     "focal_entity_ids": focal_entities,
-                    "period_scope": "MONTH",
+                    "period_scope": "AVAILABLE_MONTH_YEAR"
+                    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET
+                    else "MONTH",
                     "threshold_policy": "first_row_a_else_after_row_cumulative_lte_0_80_a_lte_0_95_b_else_c",
                     "a_cumulative_share_lte": 0.8,
                     "b_cumulative_share_lte": 0.95,
@@ -510,8 +525,15 @@ class PortfolioMarketService:
 
     def _rank_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
         rank_grain, metric_concept = self._RANK_CONCEPTS[concept_id]
-        if request.period_mode != PeriodMode.SINGLE_PERIOD:
+        if request.period_mode not in {PeriodMode.SINGLE_PERIOD, PeriodMode.AVAILABLE_MONTH_SET}:
             return _not_applicable(request, concept_id, "category_position", "rank_range_semantics_unsupported")
+        if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET and request.comparison_mode != ComparisonMode.NONE:
+            return _not_applicable(
+                request,
+                concept_id,
+                "category_position",
+                "available_month_rank_movement_not_implemented",
+            )
         unsupported_scope = _scope_filter_unsupported_limitation(request, prefix="rank")
         if unsupported_scope:
             return _not_applicable(request, concept_id, "category_position", unsupported_scope)
@@ -711,7 +733,7 @@ class PortfolioMarketService:
         )
 
     def _active_sku_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
-        if request.period_mode == PeriodMode.DATE_RANGE:
+        if request.period_mode in {PeriodMode.DATE_RANGE, PeriodMode.AVAILABLE_MONTH_SET}:
             return _not_applicable(request, concept_id, "assortment", "active_sku_scalar_not_defined_for_range")
         current_period = request.date_from
         if current_period is None:
@@ -1066,6 +1088,7 @@ def _abc_rows(
     share_rows: tuple[dict[str, Any], ...],
     *,
     ownership_universe: str,
+    period_scope: str = "MONTH",
 ) -> tuple[dict[str, Any], ...]:
     rows: list[dict[str, Any]] = []
     for index, row in enumerate(share_rows):
@@ -1077,7 +1100,7 @@ def _abc_rows(
                 "abc_class": abc_class,
                 "ownership_universe": ownership_universe,
                 "category_scope": row.get("category"),
-                "period_scope": "MONTH",
+                "period_scope": period_scope,
                 "threshold_policy": "first_row_a_else_after_row_cumulative",
                 "threshold_crossing_policy": "class_by_cumulative_share_after_entity",
                 "a_cumulative_share_lte": 0.8,

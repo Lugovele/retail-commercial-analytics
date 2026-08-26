@@ -420,6 +420,10 @@ def _comparison_result(result: Any) -> dict[str, Any]:
         "quality_status": result.quality_status,
         "gap_periods": result.gap_periods,
         "private_label_scope": result.private_label_scope.value,
+        "current_included_periods": [_date_text(period) for period in result.current_included_periods],
+        "comparison_included_periods": [_date_text(period) for period in result.comparison_included_periods],
+        "aggregation_method": result.aggregation_method,
+        "comparison_policy": result.comparison_policy,
     }
 
 

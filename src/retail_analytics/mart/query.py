@@ -52,6 +52,7 @@ class PeriodMode(StrEnum):
 
     SINGLE_PERIOD = "SINGLE_PERIOD"
     DATE_RANGE = "DATE_RANGE"
+    AVAILABLE_MONTH_SET = "AVAILABLE_MONTH_SET"
     FULL_AVAILABLE_HISTORY = "FULL_AVAILABLE_HISTORY"
 
 
@@ -186,6 +187,10 @@ class ComparisonResult:
     quality_status: str
     gap_periods: int
     private_label_scope: PrivateLabelScope
+    current_included_periods: tuple[date, ...] = ()
+    comparison_included_periods: tuple[date, ...] = ()
+    aggregation_method: str | None = None
+    comparison_policy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -1060,6 +1065,16 @@ def _aggregate_rows(
             (),
         )
 
+    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET and request.period_grain != "month":
+        return None, None, None, (
+            QueryLimitation(
+                "available_month_set_requires_month_grain",
+                "Available-month set semantics are defined only for monthly facts",
+                metric_definition_id=str(rows[0]["metric_definition_id"]),
+                metric_concept=str(rows[0]["metric_concept"]),
+            ),
+        )
+
     result_limitations = list(_result_coverage_limitations(rows, requested_periods))
     if strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS:
         if any(row["value"] is None for row in rows):
@@ -1072,7 +1087,21 @@ def _aggregate_rows(
                     metric_concept=str(rows[0]["metric_concept"]),
                 ),
             )
-        return sum(_float_or_zero(row["value"]) for row in rows), None, None, tuple(result_limitations)
+        total = sum(_float_or_zero(row["value"]) for row in rows)
+        if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
+            month_count = len({row["period_start"] for row in rows})
+            if month_count == 0:
+                return None, total, 0.0, (
+                    *result_limitations,
+                    QueryLimitation(
+                        "available_month_set_empty",
+                        "Available-month aggregation requires at least one available month",
+                        metric_definition_id=str(rows[0]["metric_definition_id"]),
+                        metric_concept=str(rows[0]["metric_concept"]),
+                    ),
+                )
+            return total / month_count, total, float(month_count), tuple(result_limitations)
+        return total, None, None, tuple(result_limitations)
     if strategy in {
         RangeAggregationStrategy.RATIO_OF_SUMS,
         RangeAggregationStrategy.WEIGHTED_RATIO_OF_SUMS,
@@ -1142,6 +1171,8 @@ def _comparisons(
 ) -> tuple[tuple[ComparisonResult, ...], tuple[QueryLimitation, ...]]:
     if request.comparison_mode == ComparisonMode.NONE:
         return (), ()
+    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
+        return _available_month_set_comparisons(frame, metric_results, request)
     if request.period_mode != PeriodMode.SINGLE_PERIOD:
         return (), (
             QueryLimitation(
@@ -1194,6 +1225,80 @@ def _comparisons(
             )
         )
     return tuple(comparisons), ()
+
+
+def _available_month_set_comparisons(
+    frame: pl.DataFrame,
+    metric_results: tuple[MetricQueryResult, ...],
+    request: DashboardMetricQueryRequest,
+) -> tuple[tuple[ComparisonResult, ...], tuple[QueryLimitation, ...]]:
+    if request.comparison_mode != ComparisonMode.YOY:
+        return (), (
+            QueryLimitation(
+                "available_month_comparison_mode_unsupported",
+                "Available-month set comparison currently supports matched month year-over-year only",
+            ),
+        )
+    current_periods = _result_periods(metric_results)
+    if not current_periods:
+        return (), (QueryLimitation("available_month_set_empty", "No current available months matched the request"),)
+    reference_periods = _reference_periods_for_matched_yoy(current_periods, frame)
+    if len(reference_periods) != len(current_periods):
+        return (), (
+            QueryLimitation(
+                "available_month_reference_set_incomplete",
+                "Matched available-month comparison requires the same month numbers on both sides",
+            ),
+        )
+    reference_frame = frame.filter(pl.col("period_start").is_in(reference_periods))
+    reference_request = replace(
+        request,
+        date_from=min(reference_periods),
+        date_to=max(reference_periods),
+        comparison_mode=ComparisonMode.NONE,
+    )
+    reference_results, reference_limitations = _metric_results(
+        reference_frame,
+        reference_request,
+        (),
+        reference_periods,
+    )
+    current_by_identity = {_result_comparison_identity(result): result for result in metric_results}
+    comparisons: list[ComparisonResult] = []
+    for reference in reference_results:
+        current = current_by_identity.get(_result_comparison_identity(reference))
+        if current is None:
+            continue
+        comparison_value = reference.value
+        current_value = current.value
+        delta = None if current_value is None or comparison_value is None else current_value - comparison_value
+        pct_delta = None
+        if delta is not None and comparison_value not in (None, 0):
+            pct_delta = delta / comparison_value
+        comparisons.append(
+            ComparisonResult(
+                comparison_mode=request.comparison_mode,
+                metric_definition_id=_result_metric_definition_id(reference),
+                entity_id=current.entity_id,
+                current_period_start=min(current_periods),
+                comparison_period_start=min(reference_periods),
+                current_value=current_value,
+                comparison_value=comparison_value,
+                delta=delta,
+                pct_delta=pct_delta,
+                quality_status="HIGH",
+                gap_periods=_period_gap(min(reference_periods), min(current_periods), request.period_grain),
+                private_label_scope=request.private_label_scope,
+                current_included_periods=current_periods,
+                comparison_included_periods=reference_periods,
+                aggregation_method=_available_month_aggregation_method(
+                    request,
+                    current.range_aggregation_strategy,
+                ),
+                comparison_policy="MATCHED_AVAILABLE_MONTHS",
+            )
+        )
+    return tuple(comparisons), tuple(reference_limitations)
 
 
 def _attach_provenance(
@@ -1272,10 +1377,15 @@ def _provenance_payload(
         "comparison_mode": request.comparison_mode.value,
         "status": _comparison_provenance_status(request, result_comparisons),
         "quality_statuses": tuple(sorted({item.quality_status for item in result_comparisons})),
+        "period_set": _comparison_period_set_payload(request, result_comparisons),
         "periods": tuple(
             {
                 "current_period_start": item.current_period_start,
                 "comparison_period_start": item.comparison_period_start,
+                "current_included_periods": item.current_included_periods,
+                "comparison_included_periods": item.comparison_included_periods,
+                "aggregation_method": item.aggregation_method,
+                "comparison_policy": item.comparison_policy,
                 "gap_periods": item.gap_periods,
             }
             for item in result_comparisons
@@ -1321,6 +1431,7 @@ def _provenance_payload(
                 private_label_scope=request.private_label_scope,
                 entity_filters=request.entity_filters,
             ),
+            "period_set": _period_set_payload(request, result.period_values),
         },
         "metric": {
             "metric_concept": result.metric_concept,
@@ -1338,6 +1449,10 @@ def _provenance_payload(
             "denominator_value": result.denominator_value,
             "aggregation_strategy": result.range_aggregation_strategy.value,
             "range_aggregation_strategy": result.range_aggregation_strategy.value,
+            "available_month_aggregation_method": _available_month_aggregation_method(
+                request,
+                result.range_aggregation_strategy,
+            ),
             "share_scope": result.share_scope,
             "period_values": tuple(
                 {
@@ -1964,6 +2079,8 @@ def _roll_up_metric_values(rows: list[dict[str, Any]]) -> tuple[float | None, fl
 def _filter_requested_periods(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
     if frame.is_empty():
         return frame
+    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
+        return _filter_available_month_set_periods(frame, request)
     result = frame
     if request.date_from is not None:
         result = result.filter(pl.col("period_start") >= request.date_from)
@@ -1972,7 +2089,25 @@ def _filter_requested_periods(frame: pl.DataFrame, request: DashboardMetricQuery
     return result
 
 
+def _filter_available_month_set_periods(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
+    result = frame
+    if request.date_from is not None:
+        result = result.filter(pl.col("period_start") >= request.date_from)
+    if request.date_to is not None:
+        result = result.filter(pl.col("period_start") <= request.date_to)
+    if request.comparison_mode != ComparisonMode.YOY:
+        return result
+    matched_months = _matched_yoy_month_numbers(frame, request)
+    if not matched_months:
+        return result.filter(pl.lit(False))
+    return result.filter(pl.col("period_start").dt.month().is_in(matched_months))
+
+
 def _expected_periods(request: DashboardMetricQueryRequest, frame: pl.DataFrame) -> tuple[date, ...]:
+    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
+        if frame.is_empty():
+            return ()
+        return tuple(sorted(set(frame.get_column("period_start").to_list())))
     if request.period_mode == PeriodMode.FULL_AVAILABLE_HISTORY:
         if frame.is_empty():
             return ()
@@ -1991,6 +2126,123 @@ def _expected_periods(request: DashboardMetricQueryRequest, frame: pl.DataFrame)
         days = (request.date_to - request.date_from).days
         return tuple(request.date_from.fromordinal(request.date_from.toordinal() + offset) for offset in range(days + 1))
     return ()
+
+
+def _matched_yoy_month_numbers(frame: pl.DataFrame, request: DashboardMetricQueryRequest) -> tuple[int, ...]:
+    if frame.is_empty() or request.date_from is None:
+        return ()
+    current = _available_periods_in_range(frame, request.date_from, request.date_to)
+    reference_start = date(request.date_from.year - 1, 1, 1)
+    reference_end = date(request.date_from.year - 1, 12, 31)
+    reference = _available_periods_in_range(frame, reference_start, reference_end)
+    current_months = {period.month for period in current}
+    reference_months = {period.month for period in reference}
+    return tuple(sorted(current_months & reference_months))
+
+
+def _available_periods_in_range(frame: pl.DataFrame, start: date, end: date | None) -> tuple[date, ...]:
+    scoped = frame.filter(pl.col("period_start") >= start)
+    if end is not None:
+        scoped = scoped.filter(pl.col("period_start") <= end)
+    if scoped.is_empty():
+        return ()
+    return tuple(sorted(set(scoped.get_column("period_start").to_list())))
+
+
+def _result_periods(results: tuple[MetricQueryResult, ...]) -> tuple[date, ...]:
+    return tuple(sorted({period.period_start for result in results for period in result.period_values}))
+
+
+def _reference_periods_for_matched_yoy(
+    current_periods: tuple[date, ...],
+    frame: pl.DataFrame,
+) -> tuple[date, ...]:
+    available = set(frame.get_column("period_start").to_list()) if not frame.is_empty() else set()
+    return tuple(
+        period
+        for period in (date(current.year - 1, current.month, 1) for current in current_periods)
+        if period in available
+    )
+
+
+def _result_comparison_identity(result: MetricQueryResult) -> tuple[Any, ...]:
+    lineage = result.lineage
+    return (
+        result.grain_id,
+        result.entity_id,
+        result.metric_concept,
+        lineage.metric_definition_id if lineage is not None else result.metric_name,
+        lineage.metric_definition_version if lineage is not None else None,
+        lineage.metric_config_hash if lineage is not None else None,
+        lineage.rule_version if lineage is not None else None,
+        result.private_label_scope,
+    )
+
+
+def _result_metric_definition_id(result: MetricQueryResult) -> str:
+    if result.lineage is not None:
+        return result.lineage.metric_definition_id
+    return result.metric_name
+
+
+def _period_set_payload(
+    request: DashboardMetricQueryRequest,
+    period_values: tuple[PeriodValue, ...],
+) -> dict[str, Any] | None:
+    if request.period_mode != PeriodMode.AVAILABLE_MONTH_SET:
+        return None
+    periods = tuple(sorted({period.period_start for period in period_values}))
+    return {
+        "scope_type": "AVAILABLE_MONTH_SET",
+        "comparison_policy": "MATCHED_AVAILABLE_MONTHS"
+        if request.comparison_mode == ComparisonMode.YOY
+        else "ALL_AVAILABLE_MONTHS_PER_SIDE",
+        "included_periods": periods,
+        "included_month_numbers": tuple(period.month for period in periods),
+        "included_month_labels": tuple(period.strftime("%b") for period in periods),
+        "coverage_count": len(periods),
+        "source_revision_ids": tuple(sorted({period.source_revision_id for period in period_values})),
+    }
+
+
+def _comparison_period_set_payload(
+    request: DashboardMetricQueryRequest,
+    comparisons: tuple[ComparisonResult, ...],
+) -> dict[str, Any] | None:
+    if request.period_mode != PeriodMode.AVAILABLE_MONTH_SET or not comparisons:
+        return None
+    current_periods = tuple(sorted({period for item in comparisons for period in item.current_included_periods}))
+    comparison_periods = tuple(sorted({period for item in comparisons for period in item.comparison_included_periods}))
+    return {
+        "scope_type": "AVAILABLE_MONTH_SET_COMPARISON",
+        "comparison_policy": comparisons[0].comparison_policy,
+        "current_included_periods": current_periods,
+        "comparison_included_periods": comparison_periods,
+        "current_month_numbers": tuple(period.month for period in current_periods),
+        "comparison_month_numbers": tuple(period.month for period in comparison_periods),
+        "current_coverage_count": len(current_periods),
+        "comparison_coverage_count": len(comparison_periods),
+    }
+
+
+def _available_month_aggregation_method(
+    request: DashboardMetricQueryRequest,
+    strategy: RangeAggregationStrategy,
+) -> str | None:
+    if request.period_mode != PeriodMode.AVAILABLE_MONTH_SET:
+        return None
+    if strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS:
+        return "ARITHMETIC_MEAN_OF_MONTHLY_TOTALS"
+    if strategy in {
+        RangeAggregationStrategy.RATIO_OF_SUMS,
+        RangeAggregationStrategy.WEIGHTED_RATIO_OF_SUMS,
+        RangeAggregationStrategy.RECOMPUTE_FROM_COMPONENTS,
+        RangeAggregationStrategy.RECOMPUTE_SHARE_SCOPE,
+    }:
+        return "RECOMPUTE_FROM_AVAILABLE_MONTH_COMPONENTS"
+    if strategy == RangeAggregationStrategy.PERIOD_ONLY:
+        return "POINT_IN_TIME_ONLY_UNSUPPORTED_FOR_AVAILABLE_MONTH_SET"
+    return "UNSUPPORTED"
 
 
 def _coverage(
