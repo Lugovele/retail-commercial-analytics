@@ -46,10 +46,12 @@ def test_manufacturer_rank_is_category_scoped_with_projection_provenance(tmp_pat
     assert item.rows[0]["category"] == "category_a"
     assert item.provenance is not None
     assert item.provenance["projection"]["projection_semantics"] == "competition_rank_by_summed_additive_metric"
-    assert item.provenance["projection"]["population_scope"] == {
-        "ranking_scope": "CATEGORY",
-        "category": "category_a",
-    }
+    assert item.provenance["projection"]["population_scope"]["ranking_scope"] == "CATEGORY"
+    assert item.provenance["projection"]["population_scope"]["ranking_universe_type"] == "selected_category_entities"
+    assert item.provenance["projection"]["population_scope"]["rank_entity_type"] == "manufacturer"
+    assert item.provenance["projection"]["population_scope"]["rank_basis_metric"] == "revenue"
+    assert item.provenance["projection"]["population_scope"]["current_universe_size"] == 3
+    assert item.provenance["projection"]["deterministic_secondary_sort"] == "entity_id_ascending"
     assert item.provenance["run_lineage"]["mart_build_id"] == "build_a"
 
 
@@ -77,6 +79,22 @@ def test_manufacturer_rank_rejects_multi_category_scope(tmp_path) -> None:
 
     assert {item.status for item in response.items} == {PortfolioConceptStatus.NOT_APPLICABLE}
     assert {item.limitations for item in response.items} == {("portfolio_requires_single_category",)}
+
+
+def test_manufacturer_rank_rejects_multi_category_entity_ids(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            concept_ids=("manufacturer_rank_revenue",),
+            entity_filters={},
+            entity_ids=("category_a", "category_b"),
+            grain_id="category",
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("portfolio_requires_single_category",)
 
 
 def test_manufacturer_rank_uses_user_category_after_execution_filter_resolution(tmp_path) -> None:
@@ -117,15 +135,158 @@ def test_manufacturer_rank_preserves_store_scope(tmp_path) -> None:
 
     rank_item = response.items[0]
     population_item = response.items[1]
-    assert rank_item.status == PortfolioConceptStatus.PARTIAL
+    assert rank_item.status == PortfolioConceptStatus.NOT_APPLICABLE
     assert rank_item.rows == ()
-    assert rank_item.limitations == ("no_manufacturer_metric_facts",)
+    assert rank_item.limitations == ("rank_scope_filter_unsupported",)
     assert population_item.status == PortfolioConceptStatus.PARTIAL
     assert rank_item.provenance is not None
     assert rank_item.provenance["current_analytical_scope"]["entity_filters"] == {
         "category": ("category_a",),
         "store": ("store_a",),
     }
+
+
+def test_rank_rejects_unsupported_scope_in_user_filters(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            concept_ids=("manufacturer_rank_revenue",),
+            entity_filters={"sku": ("sku_a",)},
+            user_entity_filters={"category": ("category_a",), "store": ("store_a",)},
+            grain_id="network",
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("rank_scope_filter_unsupported",)
+
+
+def test_manufacturer_rank_movement_uses_inverted_rank_delta(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(concept_ids=("manufacturer_rank_revenue",), comparison_mode=ComparisonMode.YOY)
+    )
+
+    rows = {row["entity_id"]: row for row in response.items[0].rows}
+    assert rows["manufacturer_b"]["current_rank"] == 1
+    assert rows["manufacturer_b"]["reference_rank"] == 2
+    assert rows["manufacturer_b"]["rank_movement_positions"] == 1
+    assert rows["manufacturer_b"]["rank_movement_state"] == "IMPROVED"
+    assert rows["manufacturer_a"]["rank_movement_positions"] == -1
+    assert rows["manufacturer_a"]["rank_movement_state"] == "DECLINED"
+    assert response.items[0].provenance is not None
+    assert response.items[0].provenance["projection"]["rank_movement_semantics"] == (
+        "reference_rank_minus_current_rank"
+    )
+
+
+def test_rank_movement_marks_new_and_exited_entities_without_fake_ranks(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(concept_ids=("manufacturer_rank_revenue",), comparison_mode=ComparisonMode.YOY)
+    )
+
+    rows = {row["entity_id"]: row for row in response.items[0].rows}
+    assert rows["manufacturer_c"]["rank_movement_state"] == "NEW_IN_RANK_UNIVERSE"
+    assert rows["manufacturer_c"]["reference_rank"] is None
+    assert rows["manufacturer_c"]["rank_movement_positions"] is None
+    assert rows["manufacturer_d"]["rank_movement_state"] == "EXITED_RANK_UNIVERSE"
+    assert rows["manufacturer_d"]["current_rank"] is None
+    assert rows["manufacturer_d"]["rank_movement_positions"] is None
+    assert {row["current_universe_size"] for row in rows.values()} == {3}
+    assert {row["reference_universe_size"] for row in rows.values()} == {3}
+
+
+def test_rank_movement_respects_focal_entity_selection_after_universe_ranking(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            concept_ids=("manufacturer_rank_revenue",),
+            comparison_mode=ComparisonMode.YOY,
+            entity_filters={"category": ("category_a",), "manufacturer": ("manufacturer_a",)},
+        )
+    )
+
+    assert [row["entity_id"] for row in response.items[0].rows] == ["manufacturer_a"]
+    assert response.items[0].rows[0]["current_universe_size"] == 3
+
+
+def test_rank_range_semantics_fail_closed_without_averaging(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(period_mode=PeriodMode.DATE_RANGE, concept_ids=("manufacturer_rank_revenue",))
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].limitations == ("rank_range_semantics_unsupported",)
+
+
+def test_rank_movement_missing_reference_period_fails_closed(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(concept_ids=("manufacturer_rank_revenue",), comparison_mode=ComparisonMode.MOM)
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.NOT_APPLICABLE
+    assert response.items[0].rows == ()
+    assert response.items[0].limitations == ("comparison_period_unavailable",)
+
+
+def test_rank_null_metric_value_is_not_zero_filled(tmp_path) -> None:
+    facts = _portfolio_facts().with_columns(
+        pl.when(
+            (pl.col("metric_concept") == "revenue")
+            & (pl.col("entity_id") == "manufacturer_c")
+            & (pl.col("period_start") == date(2026, 1, 1))
+        )
+        .then(pl.lit(None, dtype=pl.Float64))
+        .otherwise(pl.col("value"))
+        .alias("value")
+    )
+    service = _service(tmp_path, facts)
+
+    response = service.query(_request(concept_ids=("manufacturer_rank_revenue",)))
+
+    assert "manufacturer_c" not in {row["entity_id"] for row in response.items[0].rows}
+
+
+def test_category_rank_uses_network_universe(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    response = service.query(
+        _request(
+            concept_ids=("category_rank_revenue",),
+            entity_filters=None,
+            grain_id="network",
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert [row["entity_id"] for row in item.rows] == ["category_b", "category_a"]
+    assert item.rows[0]["ranking_scope"] == "NETWORK"
+    assert item.rows[0]["universe_size"] == 2
+
+
+def test_brand_and_sku_rank_support_approved_additive_bases(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    brand_response = service.query(_request(concept_ids=("brand_rank_margin_abs",)))
+    sku_response = service.query(_request(concept_ids=("sku_rank_units",)))
+
+    assert brand_response.items[0].status == PortfolioConceptStatus.READY
+    assert brand_response.items[0].rows[0]["entity_id"] == "brand_b"
+    assert brand_response.items[0].rows[0]["rank_basis_metric"] == "retailer_margin_abs"
+    assert sku_response.items[0].status == PortfolioConceptStatus.READY
+    assert sku_response.items[0].rows[0]["entity_type"] == "sku"
+    assert sku_response.items[0].rows[0]["universe_size"] == 2
+
 
 def test_active_sku_uses_available_history_and_private_label_scope(tmp_path) -> None:
     facts = pl.concat(
@@ -516,6 +677,18 @@ def _portfolio_facts(
         rows.append(
             _fact(
                 period,
+                "category",
+                "category_b",
+                "revenue",
+                500.0 if period == date(2026, 1, 1) else 300.0,
+                "sum",
+                private_label_scope,
+                parent_entity_ids={"category": "category_b"},
+            )
+        )
+        rows.append(
+            _fact(
+                period,
                 "brand",
                 "brand_a",
                 "revenue",
@@ -525,7 +698,37 @@ def _portfolio_facts(
                 parent_entity_ids={"category": "category_a", "brand": "brand_a"},
             )
         )
-    for manufacturer, value in (("manufacturer_a", 150.0), ("manufacturer_b", 250.0)):
+        for brand, margin in (("brand_a", 40.0), ("brand_b", 80.0)):
+            rows.append(
+                _fact(
+                    period,
+                    "brand",
+                    brand,
+                    "retailer_margin_abs",
+                    margin if period == date(2026, 1, 1) else margin / 2,
+                    "sum",
+                    private_label_scope,
+                    parent_entity_ids={"category": "category_a", "brand": brand},
+                )
+            )
+    for manufacturer, value in (
+        ("manufacturer_a", 300.0),
+        ("manufacturer_b", 200.0),
+        ("manufacturer_d", 100.0),
+    ):
+        rows.append(
+            _fact(
+                date(2025, 1, 1),
+                "manufacturer",
+                manufacturer,
+                "revenue",
+                value,
+                "sum",
+                private_label_scope,
+                parent_entity_ids={"category": "category_a", "manufacturer": manufacturer},
+            )
+        )
+    for manufacturer, value in (("manufacturer_a", 150.0), ("manufacturer_b", 250.0), ("manufacturer_c", 50.0)):
         previous_share = 0.2 if manufacturer == "manufacturer_a" else 0.4
         current_share = 0.3 if manufacturer == "manufacturer_a" else 0.5
         rows.append(
@@ -594,6 +797,18 @@ def _portfolio_facts(
                     sku,
                     "units",
                     1.0 if sku in active_skus else 0.0,
+                    "sum",
+                    private_label_scope,
+                    parent_entity_ids={"category": "category_a", "sku": sku},
+                )
+            )
+            rows.append(
+                _fact(
+                    period,
+                    "sku",
+                    sku,
+                    "revenue",
+                    200.0 if sku == "sku_b" else 100.0,
                     "sum",
                     private_label_scope,
                     parent_entity_ids={"category": "category_a", "sku": sku},

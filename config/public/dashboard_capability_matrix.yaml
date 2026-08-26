@@ -149,8 +149,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: retailer_margin_pct
   ui_label_ru: Маржинальность
-  ui_description_ru: Маржинальность; range-safe только через сохранённые numerator
-    и denominator.
+  ui_description_ru: Маржинальность; range-safe только через сохранённые numerator и denominator.
   tab: Показатели
   group: Экономика
   presentation_level: TOP_KPI
@@ -184,8 +183,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: weighted_shelf_price_vat
   ui_label_ru: Средняя полочная цена с НДС
-  ui_description_ru: Средневзвешенная полочная цена с НДС из deterministic metric
-    outputs.
+  ui_description_ru: Средневзвешенная полочная цена с НДС из deterministic metric outputs.
   tab: Показатели
   group: Цена
   presentation_level: DEFAULT_TABLE
@@ -318,8 +316,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: distribution
   ui_label_ru: Дистрибуция
-  ui_description_ru: Дистрибуция на уровне периода; arbitrary selected-range recomputation
-    не объявлен.
+  ui_description_ru: Дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
   tab: Показатели
   group: Присутствие
   presentation_level: DEFAULT_TABLE
@@ -353,8 +350,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: numeric_distribution_store_format
   ui_label_ru: Дистрибуция в формате ТТ
-  ui_description_ru: Дистрибуция в месячном universe выбранного формата ТТ; selected-range
-    recomputation не объявлен.
+  ui_description_ru: Дистрибуция в месячном universe выбранного формата ТТ; selected-range recomputation не объявлен.
   tab: Показатели
   group: Присутствие
   presentation_level: AUDIT_ONLY
@@ -390,8 +386,7 @@ capabilities:
   recommendation_eligible_future: false
 - concept_id: velocity
   ui_label_ru: Продажи на ТТ
-  ui_description_ru: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation
-    не объявлен.
+  ui_description_ru: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
   tab: Показатели
   group: Присутствие
   presentation_level: DEFAULT_TABLE
@@ -591,8 +586,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: category_revenue_share
   ui_label_ru: Доля в обороте категории
-  ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator
-    и denominator scope.
+  ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
   tab: Показатели
   group: Доли
   presentation_level: DEFAULT_TABLE
@@ -624,8 +618,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: category_units_share
   ui_label_ru: Доля в штуках категории
-  ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator
-    и denominator scope.
+  ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
   tab: Показатели
   group: Доли
   presentation_level: OPTIONAL_COLUMN
@@ -657,8 +650,7 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: category_margin_share
   ui_label_ru: Доля в марже категории
-  ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator
-    и denominator scope.
+  ui_description_ru: Долевая метрика; selected-range support требует объявленный numerator и denominator scope.
   tab: Показатели
   group: Доли
   presentation_level: OPTIONAL_COLUMN
@@ -702,7 +694,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
-  date_range_support: READY
+  date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
   - INCLUDE
@@ -710,11 +702,14 @@ capabilities:
   - ONLY
   format: integer
   unit: rank
-  backend_fact_source: mart.rankings.rank_manufacturers
+  backend_fact_source: mart.portfolio_market.rank_projection
   availability_status: READY
   limitations:
   - category_scope_only
   - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
   provenance_supported: true
   signal_eligible: false
   recommendation_eligible_future: true
@@ -732,7 +727,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
-  date_range_support: READY
+  date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
   - INCLUDE
@@ -740,11 +735,344 @@ capabilities:
   - ONLY
   format: integer
   unit: rank
-  backend_fact_source: mart.rankings.rank_manufacturers
+  backend_fact_source: mart.portfolio_market.rank_projection
   availability_status: READY
   limitations:
   - category_scope_only
   - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: category_rank_revenue
+  ui_label_ru: Rank category by revenue
+  ui_description_ru: Rank category by revenue within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - network_scope
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: category_rank_units
+  ui_label_ru: Rank category by units
+  ui_description_ru: Rank category by units within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - network_scope
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: category_rank_margin_abs
+  ui_label_ru: Rank category by absolute margin
+  ui_description_ru: Rank category by absolute margin within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - category
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - network_scope
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: manufacturer_rank_margin_abs
+  ui_label_ru: Rank manufacturer by absolute margin
+  ui_description_ru: Rank manufacturer by absolute margin within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - manufacturer
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: brand_rank_revenue
+  ui_label_ru: Rank brand by revenue
+  ui_description_ru: Rank brand by revenue within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - brand
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: brand_rank_units
+  ui_label_ru: Rank brand by units
+  ui_description_ru: Rank brand by units within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - brand
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: brand_rank_margin_abs
+  ui_label_ru: Rank brand by absolute margin
+  ui_description_ru: Rank brand by absolute margin within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - brand
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: sku_rank_revenue
+  ui_label_ru: Rank SKU by revenue
+  ui_description_ru: Rank SKU by revenue within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: sku_rank_units
+  ui_label_ru: Rank SKU by units
+  ui_description_ru: Rank SKU by units within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: true
+- concept_id: sku_rank_margin_abs
+  ui_label_ru: Rank SKU by absolute margin
+  ui_description_ru: Rank SKU by absolute margin within the declared deterministic ranking universe.
+  tab: Business analytics
+  group: Rankings
+  presentation_level: OPTIONAL_COLUMN
+  grain_support:
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: PARTIAL
+  range_aggregation_strategy: projection_defined
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: integer
+  unit: rank
+  backend_fact_source: mart.portfolio_market.rank_projection
+  availability_status: READY
+  limitations:
+  - category_scope_only
+  - competition_rank_ties
+  - deterministic_entity_id_tie_break
+  - rank_movement_point_period_only
+  - rank_range_semantics_unsupported
   provenance_supported: true
   signal_eligible: false
   recommendation_eligible_future: true
@@ -1308,7 +1636,6 @@ capabilities:
   provenance_supported: false
   signal_eligible: false
   recommendation_eligible_future: true
-
 - concept_id: product_store_filter_intersection
   ui_label_ru: Пересечение товаров и ТТ
   ui_description_ru: Backend serving layer for product filters combined with store filters.

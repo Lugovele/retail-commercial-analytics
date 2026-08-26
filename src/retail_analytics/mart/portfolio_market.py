@@ -102,9 +102,19 @@ class PortfolioMarketService:
         "category_units_share",
         "category_margin_share",
     }
-    _RANK_CONCEPTS: ClassVar[dict[str, str]] = {
-        "manufacturer_rank_revenue": "revenue",
-        "manufacturer_rank_units": "units",
+    _RANK_CONCEPTS: ClassVar[dict[str, tuple[str, str]]] = {
+        "category_rank_revenue": ("category", "revenue"),
+        "category_rank_units": ("category", "units"),
+        "category_rank_margin_abs": ("category", "retailer_margin_abs"),
+        "manufacturer_rank_revenue": ("manufacturer", "revenue"),
+        "manufacturer_rank_units": ("manufacturer", "units"),
+        "manufacturer_rank_margin_abs": ("manufacturer", "retailer_margin_abs"),
+        "brand_rank_revenue": ("brand", "revenue"),
+        "brand_rank_units": ("brand", "units"),
+        "brand_rank_margin_abs": ("brand", "retailer_margin_abs"),
+        "sku_rank_revenue": ("sku", "revenue"),
+        "sku_rank_units": ("sku", "units"),
+        "sku_rank_margin_abs": ("sku", "retailer_margin_abs"),
     }
     _ACTIVE_SKU_CONCEPTS: ClassVar[set[str]] = {
         "active_sku_count",
@@ -234,46 +244,154 @@ class PortfolioMarketService:
         return tuple(items) or (_not_applicable(request, concept_id, "category_position", "no_metric_fact_result"),)
 
     def _rank_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
-        category, category_limitation = _single_category_filter(request)
+        rank_grain, metric_concept = self._RANK_CONCEPTS[concept_id]
+        if request.period_mode != PeriodMode.SINGLE_PERIOD:
+            return _not_applicable(request, concept_id, "category_position", "rank_range_semantics_unsupported")
+        unsupported_scope = _rank_unsupported_scope_limitation(request)
+        if unsupported_scope:
+            return _not_applicable(request, concept_id, "category_position", unsupported_scope)
+        category, category_limitation = _rank_category_scope(request, rank_grain)
         if category_limitation:
             return _not_applicable(request, concept_id, "category_position", category_limitation)
-        if not category:
-            return _not_applicable(request, concept_id, "category_position", "manufacturer_rank_requires_category_scope")
-        metric_concept = self._RANK_CONCEPTS[concept_id]
-        filters = _projection_entity_filters(request, category=category)
-        response = self.query_service.query(
+        filters = _rank_universe_filters(rank_grain, category)
+        current_response = self.query_service.query(
             _metric_request(
                 request,
-                grain_id="manufacturer",
+                grain_id=rank_grain,
                 metric_concepts=(metric_concept,),
                 comparison_mode=ComparisonMode.NONE,
-                entity_ids=_semantic_entity_filters(request).get("manufacturer", ()),
+                entity_ids=(),
                 entity_filters=filters,
             )
         )
-        rows = _rank_rows(response.metric_results, category=category)
+        current_rows = _rank_rows(
+            current_response.metric_results,
+            rank_grain=rank_grain,
+            metric_concept=metric_concept,
+            category=category,
+        )
+        focal_entities = _rank_focal_entities(request, rank_grain)
+        rows = _filter_rank_rows(current_rows, focal_entities=focal_entities)
+        limitations = tuple(item.issue_code for item in current_response.limitations)
+        input_results = current_response.metric_results
+        evaluated_periods = tuple(current_response.available_periods)
+        reference_period: date | None = None
+        if request.comparison_mode != ComparisonMode.NONE:
+            reference_period, reference_limitations = self._rank_reference_period(
+                request,
+                rank_grain=rank_grain,
+                metric_concept=metric_concept,
+                entity_filters=filters,
+            )
+            limitations = (*limitations, *reference_limitations)
+            if reference_period is None:
+                return _not_applicable(
+                    request,
+                    concept_id,
+                    "category_position",
+                    "comparison_period_unavailable",
+                )
+            if reference_period is not None:
+                reference_response = self.query_service.query(
+                    _metric_request(
+                        request,
+                        grain_id=rank_grain,
+                        metric_concepts=(metric_concept,),
+                        comparison_mode=ComparisonMode.NONE,
+                        entity_ids=(),
+                        entity_filters=filters,
+                        date_from=reference_period,
+                        date_to=reference_period,
+                    )
+                )
+                reference_rows = _rank_rows(
+                    reference_response.metric_results,
+                    rank_grain=rank_grain,
+                    metric_concept=metric_concept,
+                    category=category,
+                )
+                rows = _rank_movement_rows(
+                    current_rows,
+                    reference_rows,
+                    focal_entities=focal_entities,
+                )
+                limitations = (*limitations, *tuple(item.issue_code for item in reference_response.limitations))
+                input_results = (*input_results, *reference_response.metric_results)
+                evaluated_periods = tuple(dict.fromkeys((*evaluated_periods, *reference_response.available_periods)))
+        status = PortfolioConceptStatus.READY if rows and not limitations else PortfolioConceptStatus.PARTIAL
         return PortfolioMarketItem(
             concept_id=concept_id,
-            status=PortfolioConceptStatus.READY if rows else PortfolioConceptStatus.PARTIAL,
+            status=status,
             block_id="category_position",
-            grain_id="manufacturer",
+            grain_id=rank_grain,
             entity_id=None,
             label=None,
             value=None,
             unit="rank",
             rows=rows,
-            limitations=() if rows else ("no_manufacturer_metric_facts",),
+            limitations=tuple(dict.fromkeys(limitations)) if rows else (*tuple(dict.fromkeys(limitations)), "no_rank_metric_facts"),
             provenance=_projection_provenance(
                 request,
                 concept_id=concept_id,
                 projection_semantics="competition_rank_by_summed_additive_metric",
                 component_metric_concepts=(metric_concept,),
-                input_results=response.metric_results,
-                population_scope={"ranking_scope": "CATEGORY", "category": category},
+                input_results=input_results,
+                population_scope={
+                    "ranking_scope": "CATEGORY" if category is not None else "NETWORK",
+                    "ranking_universe_type": "selected_category_entities" if category is not None else "network_entities",
+                    "rank_entity_type": rank_grain,
+                    "rank_basis_metric": metric_concept,
+                    "category": category,
+                    "current_universe_size": _rank_universe_size(current_rows),
+                    "reference_universe_size": _rank_universe_size(rows, key="reference_universe_size")
+                    if request.comparison_mode != ComparisonMode.NONE
+                    else None,
+                },
                 tie_policy="competition_rank",
-                evaluated_periods=tuple(response.available_periods),
+                evaluated_periods=evaluated_periods,
+                deterministic_secondary_sort="entity_id_ascending",
+                rank_movement_semantics="reference_rank_minus_current_rank"
+                if request.comparison_mode != ComparisonMode.NONE
+                else None,
+                reference_period=reference_period,
             ),
         )
+
+    def _rank_reference_period(
+        self,
+        request: PortfolioMarketQueryRequest,
+        *,
+        rank_grain: str,
+        metric_concept: str,
+        entity_filters: dict[str, tuple[str, ...]] | None,
+    ) -> tuple[date | None, tuple[str, ...]]:
+        if request.comparison_mode == ComparisonMode.NONE:
+            return None, ()
+        if request.date_from is None:
+            return None, ("comparison_period_required",)
+        history = self.query_service.query(
+            _metric_request(
+                request,
+                grain_id=rank_grain,
+                metric_concepts=(metric_concept,),
+                comparison_mode=ComparisonMode.NONE,
+                entity_ids=(),
+                entity_filters=entity_filters,
+                date_from=None,
+                date_to=request.date_from,
+                period_mode=PeriodMode.FULL_AVAILABLE_HISTORY,
+            )
+        )
+        periods = tuple(period for period in history.available_periods if period < request.date_from)
+        if request.comparison_mode == ComparisonMode.YOY:
+            candidate = date(request.date_from.year - 1, request.date_from.month, request.date_from.day)
+            return (candidate, ()) if candidate in periods else (None, ("comparison_period_unavailable",))
+        if request.comparison_mode == ComparisonMode.MOM:
+            candidate = _add_months(request.date_from, -1)
+            return (candidate, ()) if candidate in periods else (None, ("comparison_period_unavailable",))
+        if request.comparison_mode == ComparisonMode.PREVIOUS_AVAILABLE:
+            return (periods[-1], ()) if periods else (None, ("comparison_period_unavailable",))
+        return None, ("rank_comparison_mode_unsupported",)
 
     def _manufacturer_population_item(self, request: PortfolioMarketQueryRequest) -> PortfolioMarketItem:
         category, category_limitation = _single_category_filter(request)
@@ -297,7 +415,12 @@ class PortfolioMarketService:
                 entity_filters=filters,
             )
         )
-        rows = _rank_rows(response.metric_results, category=category)
+        rows = _rank_rows(
+            response.metric_results,
+            rank_grain="manufacturer",
+            metric_concept="revenue",
+            category=category,
+        )
         population = len(rows)
         status = PortfolioConceptStatus.READY if rows else PortfolioConceptStatus.PARTIAL
         return PortfolioMarketItem(
@@ -499,6 +622,7 @@ def _metric_request(
     comparison_mode: ComparisonMode,
     entity_ids: tuple[str, ...] | None = None,
     entity_filters: dict[str, tuple[str, ...]] | None = None,
+    period_mode: PeriodMode | None = None,
     date_from: date | None | object = _UNSET,
     date_to: date | None | object = _UNSET,
 ) -> DashboardMetricQueryRequest:
@@ -509,7 +633,7 @@ def _metric_request(
         source_id=request.source_id,
         date_from=actual_date_from,
         date_to=actual_date_to,
-        period_mode=request.period_mode,
+        period_mode=request.period_mode if period_mode is None else period_mode,
         period_grain=request.period_grain,
         grain_id=grain_id,
         entity_ids=request.entity_ids if entity_ids is None else entity_ids,
@@ -523,27 +647,178 @@ def _metric_request(
     )
 
 
-def _rank_rows(results: tuple[MetricQueryResult, ...], *, category: str | None) -> tuple[dict[str, Any], ...]:
-    sorted_results = sorted(results, key=lambda result: (-(result.value or 0), result.entity_id))
-    values = [result.value or 0 for result in sorted_results]
+def _rank_rows(
+    results: tuple[MetricQueryResult, ...],
+    *,
+    rank_grain: str,
+    metric_concept: str,
+    category: str | None,
+) -> tuple[dict[str, Any], ...]:
+    rankable = tuple(result for result in results if result.value is not None)
+    sorted_results = sorted(rankable, key=lambda result: (-cast(float, result.value), result.entity_id))
+    values = [cast(float, result.value) for result in sorted_results]
     population = len(sorted_results)
     rows: list[dict[str, Any]] = []
     for result in sorted_results:
-        value = result.value or 0
+        value = cast(float, result.value)
         rank = 1 + sum(1 for other in values if other > value)
-        rows.append(
-            {
-                "manufacturer": result.entity_id,
-                "metric_value": result.value,
-                "rank": rank,
-                "population_count": population,
-                "tie_count": sum(1 for other in values if other == value),
-                "ranking_scope": "CATEGORY",
-                "category": category,
-                "private_label_scope": result.private_label_scope.value,
-            }
-        )
+        row = {
+            "entity_id": result.entity_id,
+            "entity_type": rank_grain,
+            "rank_basis_metric": metric_concept,
+            "metric_value": value,
+            "rank": rank,
+            "universe_size": population,
+            "population_count": population,
+            "tie_count": sum(1 for other in values if other == value),
+            "ranking_scope": "CATEGORY" if category is not None else "NETWORK",
+            "ranking_universe_type": "selected_category_entities" if category is not None else "network_entities",
+            "category": category,
+            "private_label_scope": result.private_label_scope.value,
+        }
+        if rank_grain == "manufacturer":
+            row["manufacturer"] = result.entity_id
+        if rank_grain == "brand":
+            row["brand"] = result.entity_id
+        if rank_grain == "sku":
+            row["sku"] = result.entity_id
+        rows.append(row)
     return tuple(rows)
+
+
+def _filter_rank_rows(
+    rows: tuple[dict[str, Any], ...],
+    *,
+    focal_entities: tuple[str, ...],
+) -> tuple[dict[str, Any], ...]:
+    if not focal_entities:
+        return rows
+    allowed = set(focal_entities)
+    return tuple(row for row in rows if str(row["entity_id"]) in allowed)
+
+
+def _rank_movement_rows(
+    current_rows: tuple[dict[str, Any], ...],
+    reference_rows: tuple[dict[str, Any], ...],
+    *,
+    focal_entities: tuple[str, ...],
+) -> tuple[dict[str, Any], ...]:
+    current_by_entity = {str(row["entity_id"]): row for row in current_rows}
+    reference_by_entity = {str(row["entity_id"]): row for row in reference_rows}
+    entity_ids = tuple(sorted(set(current_by_entity) | set(reference_by_entity)))
+    movement_rows: list[dict[str, Any]] = []
+    for entity_id in entity_ids:
+        if focal_entities and entity_id not in focal_entities:
+            continue
+        current = current_by_entity.get(entity_id)
+        reference = reference_by_entity.get(entity_id)
+        if current is not None and reference is not None:
+            current_rank = int(current["rank"])
+            reference_rank = int(reference["rank"])
+            movement = reference_rank - current_rank
+            if movement > 0:
+                state = "IMPROVED"
+            elif movement < 0:
+                state = "DECLINED"
+            else:
+                state = "UNCHANGED"
+            row = dict(current)
+            row.update(
+                {
+                    "current_rank": current_rank,
+                    "reference_rank": reference_rank,
+                    "rank_movement_positions": movement,
+                    "rank_movement_state": state,
+                    "current_metric_value": current["metric_value"],
+                    "reference_metric_value": reference["metric_value"],
+                    "current_universe_size": current["universe_size"],
+                    "reference_universe_size": reference["universe_size"],
+                }
+            )
+        elif current is not None:
+            row = dict(current)
+            row.update(
+                {
+                    "current_rank": current["rank"],
+                    "reference_rank": None,
+                    "rank_movement_positions": None,
+                    "rank_movement_state": "NEW_IN_RANK_UNIVERSE",
+                    "current_metric_value": current["metric_value"],
+                    "reference_metric_value": None,
+                    "current_universe_size": current["universe_size"],
+                    "reference_universe_size": _rank_universe_size(reference_rows),
+                }
+            )
+        else:
+            reference_row = cast(dict[str, Any], reference)
+            row = dict(reference_row)
+            row.update(
+                {
+                    "metric_value": None,
+                    "rank": None,
+                    "current_rank": None,
+                    "reference_rank": reference_row["rank"],
+                    "rank_movement_positions": None,
+                    "rank_movement_state": "EXITED_RANK_UNIVERSE",
+                    "current_metric_value": None,
+                    "reference_metric_value": reference_row["metric_value"],
+                    "current_universe_size": _rank_universe_size(current_rows),
+                    "reference_universe_size": reference_row["universe_size"],
+                }
+            )
+        movement_rows.append(row)
+    return tuple(sorted(movement_rows, key=lambda row: (row["rank"] is None, row["rank"] or 999999, str(row["entity_id"]))))
+
+
+def _rank_universe_size(rows: tuple[dict[str, Any], ...], *, key: str = "universe_size") -> int | None:
+    values = {row.get(key) for row in rows if row.get(key) is not None}
+    if len(values) == 1:
+        value = next(iter(values))
+        return int(cast(int | float | str, value))
+    return None
+
+
+def _rank_category_scope(request: PortfolioMarketQueryRequest, rank_grain: str) -> tuple[str | None, str | None]:
+    if rank_grain == "category":
+        return None, None
+    category, category_limitation = _single_category_filter(request)
+    if category_limitation:
+        return None, category_limitation
+    if not category:
+        return None, f"{rank_grain}_rank_requires_category_scope"
+    return category, None
+
+
+def _rank_universe_filters(rank_grain: str, category: str | None) -> dict[str, tuple[str, ...]] | None:
+    if rank_grain == "category":
+        return None
+    if category is None:
+        return None
+    return {"category": (category,)}
+
+
+def _rank_focal_entities(request: PortfolioMarketQueryRequest, rank_grain: str) -> tuple[str, ...]:
+    semantic_filters = _semantic_entity_filters(request)
+    entities: list[str] = []
+    if request.grain_id == rank_grain:
+        entities.extend(request.entity_ids)
+    entities.extend(semantic_filters.get(rank_grain, ()))
+    if rank_grain == "sku":
+        entities.extend(semantic_filters.get("canonical_product_id", ()))
+    return tuple(dict.fromkeys(entities))
+
+
+def _rank_unsupported_scope_limitation(request: PortfolioMarketQueryRequest) -> str | None:
+    filters = {
+        **(request.entity_filters or {}),
+        **(request.user_entity_filters or {}),
+    }
+    unsupported = tuple(
+        column for column in ("store", "store_format", "territory", "fo", "fo2", "region") if filters.get(column)
+    )
+    if unsupported:
+        return "rank_scope_filter_unsupported"
+    return None
 
 
 def _comparison_for_result(
@@ -586,6 +861,9 @@ def _projection_provenance(
     population_scope: dict[str, Any],
     tie_policy: str | None,
     evaluated_periods: tuple[date, ...],
+    deterministic_secondary_sort: str | None = None,
+    rank_movement_semantics: str | None = None,
+    reference_period: date | None = None,
     unsupported_reason: str | None = None,
 ) -> dict[str, Any]:
     source_revision_ids = tuple(
@@ -608,6 +886,9 @@ def _projection_provenance(
             "component_metric_concepts": component_metric_concepts,
             "population_scope": population_scope,
             "tie_policy": tie_policy,
+            "deterministic_secondary_sort": deterministic_secondary_sort,
+            "rank_movement_semantics": rank_movement_semantics,
+            "reference_period": reference_period,
             "evaluated_periods": evaluated_periods,
             "unsupported_reason": unsupported_reason,
         },
@@ -721,7 +1002,8 @@ def _category_filter(request: PortfolioMarketQueryRequest) -> str | None:
 
 def _single_category_filter(request: PortfolioMarketQueryRequest) -> tuple[str | None, str | None]:
     values = _semantic_entity_filters(request).get("category") or ()
-    if len(values) > 1:
+    entity_category_values = request.entity_ids if request.grain_id == "category" else ()
+    if len(values) > 1 or len(entity_category_values) > 1:
         return None, "portfolio_requires_single_category"
     return _category_filter(request), None
 
@@ -750,3 +1032,13 @@ def _block_for_concept(concept_id: str) -> str:
     if concept_id in {"broad_competitors", "direct_peers", "abc"}:
         return "competitors"
     return "portfolio_market"
+
+
+def _add_months(value: date, months: int) -> date:
+    month_index = value.year * 12 + value.month - 1 + months
+    year, month_zero = divmod(month_index, 12)
+    month = month_zero + 1
+    import calendar
+
+    day = min(value.day, calendar.monthrange(year, month)[1])
+    return date(year, month, day)

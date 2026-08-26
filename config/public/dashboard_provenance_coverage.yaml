@@ -541,7 +541,7 @@ coverage:
     - brand
     - sku
 - concept_id: manufacturer_rank_revenue
-  fact_type: mart.rankings.rank_manufacturers
+  fact_type: mart.portfolio_market.rank_projection
   coverage_status: PARTIAL
   scope: COMPLETE
   definition: PARTIAL
@@ -562,7 +562,7 @@ coverage:
     grain_support:
     - manufacturer
 - concept_id: manufacturer_rank_units
-  fact_type: mart.rankings.rank_manufacturers
+  fact_type: mart.portfolio_market.rank_projection
   coverage_status: PARTIAL
   scope: COMPLETE
   definition: PARTIAL
@@ -582,6 +582,216 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - manufacturer
+- concept_id: category_rank_revenue
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+- concept_id: category_rank_units
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+- concept_id: category_rank_margin_abs
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - category
+- concept_id: manufacturer_rank_margin_abs
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - manufacturer
+- concept_id: brand_rank_revenue
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - brand
+- concept_id: brand_rank_units
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - brand
+- concept_id: brand_rank_margin_abs
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - brand
+- concept_id: sku_rank_revenue
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - sku
+- concept_id: sku_rank_units
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - sku
+- concept_id: sku_rank_margin_abs
+  fact_type: mart.portfolio_market.rank_projection
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: PARTIAL
+  components: PARTIAL
+  comparison: PARTIAL
+  rule: PARTIAL
+  run: PARTIAL
+  source_evidence: PARTIAL
+  quality: PARTIAL
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Business analytics
+    group: Rankings
+    availability_status: READY
+    presentation_level: OPTIONAL_COLUMN
+    grain_support:
+    - sku
 - concept_id: manufacturer_population_count
   fact_type: mart.rankings.rank_manufacturers
   coverage_status: PARTIAL

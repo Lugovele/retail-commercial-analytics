@@ -5,107 +5,104 @@ semantic_boundary:
   dashboard_ia_role: taxonomy_of_business_questions
   formula_source: metric_catalog_and_business_rules
   forbidden: duplicate_metric_formulas_in_policy
-
 expert_model:
-  - id: senior_fmcg_commercial_analytics_lead
-    responsibility:
-      - business_questions
-      - kpi_priority
-      - decision_usefulness
-      - diagnostic_hierarchy
-  - id: product_information_architect
-    responsibility:
-      - screen_purpose
-      - block_hierarchy
-      - progressive_disclosure
-      - drilldown
-      - duplication_avoidance
-  - id: senior_bi_visualization_specialist
-    responsibility:
-      - visualization_type
-      - axes
-      - comparisons
-      - sparse_history
-      - rankings
-      - shares
-      - contributions
-  - id: senior_b2b_analytics_ui_ux_designer
-    responsibility:
-      - layout
-      - scan_speed
-      - filters
-      - tables
-      - responsive_behavior
-      - accessibility
-  - id: retail_data_architecture_reviewer
-    responsibility:
-      - readiness
-      - routes
-      - provenance
-      - performance
-      - no_frontend_calculations
-  - id: retail_business_rules_reviewer
-    responsibility:
-      - formulas
-      - aggregation
-      - causality
-      - statuses
-      - comparison_semantics
-      - private_label_scope
-
+- id: senior_fmcg_commercial_analytics_lead
+  responsibility:
+  - business_questions
+  - kpi_priority
+  - decision_usefulness
+  - diagnostic_hierarchy
+- id: product_information_architect
+  responsibility:
+  - screen_purpose
+  - block_hierarchy
+  - progressive_disclosure
+  - drilldown
+  - duplication_avoidance
+- id: senior_bi_visualization_specialist
+  responsibility:
+  - visualization_type
+  - axes
+  - comparisons
+  - sparse_history
+  - rankings
+  - shares
+  - contributions
+- id: senior_b2b_analytics_ui_ux_designer
+  responsibility:
+  - layout
+  - scan_speed
+  - filters
+  - tables
+  - responsive_behavior
+  - accessibility
+- id: retail_data_architecture_reviewer
+  responsibility:
+  - readiness
+  - routes
+  - provenance
+  - performance
+  - no_frontend_calculations
+- id: retail_business_rules_reviewer
+  responsibility:
+  - formulas
+  - aggregation
+  - causality
+  - statuses
+  - comparison_semantics
+  - private_label_scope
 enums:
   visualization_types:
-    - KPI
-    - LINE
-    - BAR
-    - STACKED_BAR
-    - RANKED_BAR
-    - RANKED_TABLE
-    - DETAIL_TABLE
-    - DRIVER_MATRIX
-    - COMPARISON_STRIP
-    - DUMBBELL
-    - BULLET
-    - AVAILABILITY_GRID
-    - SIGNAL_LIST
-    - PROVENANCE_DRAWER
-    - HEATMAP
-    - WATERFALL
+  - KPI
+  - LINE
+  - BAR
+  - STACKED_BAR
+  - RANKED_BAR
+  - RANKED_TABLE
+  - DETAIL_TABLE
+  - DRIVER_MATRIX
+  - COMPARISON_STRIP
+  - DUMBBELL
+  - BULLET
+  - AVAILABILITY_GRID
+  - SIGNAL_LIST
+  - PROVENANCE_DRAWER
+  - HEATMAP
+  - WATERFALL
   discouraged_visualizations:
-    - PIE
-    - DONUT
-    - RADAR
-    - GAUGE
-    - MULTI_AXIS_CHART
+  - PIE
+  - DONUT
+  - RADAR
+  - GAUGE
+  - MULTI_AXIS_CHART
   readiness:
-    - READY_QUERY
-    - READY_PROJECTION
-    - BACKEND_ROUTE_REQUIRED
-    - PARTIAL
-    - BUSINESS_RULE_REQUIRED
-    - FUTURE
-    - AUDIT_ONLY
+  - READY_QUERY
+  - READY_PROJECTION
+  - BACKEND_ROUTE_REQUIRED
+  - PARTIAL
+  - BUSINESS_RULE_REQUIRED
+  - FUTURE
+  - AUDIT_ONLY
   period_modes:
-    - SINGLE_PERIOD
-    - COMPARE
-    - DATE_RANGE
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
   grains:
-    - network
-    - category
-    - manufacturer
-    - brand
-    - sku
-    - store
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
   presentation_priority:
-    - PRIMARY
-    - SECONDARY
-    - DETAIL
-    - AUDIT
+  - PRIMARY
+  - SECONDARY
+  - DETAIL
+  - AUDIT
   delta_semantics:
-    - OUTCOME_DIRECTIONAL
-    - NEUTRAL_DIRECTIONAL
-    - RANK_DIRECTIONAL
-
+  - OUTCOME_DIRECTIONAL
+  - NEUTRAL_DIRECTIONAL
+  - RANK_DIRECTIONAL
 interaction_model:
   report_structure: continuous_vertical_report
   section_navigation:
@@ -124,22 +121,35 @@ interaction_model:
     layout: single_compact_row
     duplicated_scope_controls_allowed: false
     controls_order:
-      - retailer
-      - period
-      - category
-      - manufacturer
-      - brand
-      - sku
-      - store
-      - private_label_scope
+    - retailer
+    - period
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
+    - private_label_scope
     period_configuration: collapsed_control_with_popover
     selected_filter_chips_allowed: false
     current_scope_sentence_allowed: coverage_note_only_when_meaningful
   filter_behavior:
-    browse_without_typing_required_for: [manufacturer, brand, sku, store]
-    typeahead_required_for: [manufacturer, brand, sku, store]
+    browse_without_typing_required_for:
+    - manufacturer
+    - brand
+    - sku
+    - store
+    typeahead_required_for:
+    - manufacturer
+    - brand
+    - sku
+    - store
     typeahead_must_not_reload_analytics_before_selection: true
-    multi_select_required_for: [category, manufacturer, brand, sku, store]
+    multi_select_required_for:
+    - category
+    - manufacturer
+    - brand
+    - sku
+    - store
     multi_select_semantics:
       within_one_filter: OR
       across_filters: AND
@@ -157,331 +167,445 @@ interaction_model:
     old_icon_only_affordance_allowed: fallback_only
     hover_instruction_tooltips_allowed: false
     keyboard:
-      trigger_keys: [Enter, Space]
-      close_keys: [Escape]
+      trigger_keys:
+      - Enter
+      - Space
+      close_keys:
+      - Escape
       focus_visible_required: true
     sections_default_open:
-      - business_definition
-      - value
-      - calculation
-      - comparison
-      - scope
-      - data_coverage
-      - business_rule
-      - quality
+    - business_definition
+    - value
+    - calculation
+    - comparison
+    - scope
+    - data_coverage
+    - business_rule
+    - quality
     sections_collapsed:
-      - technical_audit
+    - technical_audit
     formula_source: metric_catalog_and_backend_provenance
     frontend_business_formulas_allowed: false
   semantic_delta_color:
     principle: direction_not_good_bad
     outcome_directional_metrics:
-      - revenue
-      - revenue_vat
-      - units
-      - retailer_margin_abs
-      - retailer_margin_pct
+    - revenue
+    - revenue_vat
+    - units
+    - retailer_margin_abs
+    - retailer_margin_pct
     neutral_directional_metrics:
-      - weighted_shelf_price_vat
-      - weighted_input_price_vat
-      - selling_store_count
-      - active_store_count
-      - distribution
-      - numeric_distribution_store_format
-      - velocity
-      - revenue_velocity
-      - margin_velocity
-      - sku_count
-      - brand_count
-      - category_count
-      - category_revenue_share
-      - category_units_share
-      - category_margin_share
-      - contribution_to_delta
+    - weighted_shelf_price_vat
+    - weighted_input_price_vat
+    - selling_store_count
+    - active_store_count
+    - distribution
+    - numeric_distribution_store_format
+    - velocity
+    - revenue_velocity
+    - margin_velocity
+    - sku_count
+    - brand_count
+    - category_count
+    - category_revenue_share
+    - category_units_share
+    - category_margin_share
+    - contribution_to_delta
     rank_directional_metrics:
-      - manufacturer_rank_revenue
-      - manufacturer_rank_units
+    - category_rank_revenue
+    - category_rank_units
+    - category_rank_margin_abs
+    - manufacturer_rank_revenue
+    - manufacturer_rank_units
+    - manufacturer_rank_margin_abs
+    - brand_rank_revenue
+    - brand_rank_units
+    - brand_rank_margin_abs
+    - sku_rank_revenue
+    - sku_rank_units
+    - sku_rank_margin_abs
     rank_rule: lower_rank_number_is_position_improvement
     percentage_metric_delta_format: percentage_points
     forbidden_copy:
-      - good
-      - bad
-      - cause
-      - recommendation
+    - good
+    - bad
+    - cause
+    - recommendation
   drilldown:
     breadcrumb_represents: selected_analytical_entity_path_only
     breadcrumb_hidden_without_drilldown: true
-
 screens:
-  - id: overview
-    label_ru: Обзор
-    purpose: What happened, how material it is, where to look, what changed together, what to check next.
-    primary_questions:
-      - Что произошло?
-      - Насколько существенно?
-      - Где произошло изменение?
-      - Что изменилось одновременно?
-      - Что проверить?
-    allowed_visualizations: [KPI, LINE, RANKED_TABLE, DRIVER_MATRIX, SIGNAL_LIST, PROVENANCE_DRAWER]
-    default_blocks:
-      - id: primary_kpi
-        visualizations: [KPI]
-        readiness_requirement: READY_QUERY
-      - id: main_trend
-        visualizations: [LINE]
-        readiness_requirement: READY_QUERY
-      - id: contribution_drilldown
-        visualizations: [RANKED_TABLE]
-        readiness_requirement: READY_QUERY
-      - id: change_picture
-        visualizations: [DRIVER_MATRIX]
-        readiness_requirement: READY_QUERY
-      - id: attention_preview
-        visualizations: [SIGNAL_LIST]
-        readiness_requirement: PARTIAL
-      - id: provenance
-        visualizations: [PROVENANCE_DRAWER]
-        readiness_requirement: READY_QUERY
-    max_kpi: 4
-    max_primary_charts: 1
-    max_preview_rows: 8
-    max_signal_preview: 3
-    forbidden_concepts:
-      - recommendations
-      - direct_peers
-      - abc
-      - brand_composite_status
-      - delisting
-      - opportunity_facts
-  - id: sales_drivers
-    label_ru: Продажи и драйверы
-    purpose: Diagnose result, volume, price, presence, sales speed, economics, and structure without causal overclaim.
-    primary_questions:
-      - Как изменился коммерческий результат?
-      - Какие параметры изменились одновременно?
-      - Где нужна deeper diagnosis?
-    allowed_visualizations: [DRIVER_MATRIX, LINE, COMPARISON_STRIP, DETAIL_TABLE, PROVENANCE_DRAWER]
-    default_blocks:
-      - id: driver_matrix
-        visualizations: [DRIVER_MATRIX]
-        readiness_requirement: READY_QUERY
-      - id: selected_metric_trend
-        visualizations: [LINE]
-        readiness_requirement: READY_QUERY
-      - id: driver_detail_table
-        visualizations: [DETAIL_TABLE]
-        readiness_requirement: READY_QUERY
-    max_kpi: 0
-    max_primary_charts: 1
-    max_preview_rows: 0
-    forbidden_concepts:
-      - manufacturer_rank_revenue
-      - manufacturer_rank_units
-      - direct_peers
-      - recommendations
-  - id: portfolio_market
-    label_ru: Портфель и рынок
-    purpose: Category position, shares, ranking, assortment, brand-vs-category, market/private-label, and competitors where ready.
-    primary_questions:
-      - Как мы стоим в категории?
-      - Что происходит с долей?
-      - Какое место производителя?
-      - Что происходит с ассортиментом?
-      - Как бренд движется относительно категории?
-    allowed_visualizations: [RANKED_BAR, RANKED_TABLE, BAR, STACKED_BAR, DUMBBELL, BULLET, COMPARISON_STRIP, DETAIL_TABLE, PROVENANCE_DRAWER]
-    default_blocks:
-      - id: category_position
-        visualizations: [RANKED_BAR, RANKED_TABLE]
-        readiness_requirement: READY_PROJECTION
-      - id: assortment
-        visualizations: [BULLET, COMPARISON_STRIP]
-        readiness_requirement: READY_PROJECTION
-      - id: brand_vs_category
-        visualizations: [DUMBBELL, COMPARISON_STRIP]
-        readiness_requirement: READY_PROJECTION
-      - id: market_private_label
-        visualizations: [BAR, COMPARISON_STRIP]
-        readiness_requirement: READY_PROJECTION
-      - id: competitors
-        visualizations: [DETAIL_TABLE]
-        readiness_requirement: PARTIAL
-    max_kpi: 2
-    max_primary_charts: 2
-    max_preview_rows: 10
-    forbidden_concepts:
-      - brand_composite_status
-      - delisting
-      - direct_peers
-      - recommendations
-  - id: stores
-    label_ru: Точки продаж
-    purpose: Show where physical store-level result forms.
-    primary_questions:
-      - Какие ТТ формируют результат?
-      - Где меняются продажи и экономика?
-      - Где нужна store-level action?
-    allowed_visualizations: [RANKED_BAR, DETAIL_TABLE, HEATMAP, PROVENANCE_DRAWER]
-    default_blocks:
-      - id: store_ranking
-        visualizations: [RANKED_BAR]
-        readiness_requirement: READY_QUERY
-      - id: store_detail_table
-        visualizations: [DETAIL_TABLE]
-        readiness_requirement: READY_QUERY
-    max_kpi: 2
-    max_primary_charts: 1
-    max_preview_rows: 23
-    forbidden_concepts:
-      - distribution
-      - velocity
-      - revenue_velocity
-      - margin_velocity
-      - direct_peers
-      - recommendations
-  - id: signals
-    label_ru: Сигналы
-    purpose: Separate attention-worthy deterministic patterns from data-quality alerts and capability limitations.
-    primary_questions:
-      - Что требует внимания?
-      - На каком правиле основан сигнал?
-      - Куда перейти для проверки?
-    allowed_visualizations: [SIGNAL_LIST, DETAIL_TABLE, PROVENANCE_DRAWER]
-    default_blocks:
-      - id: commercial_signals
-        visualizations: [SIGNAL_LIST]
-        readiness_requirement: PARTIAL
-      - id: data_quality_alerts
-        visualizations: [SIGNAL_LIST]
-        readiness_requirement: READY_QUERY
-    max_kpi: 0
-    max_primary_charts: 0
-    max_preview_rows: 20
-    forbidden_concepts:
-      - recommendations
-      - ordinary_delta_as_signal
-      - capability_limitation_as_commercial_signal
-  - id: data
-    label_ru: Данные
-    purpose: Show what data is included, coverage, quality, source-like rows, and audit access.
-    primary_questions:
-      - Какие данные используются?
-      - Можно ли им доверять?
-      - Где посмотреть покрытие и качество?
-    allowed_visualizations: [AVAILABILITY_GRID, DETAIL_TABLE, PROVENANCE_DRAWER, SIGNAL_LIST]
-    default_blocks:
-      - id: period_coverage
-        visualizations: [AVAILABILITY_GRID]
-        readiness_requirement: READY_QUERY
-      - id: quality
-        visualizations: [SIGNAL_LIST, DETAIL_TABLE]
-        readiness_requirement: READY_QUERY
-      - id: source_like_rows
-        visualizations: [DETAIL_TABLE]
-        readiness_requirement: READY_QUERY
-      - id: audit
-        visualizations: [PROVENANCE_DRAWER]
-        readiness_requirement: READY_QUERY
-    max_kpi: 0
-    max_primary_charts: 0
-    max_preview_rows: 50
-    forbidden_concepts:
-      - recommendations
-      - hashes_as_primary_content
-
+- id: overview
+  label_ru: Обзор
+  purpose: What happened, how material it is, where to look, what changed together, what to check next.
+  primary_questions:
+  - Что произошло?
+  - Насколько существенно?
+  - Где произошло изменение?
+  - Что изменилось одновременно?
+  - Что проверить?
+  allowed_visualizations:
+  - KPI
+  - LINE
+  - RANKED_TABLE
+  - DRIVER_MATRIX
+  - SIGNAL_LIST
+  - PROVENANCE_DRAWER
+  default_blocks:
+  - id: primary_kpi
+    visualizations:
+    - KPI
+    readiness_requirement: READY_QUERY
+  - id: main_trend
+    visualizations:
+    - LINE
+    readiness_requirement: READY_QUERY
+  - id: contribution_drilldown
+    visualizations:
+    - RANKED_TABLE
+    readiness_requirement: READY_QUERY
+  - id: change_picture
+    visualizations:
+    - DRIVER_MATRIX
+    readiness_requirement: READY_QUERY
+  - id: attention_preview
+    visualizations:
+    - SIGNAL_LIST
+    readiness_requirement: PARTIAL
+  - id: provenance
+    visualizations:
+    - PROVENANCE_DRAWER
+    readiness_requirement: READY_QUERY
+  max_kpi: 4
+  max_primary_charts: 1
+  max_preview_rows: 8
+  max_signal_preview: 3
+  forbidden_concepts:
+  - recommendations
+  - direct_peers
+  - abc
+  - brand_composite_status
+  - delisting
+  - opportunity_facts
+- id: sales_drivers
+  label_ru: Продажи и драйверы
+  purpose: Diagnose result, volume, price, presence, sales speed, economics, and structure without causal overclaim.
+  primary_questions:
+  - Как изменился коммерческий результат?
+  - Какие параметры изменились одновременно?
+  - Где нужна deeper diagnosis?
+  allowed_visualizations:
+  - DRIVER_MATRIX
+  - LINE
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  default_blocks:
+  - id: driver_matrix
+    visualizations:
+    - DRIVER_MATRIX
+    readiness_requirement: READY_QUERY
+  - id: selected_metric_trend
+    visualizations:
+    - LINE
+    readiness_requirement: READY_QUERY
+  - id: driver_detail_table
+    visualizations:
+    - DETAIL_TABLE
+    readiness_requirement: READY_QUERY
+  max_kpi: 0
+  max_primary_charts: 1
+  max_preview_rows: 0
+  forbidden_concepts:
+  - manufacturer_rank_revenue
+  - manufacturer_rank_units
+  - direct_peers
+  - recommendations
+- id: portfolio_market
+  label_ru: Портфель и рынок
+  purpose: Category position, shares, ranking, assortment, brand-vs-category, market/private-label, and competitors where
+    ready.
+  primary_questions:
+  - Как мы стоим в категории?
+  - Что происходит с долей?
+  - Какое место производителя?
+  - Что происходит с ассортиментом?
+  - Как бренд движется относительно категории?
+  allowed_visualizations:
+  - RANKED_BAR
+  - RANKED_TABLE
+  - BAR
+  - STACKED_BAR
+  - DUMBBELL
+  - BULLET
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  default_blocks:
+  - id: category_position
+    visualizations:
+    - RANKED_BAR
+    - RANKED_TABLE
+    readiness_requirement: READY_PROJECTION
+  - id: assortment
+    visualizations:
+    - BULLET
+    - COMPARISON_STRIP
+    readiness_requirement: READY_PROJECTION
+  - id: brand_vs_category
+    visualizations:
+    - DUMBBELL
+    - COMPARISON_STRIP
+    readiness_requirement: READY_PROJECTION
+  - id: market_private_label
+    visualizations:
+    - BAR
+    - COMPARISON_STRIP
+    readiness_requirement: READY_PROJECTION
+  - id: competitors
+    visualizations:
+    - DETAIL_TABLE
+    readiness_requirement: PARTIAL
+  max_kpi: 2
+  max_primary_charts: 2
+  max_preview_rows: 10
+  forbidden_concepts:
+  - brand_composite_status
+  - delisting
+  - direct_peers
+  - recommendations
+- id: stores
+  label_ru: Точки продаж
+  purpose: Show where physical store-level result forms.
+  primary_questions:
+  - Какие ТТ формируют результат?
+  - Где меняются продажи и экономика?
+  - Где нужна store-level action?
+  allowed_visualizations:
+  - RANKED_BAR
+  - DETAIL_TABLE
+  - HEATMAP
+  - PROVENANCE_DRAWER
+  default_blocks:
+  - id: store_ranking
+    visualizations:
+    - RANKED_BAR
+    readiness_requirement: READY_QUERY
+  - id: store_detail_table
+    visualizations:
+    - DETAIL_TABLE
+    readiness_requirement: READY_QUERY
+  max_kpi: 2
+  max_primary_charts: 1
+  max_preview_rows: 23
+  forbidden_concepts:
+  - distribution
+  - velocity
+  - revenue_velocity
+  - margin_velocity
+  - direct_peers
+  - recommendations
+- id: signals
+  label_ru: Сигналы
+  purpose: Separate attention-worthy deterministic patterns from data-quality alerts and capability limitations.
+  primary_questions:
+  - Что требует внимания?
+  - На каком правиле основан сигнал?
+  - Куда перейти для проверки?
+  allowed_visualizations:
+  - SIGNAL_LIST
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  default_blocks:
+  - id: commercial_signals
+    visualizations:
+    - SIGNAL_LIST
+    readiness_requirement: PARTIAL
+  - id: data_quality_alerts
+    visualizations:
+    - SIGNAL_LIST
+    readiness_requirement: READY_QUERY
+  max_kpi: 0
+  max_primary_charts: 0
+  max_preview_rows: 20
+  forbidden_concepts:
+  - recommendations
+  - ordinary_delta_as_signal
+  - capability_limitation_as_commercial_signal
+- id: data
+  label_ru: Данные
+  purpose: Show what data is included, coverage, quality, source-like rows, and audit access.
+  primary_questions:
+  - Какие данные используются?
+  - Можно ли им доверять?
+  - Где посмотреть покрытие и качество?
+  allowed_visualizations:
+  - AVAILABILITY_GRID
+  - DETAIL_TABLE
+  - PROVENANCE_DRAWER
+  - SIGNAL_LIST
+  default_blocks:
+  - id: period_coverage
+    visualizations:
+    - AVAILABILITY_GRID
+    readiness_requirement: READY_QUERY
+  - id: quality
+    visualizations:
+    - SIGNAL_LIST
+    - DETAIL_TABLE
+    readiness_requirement: READY_QUERY
+  - id: source_like_rows
+    visualizations:
+    - DETAIL_TABLE
+    readiness_requirement: READY_QUERY
+  - id: audit
+    visualizations:
+    - PROVENANCE_DRAWER
+    readiness_requirement: READY_QUERY
+  max_kpi: 0
+  max_primary_charts: 0
+  max_preview_rows: 50
+  forbidden_concepts:
+  - recommendations
+  - hashes_as_primary_content
 business_concept_rules:
   contribution_to_delta:
-    supported_metric_concepts: [revenue_vat, revenue, units, retailer_margin_abs]
+    supported_metric_concepts:
+    - revenue_vat
+    - revenue
+    - units
+    - retailer_margin_abs
     preferred_visualization: RANKED_TABLE
-    alternative_visualizations: [BAR]
-    forbidden_visualizations: [PIE, DONUT, WATERFALL]
-    columns_ru: [Объект, Текущий период, Период сравнения, Изменение, Вклад в изменение]
+    alternative_visualizations:
+    - BAR
+    forbidden_visualizations:
+    - PIE
+    - DONUT
+    - WATERFALL
+    columns_ru:
+    - Объект
+    - Текущий период
+    - Период сравнения
+    - Изменение
+    - Вклад в изменение
     default_sort: absolute_delta_desc
     period_modes:
       SINGLE_PERIOD: NOT_APPLICABLE
       COMPARE: READY_QUERY
       DATE_RANGE: NOT_APPLICABLE
     guardrails:
-      - signed_share_may_exceed_100_or_be_negative
-      - never_clamp_to_0_100
-      - no_causal_wording
-      - total_delta_zero_returns_undefined_share
+    - signed_share_may_exceed_100_or_be_negative
+    - never_clamp_to_0_100
+    - no_causal_wording
+    - total_delta_zero_returns_undefined_share
   sparse_time_history:
     preferred_visualization: LINE
     guardrails:
-      - actual_available_periods_only
-      - no_zero_fill
-      - no_smoothing
-      - no_interpolation
+    - actual_available_periods_only
+    - no_zero_fill
+    - no_smoothing
+    - no_interpolation
   shares:
     preferred_visualization: BAR
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
+    alternative_visualizations:
+    - COMPARISON_STRIP
+    - DETAIL_TABLE
+    forbidden_visualizations:
+    - PIE
+    - DONUT
     guardrails:
-      - recompute_from_numerator_denominator
-      - do_not_average_monthly_shares
+    - recompute_from_numerator_denominator
+    - do_not_average_monthly_shares
   ranking:
     preferred_visualization: RANKED_BAR
-    alternative_visualizations: [RANKED_TABLE]
-    forbidden_visualizations: [KPI]
+    alternative_visualizations:
+    - RANKED_TABLE
+    forbidden_visualizations:
+    - KPI
     guardrails:
-      - show_ranking_universe
-      - show_tie_policy_where_relevant
+    - show_ranking_universe
+    - show_tie_policy_where_relevant
   brand_vs_category:
     preferred_visualization: DUMBBELL
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [KPI]
+    alternative_visualizations:
+    - COMPARISON_STRIP
+    - DETAIL_TABLE
+    forbidden_visualizations:
+    - KPI
     guardrails:
-      - no_growth_decline_status_badge
-      - show_brand_and_category_reference
+    - no_growth_decline_status_badge
+    - show_brand_and_category_reference
   stores:
     preferred_visualization: RANKED_BAR
-    alternative_visualizations: [DETAIL_TABLE, HEATMAP]
+    alternative_visualizations:
+    - DETAIL_TABLE
+    - HEATMAP
     forbidden_visualizations: []
     guardrails:
-      - no_store_grain_distribution
-      - no_store_grain_velocity
-      - map_not_default
+    - no_store_grain_distribution
+    - no_store_grain_velocity
+    - map_not_default
   signals:
     preferred_visualization: SIGNAL_LIST
     guardrails:
-      - signal_is_not_ordinary_delta
-      - signal_is_not_recommendation
-      - capability_limitation_is_not_commercial_signal
+    - signal_is_not_ordinary_delta
+    - signal_is_not_recommendation
+    - capability_limitation_is_not_commercial_signal
   coverage:
     preferred_visualization: AVAILABILITY_GRID
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [LINE]
+    alternative_visualizations:
+    - DETAIL_TABLE
+    forbidden_visualizations:
+    - LINE
   provenance:
     preferred_visualization: PROVENANCE_DRAWER
     guardrails:
-      - technical_metadata_collapsed_by_default
-
+    - technical_metadata_collapsed_by_default
 period_rules:
   additive_metrics:
-    concepts: [revenue_vat, revenue, units, retailer_margin_abs]
+    concepts:
+    - revenue_vat
+    - revenue
+    - units
+    - retailer_margin_abs
     SINGLE_PERIOD: READY_QUERY
     COMPARE: READY_QUERY
     DATE_RANGE: READY_QUERY
     range_strategy: sum_available_periods
   ratio_of_sums_metrics:
-    concepts: [retailer_margin_pct]
+    concepts:
+    - retailer_margin_pct
     SINGLE_PERIOD: READY_QUERY
     COMPARE: READY_QUERY
     DATE_RANGE: READY_QUERY
     range_strategy: ratio_of_sums
   weighted_metrics:
-    concepts: [weighted_shelf_price_vat, weighted_input_price_vat]
+    concepts:
+    - weighted_shelf_price_vat
+    - weighted_input_price_vat
     SINGLE_PERIOD: READY_QUERY
     COMPARE: READY_QUERY
     DATE_RANGE: READY_QUERY
     range_strategy: weighted_ratio_of_sums
   period_only_metrics:
-    concepts: [selling_store_count, active_store_count, distribution, numeric_distribution_store_format, velocity, revenue_velocity, margin_velocity, sku_count, brand_count, category_count, category_revenue_share, category_units_share, category_margin_share]
+    concepts:
+    - selling_store_count
+    - active_store_count
+    - distribution
+    - numeric_distribution_store_format
+    - velocity
+    - revenue_velocity
+    - margin_velocity
+    - sku_count
+    - brand_count
+    - category_count
+    - category_revenue_share
+    - category_units_share
+    - category_margin_share
     SINGLE_PERIOD: READY_QUERY
     COMPARE: READY_QUERY
     DATE_RANGE: PARTIAL
     range_strategy: period_only
-
 table_policy:
   default:
     pagination_required: true
@@ -489,438 +613,1109 @@ table_policy:
     conditional_formatting: restrained_directional_not_good_bad
   grains:
     category:
-      default_columns: [category, revenue, contribution_to_delta, units, retailer_margin_abs, retailer_margin_pct, sku_count, selling_store_count]
+      default_columns:
+      - category
+      - revenue
+      - contribution_to_delta
+      - units
+      - retailer_margin_abs
+      - retailer_margin_pct
+      - sku_count
+      - selling_store_count
       default_sort: contribution_absolute_delta_desc_when_available
       drilldown_target: manufacturer
     manufacturer:
-      default_columns: [manufacturer, revenue, contribution_to_delta, units, retailer_margin_abs, retailer_margin_pct, manufacturer_rank_revenue]
+      default_columns:
+      - manufacturer
+      - revenue
+      - contribution_to_delta
+      - units
+      - retailer_margin_abs
+      - retailer_margin_pct
+      - manufacturer_rank_revenue
       default_sort: contribution_absolute_delta_desc_when_available
       drilldown_target: brand
     brand:
-      default_columns: [brand, revenue, contribution_to_delta, units, retailer_margin_abs, category_revenue_share]
+      default_columns:
+      - brand
+      - revenue
+      - contribution_to_delta
+      - units
+      - retailer_margin_abs
+      - category_revenue_share
       default_sort: contribution_absolute_delta_desc_when_available
       drilldown_target: sku
     sku:
-      default_columns: [sku, revenue, contribution_to_delta, units, retailer_margin_abs, weighted_shelf_price_vat, selling_store_count]
+      default_columns:
+      - sku
+      - revenue
+      - contribution_to_delta
+      - units
+      - retailer_margin_abs
+      - weighted_shelf_price_vat
+      - selling_store_count
       default_sort: contribution_absolute_delta_desc_when_available
       drilldown_target: store
       store_contribution_support: BACKEND_ROUTE_REQUIRED
     store:
-      default_columns: [store, revenue, units, retailer_margin_abs, retailer_margin_pct, sku_count]
+      default_columns:
+      - store
+      - revenue
+      - units
+      - retailer_margin_abs
+      - retailer_margin_pct
+      - sku_count
       default_sort: current_value_desc
       drilldown_target: none
-      forbidden_columns: [distribution, velocity, revenue_velocity, margin_velocity]
-
+      forbidden_columns:
+      - distribution
+      - velocity
+      - revenue_velocity
+      - margin_velocity
 metric_rules:
-  - concept_id: revenue_vat
-    allowed_screens: [overview, sales_drivers, portfolio_market, stores]
-    preferred_visualization: KPI
-    alternative_visualizations: [LINE, DETAIL_TABLE, RANKED_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: PRIMARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: revenue
-    allowed_screens: [overview, sales_drivers, portfolio_market, stores]
-    preferred_visualization: KPI
-    alternative_visualizations: [LINE, DETAIL_TABLE, RANKED_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: PRIMARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: units
-    allowed_screens: [overview, sales_drivers, stores]
-    preferred_visualization: KPI
-    alternative_visualizations: [LINE, DETAIL_TABLE, RANKED_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: PRIMARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: retailer_margin_abs
-    allowed_screens: [overview, sales_drivers, stores]
-    preferred_visualization: KPI
-    alternative_visualizations: [LINE, DETAIL_TABLE, RANKED_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: PRIMARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: retailer_margin_pct
-    allowed_screens: [overview, sales_drivers, stores]
-    preferred_visualization: KPI
-    alternative_visualizations: [LINE, COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: PRIMARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: weighted_shelf_price_vat
-    allowed_screens: [overview, sales_drivers, stores]
-    preferred_visualization: LINE
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: weighted_input_price_vat
-    allowed_screens: [sales_drivers, stores]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [LINE, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: selling_store_count
-    allowed_screens: [overview, sales_drivers, stores]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category, manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: active_store_count
-    allowed_screens: [sales_drivers, data]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [network, category]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: distribution
-    allowed_screens: [sales_drivers]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: SECONDARY
-    grain_support: [category, manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: numeric_distribution_store_format
-    allowed_screens: [data]
-    preferred_visualization: PROVENANCE_DRAWER
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT, GAUGE]
-    presentation_priority: AUDIT
-    grain_support: [category, manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: AUDIT_ONLY
-  - concept_id: velocity
-    allowed_screens: [sales_drivers]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [LINE, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT, GAUGE]
-    presentation_priority: SECONDARY
-    grain_support: [category, manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: revenue_velocity
-    allowed_screens: [sales_drivers]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [LINE, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [category, manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: margin_velocity
-    allowed_screens: [sales_drivers]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [LINE, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [category, manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: sku_count
-    allowed_screens: [overview, sales_drivers, portfolio_market, stores]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [BULLET, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category, manufacturer, brand, store]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: brand_count
-    allowed_screens: [sales_drivers, portfolio_market, stores]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [network, category, manufacturer, store]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: category_count
-    allowed_screens: [data, sales_drivers]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [network, manufacturer, store]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: category_revenue_share
-    allowed_screens: [portfolio_market]
-    preferred_visualization: BAR
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: category_units_share
-    allowed_screens: [portfolio_market]
-    preferred_visualization: BAR
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: category_margin_share
-    allowed_screens: [portfolio_market]
-    preferred_visualization: BAR
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [manufacturer, brand, sku]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: manufacturer_rank_revenue
-    allowed_screens: [portfolio_market]
-    preferred_visualization: RANKED_BAR
-    alternative_visualizations: [RANKED_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [manufacturer]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: manufacturer_rank_units
-    allowed_screens: [portfolio_market]
-    preferred_visualization: RANKED_BAR
-    alternative_visualizations: [RANKED_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [manufacturer]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: manufacturer_population_count
-    allowed_screens: [portfolio_market]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [PROVENANCE_DRAWER]
-    forbidden_visualizations: [KPI]
-    presentation_priority: AUDIT
-    grain_support: [manufacturer]
-    period_modes: [SINGLE_PERIOD, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: active_sku_count
-    allowed_screens: [portfolio_market]
-    preferred_visualization: BULLET
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category]
-    period_modes: [SINGLE_PERIOD]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: historical_peak_active_sku_count
-    allowed_screens: [portfolio_market]
-    preferred_visualization: BULLET
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [network, category]
-    period_modes: [SINGLE_PERIOD]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: active_sku_change_pct
-    allowed_screens: [portfolio_market]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [BULLET, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [network, category]
-    period_modes: [SINGLE_PERIOD]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: brand_category_delta_gap_pp
-    allowed_screens: [portfolio_market]
-    preferred_visualization: DUMBBELL
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [brand]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: brand_delta_pct
-    allowed_screens: [portfolio_market]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DUMBBELL, DETAIL_TABLE]
-    forbidden_visualizations: [KPI]
-    presentation_priority: DETAIL
-    grain_support: [brand]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: category_delta_pct
-    allowed_screens: [portfolio_market]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DUMBBELL, DETAIL_TABLE]
-    forbidden_visualizations: [KPI]
-    presentation_priority: DETAIL
-    grain_support: [category]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: market_segment_delta_pct
-    allowed_screens: [portfolio_market]
-    preferred_visualization: BAR
-    alternative_visualizations: [COMPARISON_STRIP, DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: decline_speed_ratio
-    allowed_screens: [portfolio_market]
-    preferred_visualization: COMPARISON_STRIP
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [network, category]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: private_label_growth_while_portfolio_declines
-    allowed_screens: [signals]
-    preferred_visualization: SIGNAL_LIST
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [network, category]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: regional_revenue
-    allowed_screens: [stores]
-    preferred_visualization: RANKED_BAR
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [store]
-    period_modes: [SINGLE_PERIOD, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: regional_units
-    allowed_screens: [stores]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [RANKED_BAR]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [store]
-    period_modes: [SINGLE_PERIOD, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: regional_margin_abs
-    allowed_screens: [stores]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [RANKED_BAR]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [store]
-    period_modes: [SINGLE_PERIOD, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: regional_share_revenue
-    allowed_screens: [stores]
-    preferred_visualization: BAR
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [store]
-    period_modes: [SINGLE_PERIOD, DATE_RANGE]
-    readiness_requirement: READY_PROJECTION
-  - concept_id: abc
-    allowed_screens: [portfolio_market]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [PROVENANCE_DRAWER]
-    forbidden_visualizations: [KPI]
-    presentation_priority: AUDIT
-    grain_support: [sku]
-    period_modes: [SINGLE_PERIOD]
-    readiness_requirement: PARTIAL
-  - concept_id: broad_competitors
-    allowed_screens: [portfolio_market]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [RANKED_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [sku]
-    period_modes: [SINGLE_PERIOD]
-    readiness_requirement: PARTIAL
-  - concept_id: direct_peers
-    allowed_screens: [portfolio_market]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [PROVENANCE_DRAWER]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: AUDIT
-    grain_support: [sku]
-    period_modes: [SINGLE_PERIOD]
-    readiness_requirement: BUSINESS_RULE_REQUIRED
-  - concept_id: events_signals
-    allowed_screens: [signals]
-    preferred_visualization: SIGNAL_LIST
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT]
-    presentation_priority: SECONDARY
-    grain_support: [category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE]
-    readiness_requirement: PARTIAL
-  - concept_id: geography
-    allowed_screens: [stores]
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: [RANKED_BAR]
-    forbidden_visualizations: [PIE, DONUT]
-    presentation_priority: DETAIL
-    grain_support: [store]
-    period_modes: [SINGLE_PERIOD, DATE_RANGE]
-    readiness_requirement: PARTIAL
-  - concept_id: contribution_to_delta
-    allowed_screens: [overview]
-    preferred_visualization: RANKED_TABLE
-    alternative_visualizations: [BAR]
-    forbidden_visualizations: [PIE, DONUT, WATERFALL]
-    presentation_priority: SECONDARY
-    grain_support: [category, manufacturer, brand, sku]
-    period_modes: [COMPARE]
-    readiness_requirement: READY_QUERY
-  - concept_id: product_store_filter_intersection
-    allowed_screens: [data]
-    preferred_visualization: PROVENANCE_DRAWER
-    alternative_visualizations: [DETAIL_TABLE]
-    forbidden_visualizations: [KPI, PIE, DONUT, GAUGE, WATERFALL]
-    presentation_priority: AUDIT
-    grain_support: [network, category, manufacturer, brand, sku, store]
-    period_modes: [SINGLE_PERIOD, COMPARE, DATE_RANGE]
-    readiness_requirement: READY_QUERY
-  - concept_id: recommendations
-    allowed_screens: []
-    preferred_visualization: DETAIL_TABLE
-    alternative_visualizations: []
-    forbidden_visualizations: [KPI, SIGNAL_LIST, RANKED_TABLE]
-    presentation_priority: AUDIT
-    grain_support: []
-    period_modes: []
-    readiness_requirement: FUTURE
-
+- concept_id: revenue_vat
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - portfolio_market
+  - stores
+  preferred_visualization: KPI
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  - RANKED_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: PRIMARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: revenue
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - portfolio_market
+  - stores
+  preferred_visualization: KPI
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  - RANKED_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: PRIMARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: units
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - stores
+  preferred_visualization: KPI
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  - RANKED_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: PRIMARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: retailer_margin_abs
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - stores
+  preferred_visualization: KPI
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  - RANKED_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: PRIMARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: retailer_margin_pct
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - stores
+  preferred_visualization: KPI
+  alternative_visualizations:
+  - LINE
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: PRIMARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: weighted_shelf_price_vat
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - stores
+  preferred_visualization: LINE
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: weighted_input_price_vat
+  allowed_screens:
+  - sales_drivers
+  - stores
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: selling_store_count
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - stores
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: active_store_count
+  allowed_screens:
+  - sales_drivers
+  - data
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: distribution
+  allowed_screens:
+  - sales_drivers
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: SECONDARY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: numeric_distribution_store_format
+  allowed_screens:
+  - data
+  preferred_visualization: PROVENANCE_DRAWER
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: AUDIT
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: AUDIT_ONLY
+- concept_id: velocity
+  allowed_screens:
+  - sales_drivers
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: SECONDARY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: revenue_velocity
+  allowed_screens:
+  - sales_drivers
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: margin_velocity
+  allowed_screens:
+  - sales_drivers
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: sku_count
+  allowed_screens:
+  - overview
+  - sales_drivers
+  - portfolio_market
+  - stores
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - BULLET
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: brand_count
+  allowed_screens:
+  - sales_drivers
+  - portfolio_market
+  - stores
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: category_count
+  allowed_screens:
+  - data
+  - sales_drivers
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - network
+  - manufacturer
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: category_revenue_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: category_units_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: category_margin_share
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: manufacturer_rank_revenue
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_BAR
+  alternative_visualizations:
+  - RANKED_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: manufacturer_rank_units
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_BAR
+  alternative_visualizations:
+  - RANKED_TABLE
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: category_rank_revenue
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: category_rank_units
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: category_rank_margin_abs
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: manufacturer_rank_margin_abs
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: brand_rank_revenue
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - brand
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: brand_rank_units
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - brand
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: brand_rank_margin_abs
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - brand
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: sku_rank_revenue
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: sku_rank_units
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: sku_rank_margin_abs
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: manufacturer_population_count
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  presentation_priority: AUDIT
+  grain_support:
+  - manufacturer
+  period_modes:
+  - SINGLE_PERIOD
+  - DATE_RANGE
+  readiness_requirement: READY_PROJECTION
+- concept_id: active_sku_count
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BULLET
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_PROJECTION
+- concept_id: historical_peak_active_sku_count
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BULLET
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_PROJECTION
+- concept_id: active_sku_change_pct
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - BULLET
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: READY_PROJECTION
+- concept_id: brand_category_delta_gap_pp
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: DUMBBELL
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - brand
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: brand_delta_pct
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DUMBBELL
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  presentation_priority: DETAIL
+  grain_support:
+  - brand
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: category_delta_pct
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DUMBBELL
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  presentation_priority: DETAIL
+  grain_support:
+  - category
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: market_segment_delta_pct
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: decline_speed_ratio
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: private_label_growth_while_portfolio_declines
+  allowed_screens:
+  - signals
+  preferred_visualization: SIGNAL_LIST
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_PROJECTION
+- concept_id: regional_revenue
+  allowed_screens:
+  - stores
+  preferred_visualization: RANKED_BAR
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - DATE_RANGE
+  readiness_requirement: READY_PROJECTION
+- concept_id: regional_units
+  allowed_screens:
+  - stores
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - DATE_RANGE
+  readiness_requirement: READY_PROJECTION
+- concept_id: regional_margin_abs
+  allowed_screens:
+  - stores
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - DATE_RANGE
+  readiness_requirement: READY_PROJECTION
+- concept_id: regional_share_revenue
+  allowed_screens:
+  - stores
+  preferred_visualization: BAR
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - DATE_RANGE
+  readiness_requirement: READY_PROJECTION
+- concept_id: abc
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  presentation_priority: AUDIT
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: PARTIAL
+- concept_id: broad_competitors
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: PARTIAL
+- concept_id: direct_peers
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: AUDIT
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  readiness_requirement: BUSINESS_RULE_REQUIRED
+- concept_id: events_signals
+  allowed_screens:
+  - signals
+  preferred_visualization: SIGNAL_LIST
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: PARTIAL
+- concept_id: geography
+  allowed_screens:
+  - stores
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - DATE_RANGE
+  readiness_requirement: PARTIAL
+- concept_id: contribution_to_delta
+  allowed_screens:
+  - overview
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - WATERFALL
+  presentation_priority: SECONDARY
+  grain_support:
+  - category
+  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: product_store_filter_intersection
+  allowed_screens:
+  - data
+  preferred_visualization: PROVENANCE_DRAWER
+  alternative_visualizations:
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  - GAUGE
+  - WATERFALL
+  presentation_priority: AUDIT
+  grain_support:
+  - network
+  - category
+  - manufacturer
+  - brand
+  - sku
+  - store
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  readiness_requirement: READY_QUERY
+- concept_id: recommendations
+  allowed_screens: []
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations: []
+  forbidden_visualizations:
+  - KPI
+  - SIGNAL_LIST
+  - RANKED_TABLE
+  presentation_priority: AUDIT
+  grain_support: []
+  period_modes: []
+  readiness_requirement: FUTURE
 prohibited_patterns:
-  - frontend_business_calculation
-  - one_metric_one_card_wall
-  - decorative_chart
-  - missing_period_zero_fill
-  - average_percentages_or_shares
-  - positive_green_equals_good
-  - fake_recommendations
-  - unsupported_brand_status_badges
-  - duplicate_filter_bars
-  - preserve_bad_ui_because_existing
-
+- frontend_business_calculation
+- one_metric_one_card_wall
+- decorative_chart
+- missing_period_zero_fill
+- average_percentages_or_shares
+- positive_green_equals_good
+- fake_recommendations
+- unsupported_brand_status_badges
+- duplicate_filter_bars
+- preserve_bad_ui_because_existing
 policy_versioning:
   semantic_design_change_requires_version_bump: true
   css_only_implementation_change_requires_version_bump: false

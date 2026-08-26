@@ -135,7 +135,20 @@ def test_metric_inspector_and_delta_semantics_are_governed() -> None:
     assert {"weighted_shelf_price_vat", "distribution", "velocity", "category_revenue_share"}.issubset(
         set(colors["neutral_directional_metrics"])
     )
-    assert colors["rank_directional_metrics"] == ["manufacturer_rank_revenue", "manufacturer_rank_units"]
+    assert {
+        "category_rank_revenue",
+        "category_rank_units",
+        "category_rank_margin_abs",
+        "manufacturer_rank_revenue",
+        "manufacturer_rank_units",
+        "manufacturer_rank_margin_abs",
+        "brand_rank_revenue",
+        "brand_rank_units",
+        "brand_rank_margin_abs",
+        "sku_rank_revenue",
+        "sku_rank_units",
+        "sku_rank_margin_abs",
+    } <= set(colors["rank_directional_metrics"])
     assert colors["rank_rule"] == "lower_rank_number_is_position_improvement"
     assert colors["percentage_metric_delta_format"] == "percentage_points"
 
