@@ -55,19 +55,35 @@ review_lifecycle_evidence_schema:
     - private_rendered_acceptance_status
   optional_reference_report_parity_fields:
     - private_reference_report_registered
+    - private_metric_placement_contract_registered
+    - private_visual_semantics_contract_registered
     - affected_parity_concepts
+    - placement_concepts_reviewed
+    - pre_code_design_table_completed
+    - post_code_parity_table_completed
+    - rendered_private_acceptance_completed
     - parity_access_removed_or_degraded
     - semantics_introduced_or_reinterpreted
     - unresolved_parity_gap_surfaced
     - parity_impact_status
+    - placement_impact_status
   reference_report_parity:
     contract_path: config/public/reference_report_parity_contract.yaml
     applies_to_meaningful_analytical_or_product_semantic_changes: true
     full_reference_audit_required_for_visual_only_changes: false
+    private_metric_placement_contract_required_for_meaningful_ui_parity: true
+    private_visual_semantics_contract_required_after_placement_review: true
+    backend_ready_is_not_visible_parity: true
+    cosmetic_label_change_satisfies_parity: false
     parity_impact_statuses:
       - NOT_APPLICABLE
       - REVIEWED_NO_IMPACT
       - REVIEWED_IMPACT_ACCEPTED
+      - CHANGES_REQUIRED
+    placement_impact_statuses:
+      - NOT_APPLICABLE
+      - REVIEWED_NO_IMPACT
+      - REVIEWED_PLACEMENT_ACCEPTED
       - CHANGES_REQUIRED
   finding_fields:
     - finding_id

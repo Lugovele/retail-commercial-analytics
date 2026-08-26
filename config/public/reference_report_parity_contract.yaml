@@ -42,6 +42,129 @@ reference_report_parity_contract:
     - SOURCE_MAPPING_REQUIRED
     - NOT_APPLICABLE
     - INTENTIONALLY_IMPROVED_PRESENTATION
+  dashboard_metric_placement_governance:
+    applies_when_private_placement_contract_registered: true
+    placement_contract_role: content_origin_primary_home_representation_and_coverage_truth
+    visual_semantics_contract_role: visual_priority_reading_patterns_and_presentation_semantics
+    source_of_truth_hierarchy:
+      - deterministic_business_rules_and_metric_definitions
+      - excel_to_web_metric_placement_contract
+      - excel_visual_semantics_to_web_design_contract
+      - public_visualization_screen_and_presentation_policy
+      - current_ui_implementation
+    legacy_excel_role: evidence_reference_not_executable_calculation_authority
+    origin_taxonomy:
+      - XLSX
+      - XLSX→WEB
+      - WEB-DERIVED
+      - WEB-AUDIT
+      - XLSX-UNRESOLVED
+    implementation_statuses:
+      - VISIBLE
+      - BACKEND_READY
+      - BACKEND_ONLY
+      - PARTIAL
+      - GAP
+      - UNRESOLVED
+      - NOT_APPLICABLE
+    representation_types:
+      - TOP_KPI
+      - TREND
+      - DRIVER_MATRIX
+      - RANKED_DECISION_ROW
+      - CONTRIBUTION_BLOCK
+      - SHARE_TRACK
+      - CUMULATIVE_MARKER
+      - ABC_CHIP
+      - COMPARISON_STRIP
+      - DETAIL_TABLE
+      - AVAILABILITY_GRID
+      - QUALITY_SUMMARY
+      - METRIC_INSPECTOR
+      - LIMITATION_STATE
+    primary_home_rule:
+      exactly_one_primary_home_required: true
+      secondary_context_homes_allowed: true
+      duplicated_metric_without_business_question_disallowed: true
+      screen_roles:
+        overview: result_and_first_diagnosis
+        sales_drivers: commercial_drivers
+        portfolio_market: rank_share_cumulative_abc_and_portfolio_structure
+        stores: physical_network_geography_and_format
+        signals: deterministic_attention_patterns
+        data: quality_coverage_reconciliation_and_provenance
+    parity_completion_rule:
+      backend_only_is_not_visible_parity: true
+      requires:
+        - approved_semantics
+        - backend_or_query_support_where_needed
+        - reachable_primary_home
+        - representation_answers_business_question
+        - relevant_filters_and_scope_work
+        - explicit_limitation_for_unsupported_combinations
+        - inspector_or_provenance_where_complex
+    no_micro_change_parity_rule:
+      label_repetition_satisfies_parity: false
+      heading_only_satisfies_parity: false
+      duplicated_existing_value_satisfies_parity: false
+      tiny_badge_only_satisfies_parity: false
+      explanatory_text_without_analytics_satisfies_parity: false
+    future_ui_lifecycle:
+      pre_code_contract_steps:
+        - read_private_metric_placement_contract
+        - identify_affected_concepts
+        - record_origin_primary_home_representation_status_and_dependencies
+        - read_private_visual_semantics_contract
+        - define_visual_semantics_for_current_reference_delta_rank_share_classification_attention_hierarchy_ownership_quality
+      pre_code_design_table_columns:
+        - Concept
+        - Origin
+        - Primary Home
+        - Current Status
+        - Target Representation
+        - Backend Ready?
+        - Change Needed
+      post_code_parity_table_columns:
+        - Concept
+        - Before
+        - After
+        - Browser Visible?
+        - Correct Scope?
+        - Representation
+        - Remaining Limitation
+      rendered_private_acceptance_required_for_meaningful_ui_parity: true
+      trivial_css_bug_fixes_exempt: true
+    new_web_concept_rule:
+      allowed_origins:
+        - WEB-DERIVED
+        - WEB-AUDIT
+      requires_before_ui:
+        - business_question
+        - formula_authority
+        - primary_home
+        - representation
+        - scope_semantics
+        - provenance
+        - business_review_where_semantic
+      web_derived_may_not_claim_legacy_excel_kpi: true
+    xlsx_unresolved_rule:
+      fail_closed: true
+      allowed:
+        - limitation_state
+        - future_placeholder_when_useful
+      disallowed:
+        - approximate_calculation
+        - guessed_denominator
+        - legacy_label_with_different_backend_metric
+        - silent_substitution
+    visual_contract_integration:
+      outcome_metrics_may_use_outcome_directional_delta: true
+      neutral_metrics_remain_neutral: true
+      rank_number_neutral_movement_separate: true
+      share_neutral_contribution: true
+      abc_classification_not_alarm: true
+      ownership_identity_not_outcome: true
+      data_quality_distinct_from_business_negative: true
   excel_authority_boundary:
     role: evidence_of_business_usage
     not_executable_calculation_authority: true
@@ -96,6 +219,14 @@ reference_report_parity_contract:
       - share
       - abc
       - metric_inspector_definition
+      - dashboard_ui
+      - metric_presentation
+      - metric_placement
+      - excel_parity
+      - overview
+      - stores
+      - signals
+      - data
     visual_only_change_types_exempt_from_full_reference_audit:
       - css_only
       - spacing_only
@@ -105,13 +236,23 @@ reference_report_parity_contract:
   reviewer_responsibilities:
     senior_fmcg_business:
       - commercial_analytical_content_parity
+      - web_added_concepts_distinguished_from_excel_content
     product_information_architecture:
       - every_approved_concept_has_clear_web_home
+      - one_primary_home_per_concept
+      - no_redundant_cross_screen_duplication
+      - correct_representation_type
     bi_ui:
       - improved_presentation_without_lost_analytical_access
+      - representation_answers_business_question
+      - visual_semantics_contract_preserved
     architecture:
       - no_unsafe_architecture_or_duplicate_semantic_truth
+      - no_frontend_calculation_truth
+      - no_parallel_contract_subsystem
     business_rules:
       - excel_evidence_never_substitutes_for_confirmed_calculation_semantics
+      - unresolved_excel_concepts_fail_closed
     change:
       - silent_parity_regression_detection
+      - superficial_status_completion_detection

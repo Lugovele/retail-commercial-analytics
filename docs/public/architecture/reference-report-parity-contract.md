@@ -76,6 +76,65 @@ The standard parity status vocabulary is:
 - `NOT_APPLICABLE`
 - `INTENTIONALLY_IMPROVED_PRESENTATION`
 
+## Dashboard Placement And Visual Contracts
+
+When the private registry declares a metric placement contract and a visual
+semantics contract, meaningful dashboard UI or parity work must consult both
+contracts before implementation.
+
+The durable source-of-truth hierarchy is:
+
+1. deterministic business rules and metric definitions: calculation truth;
+2. private metric placement contract: analytical origin, primary home,
+   representation and coverage truth;
+3. private visual semantics contract: presentation priority and reading
+   semantics;
+4. public visualization, screen and presentation policy: retailer-neutral
+   implementation constraints;
+5. current UI implementation: implementation evidence, not authority.
+
+The placement contract and visual semantics contract have distinct roles. The
+placement contract answers what must exist, where it belongs, how it is
+represented, and whether coverage is visible, backend-only, partial, a gap, or
+unresolved. The visual semantics contract answers how the selected
+representation should communicate current/reference hierarchy, deltas, rank,
+share, classification, ownership, attention, data quality and limitations.
+
+The standard placement origin vocabulary is:
+
+- `XLSX`
+- `XLSX→WEB`
+- `WEB-DERIVED`
+- `WEB-AUDIT`
+- `XLSX-UNRESOLVED`
+
+Web-derived and web-audit concepts must not be described as legacy spreadsheet
+KPIs. Spreadsheet-unresolved concepts fail closed: they may be shown as a calm
+limitation or future placeholder, but must not render approximate calculations,
+guessed denominators, legacy labels over different metrics, or silent
+substitutions.
+
+The standard placement implementation status vocabulary is:
+
+- `VISIBLE`
+- `BACKEND_READY`
+- `BACKEND_ONLY`
+- `PARTIAL`
+- `GAP`
+- `UNRESOLVED`
+- `NOT_APPLICABLE`
+
+Backend readiness is not visible parity. A concept is web-present only when
+semantics are approved, backend or query support exists where needed, the
+concept is reachable in its primary home, the representation communicates the
+business question, relevant filters and scopes work, unsupported combinations
+surface explicit limitations, and Inspector/provenance exists where complexity
+requires it.
+
+Repeating a label, adding a heading, duplicating an already visible value,
+adding a tiny badge, or adding explanatory text without the underlying analytics
+does not count as parity implementation.
+
 ## Change Lifecycle
 
 Meaningful analytical or product-semantic changes must consider registered
@@ -91,6 +150,22 @@ This applies to metric additions or removals, comparison semantics, dashboard
 screen capability, filters and dimensions, Portfolio, Sales Drivers, tables,
 ranking, share, ABC, and Metric Inspector definitions.
 
+For meaningful dashboard UI/parity work, the lifecycle also requires a pre-code
+design table:
+
+```text
+Concept | Origin | Primary Home | Current Status | Target Representation | Backend Ready? | Change Needed
+```
+
+After implementation it requires a rendered acceptance table:
+
+```text
+Concept | Before | After | Browser Visible? | Correct Scope? | Representation | Remaining Limitation
+```
+
+The post-code table must be based on rendered private acceptance when UI parity
+is claimed, not source inspection alone.
+
 Trivial CSS or purely cosmetic work does not require a full workbook re-audit.
 
 ## Reviewer Responsibilities
@@ -102,6 +177,12 @@ access. Architecture review owns safe boundaries and avoiding duplicate semantic
 truth. Business-rules review owns the rule that reference evidence never
 substitutes for confirmed calculation semantics. Change review owns detection of
 silent parity regression.
+
+Product information architecture also owns the one-primary-home rule,
+representation type and avoidance of redundant cross-screen duplication. BI/UI
+review verifies that the visual semantics contract is preserved without
+spreadsheet replication. Change review rejects superficial implementation
+status changes where analytical access is not actually visible.
 
 Private reference reports may supply candidate familiar terminology for later
 explicit alias configuration. This contract does not implement terminology
