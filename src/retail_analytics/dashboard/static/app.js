@@ -132,8 +132,20 @@ const portfolioMarketConcepts = [
   "category_revenue_share",
   "category_units_share",
   "category_margin_share",
+  "entity_revenue_share",
+  "entity_units_share",
+  "entity_margin_share",
+  "entity_cumulative_revenue_share",
+  "entity_cumulative_units_share",
+  "entity_cumulative_margin_share",
   "manufacturer_rank_revenue",
   "manufacturer_rank_units",
+  "manufacturer_abc_revenue",
+  "manufacturer_abc_units",
+  "manufacturer_abc_margin_abs",
+  "sku_abc_revenue",
+  "sku_abc_units",
+  "sku_abc_margin_abs",
   "manufacturer_population_count",
   "active_sku_count",
   "historical_peak_active_sku_count",
@@ -145,7 +157,21 @@ const portfolioMarketConcepts = [
   "broad_competitors"
 ];
 const portfolioShareConcepts = ["category_revenue_share", "category_units_share", "category_margin_share"];
+const portfolioContributionConcepts = ["entity_revenue_share", "entity_units_share", "entity_margin_share"];
+const portfolioCumulativeShareConcepts = [
+  "entity_cumulative_revenue_share",
+  "entity_cumulative_units_share",
+  "entity_cumulative_margin_share"
+];
 const portfolioRankConcepts = ["manufacturer_rank_revenue", "manufacturer_rank_units"];
+const portfolioAbcConcepts = [
+  "manufacturer_abc_revenue",
+  "manufacturer_abc_units",
+  "manufacturer_abc_margin_abs",
+  "sku_abc_revenue",
+  "sku_abc_units",
+  "sku_abc_margin_abs"
+];
 const portfolioActiveSkuConcepts = ["active_sku_count", "historical_peak_active_sku_count", "active_sku_change_pct"];
 const portfolioBrandCategoryConcepts = ["brand_delta_pct", "category_delta_pct", "brand_category_delta_gap_pp"];
 const portfolioMarketUniverseConcepts = ["market_segment_delta_pct"];
@@ -191,8 +217,68 @@ const portfolioPresentationFallback = {
   category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" },
   category_units_share: { display_label: "Доля в штуках категории", format: "percent" },
   category_margin_share: { display_label: "Доля в марже категории", format: "percent" },
+  entity_revenue_share: {
+    display_label: "Доля по обороту",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Доля объекта в выбранном аналитическом рынке по обороту.",
+    decision_use: "Показывает вклад объекта в текущую вселенную без оценки хорошо/плохо.",
+    formula_summary: "значение объекта / значение всего выбранного рынка",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
+  entity_units_share: {
+    display_label: "Доля по штукам",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Доля объекта в выбранном аналитическом рынке по продажам в штуках.",
+    decision_use: "Показывает вклад объекта в текущую вселенную без оценки хорошо/плохо.",
+    formula_summary: "значение объекта / значение всего выбранного рынка",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
+  entity_margin_share: {
+    display_label: "Доля по марже",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Доля объекта в выбранном аналитическом рынке по абсолютной марже.",
+    decision_use: "Показывает вклад объекта в текущую вселенную без оценки хорошо/плохо.",
+    formula_summary: "значение объекта / значение всего выбранного рынка",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
+  entity_cumulative_revenue_share: {
+    display_label: "Накопленная доля по обороту",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Накопленная доля после сортировки объектов по обороту.",
+    decision_use: "Показывает вклад строки в упорядоченной серии для портфельного анализа.",
+    formula_summary: "сумма значений до текущей строки / значение всего выбранного рынка",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
+  entity_cumulative_units_share: {
+    display_label: "Накопленная доля по штукам",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Накопленная доля после сортировки объектов по продажам в штуках.",
+    decision_use: "Показывает вклад строки в упорядоченной серии для портфельного анализа.",
+    formula_summary: "сумма значений до текущей строки / значение всего выбранного рынка",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
+  entity_cumulative_margin_share: {
+    display_label: "Накопленная доля по марже",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Накопленная доля после сортировки объектов по абсолютной марже.",
+    decision_use: "Показывает вклад строки в упорядоченной серии для портфельного анализа.",
+    formula_summary: "сумма значений до текущей строки / значение всего выбранного рынка",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
   manufacturer_rank_revenue: { display_label: "Место производителя по обороту", format: "integer", delta_semantics: "RANK_DIRECTIONAL" },
   manufacturer_rank_units: { display_label: "Место производителя по штукам", format: "integer", delta_semantics: "RANK_DIRECTIONAL" },
+  manufacturer_abc_revenue: { display_label: "ABC производителя по обороту", format: "text", unit_label: "A/B/C", business_meaning: "ABC-класс вклада производителя по обороту внутри одной категории и одного аналитического портфеля.", decision_use: "Разделяет вклад на A/B/C без рекомендаций и оценки качества.", formula_summary: "класс по накопленной доле после ранжирования по выбранному показателю" },
+  manufacturer_abc_units: { display_label: "ABC производителя по штукам", format: "text", unit_label: "A/B/C", business_meaning: "ABC-класс вклада производителя по штукам внутри одной категории и одного аналитического портфеля.", decision_use: "Разделяет вклад на A/B/C без рекомендаций и оценки качества.", formula_summary: "класс по накопленной доле после ранжирования по выбранному показателю" },
+  manufacturer_abc_margin_abs: { display_label: "ABC производителя по абсолютной марже", format: "text", unit_label: "A/B/C", business_meaning: "ABC-класс вклада производителя по абсолютной марже внутри одной категории и одного аналитического портфеля.", decision_use: "Разделяет вклад на A/B/C без рекомендаций и оценки качества.", formula_summary: "класс по накопленной доле после ранжирования по выбранному показателю" },
+  sku_abc_revenue: { display_label: "ABC SKU по обороту", format: "text", unit_label: "A/B/C", business_meaning: "ABC-класс вклада SKU по обороту внутри одной категории и одного аналитического портфеля.", decision_use: "Разделяет вклад на A/B/C без рекомендаций и оценки качества.", formula_summary: "класс по накопленной доле после ранжирования по выбранному показателю" },
+  sku_abc_units: { display_label: "ABC SKU по штукам", format: "text", unit_label: "A/B/C", business_meaning: "ABC-класс вклада SKU по штукам внутри одной категории и одного аналитического портфеля.", decision_use: "Разделяет вклад на A/B/C без рекомендаций и оценки качества.", formula_summary: "класс по накопленной доле после ранжирования по выбранному показателю" },
+  sku_abc_margin_abs: { display_label: "ABC SKU по абсолютной марже", format: "text", unit_label: "A/B/C", business_meaning: "ABC-класс вклада SKU по абсолютной марже внутри одной категории и одного аналитического портфеля.", decision_use: "Разделяет вклад на A/B/C без рекомендаций и оценки качества.", formula_summary: "класс по накопленной доле после ранжирования по выбранному показателю" },
   manufacturer_population_count: { display_label: "Производителей в рейтинге", format: "integer" },
   active_sku_count: { display_label: "Активные SKU", format: "integer" },
   historical_peak_active_sku_count: { display_label: "Пиковое число активных SKU", format: "integer" },
@@ -220,6 +306,12 @@ const neutralDirectionalMetrics = new Set([
   "category_revenue_share",
   "category_units_share",
   "category_margin_share",
+  "entity_revenue_share",
+  "entity_units_share",
+  "entity_margin_share",
+  "entity_cumulative_revenue_share",
+  "entity_cumulative_units_share",
+  "entity_cumulative_margin_share",
   "active_sku_count",
   "historical_peak_active_sku_count",
   "active_sku_change_pct",
@@ -1256,6 +1348,7 @@ function renderKpis() {
     const comparison = comparisonFor(state.summaryResponse, result);
     appendText(card, "small", displayLabel(concept));
     const valueWrap = document.createElement("strong");
+    valueWrap.className = "metric-current";
     valueWrap.appendChild(metricValueButton({
       concept,
       text: formatValue(result.value, entry.format),
@@ -2511,6 +2604,7 @@ function renderPortfolioPosition() {
   const shareStrip = document.getElementById("portfolio-share-strip");
   const rankList = document.getElementById("portfolio-rank-list");
   const shareItems = portfolioItems(portfolioShareConcepts).filter(isDisplayablePortfolioItem);
+  const contributionRows = portfolioContributionRows();
   const rank = portfolioItem("manufacturer_rank_revenue");
   const rows = rank?.rows || [];
   const selectedManufacturer =
@@ -2520,6 +2614,13 @@ function renderPortfolioPosition() {
     shareStrip.replaceChildren(...shareItems.map((item) => portfolioMetricTile(item)));
   } else {
     replaceWithMessage(shareStrip, "empty-state compact", portfolioShareUnavailableText());
+  }
+
+  if (contributionRows.length) {
+    rankList.replaceChildren(...contributionRows.slice(0, 12).map((row) => portfolioDecisionRow(row)));
+    document.getElementById("portfolio-position-context").textContent =
+      `${portfolioDecisionContextText()} · Доля и ABC нейтральны: это вклад в выбранной вселенной, не оценка качества.`;
+    return;
   }
 
   if (rows.length) {
@@ -2562,6 +2663,267 @@ function renderPortfolioPosition() {
   } else {
     replaceWithMessage(rankList, "empty-state compact", portfolioRankUnavailableText(rank));
   }
+}
+
+function portfolioContributionRows() {
+  const abcItem = portfolioItems(portfolioAbcConcepts)
+    .find((item) => item.rows?.length);
+  const shareItem = portfolioItems(portfolioContributionConcepts)
+    .find((item) => item.rows?.length && (!abcItem || portfolioBasisMetric(item) === portfolioBasisMetric(abcItem)));
+  const basis = portfolioBasisMetric(abcItem) || portfolioBasisMetric(shareItem);
+  const cumulativeItem = portfolioItems(portfolioCumulativeShareConcepts)
+    .find((item) => item.rows?.length && portfolioBasisMetric(item) === basis);
+  const rankItem = portfolioItems(portfolioRankConcepts)
+    .find((item) => item.rows?.length && portfolioBasisMetric(item) === basis);
+  const baseItem = abcItem || shareItem || rankItem;
+  if (!baseItem?.rows?.length) return [];
+  const cumulativeByEntity = rowsByEntityId(cumulativeItem?.rows || []);
+  const rankByEntity = rowsByEntityId(rankItem?.rows || []);
+  const shareByEntity = rowsByEntityId(shareItem?.rows || []);
+  const abcByEntity = rowsByEntityId(abcItem?.rows || []);
+  return (baseItem.rows || []).map((baseRow) => {
+    const entityId = baseRow.entity_id;
+    const shareRow = shareByEntity.get(entityId) || baseRow;
+    return {
+      entityId,
+      entityType: baseRow.entity_type || baseRow.share_entity_type || baseItem.grain_id || state.currentGrain,
+      label: entityDisplayLabel(baseRow.entity_type || baseRow.share_entity_type || baseItem.grain_id, entityId) || entityId,
+      valueItem: shareItem || abcItem || rankItem,
+      valueRow: shareRow,
+      shareItem,
+      shareRow,
+      cumulativeItem,
+      cumulativeRow: cumulativeByEntity.get(entityId) || (baseRow.cumulative_share !== undefined ? baseRow : null),
+      rankItem,
+      rankRow: rankByEntity.get(entityId) || (baseRow.rank !== undefined ? baseRow : null),
+      abcItem,
+      abcRow: abcByEntity.get(entityId) || (baseRow.abc_class !== undefined ? baseRow : null)
+    };
+  });
+}
+
+function portfolioDecisionRow(model) {
+  const node = document.createElement("article");
+  const ownershipClass = portfolioOwnershipClass(model.abcRow || model.shareRow);
+  node.className = ["portfolio-decision-row", ownershipClass].filter(Boolean).join(" ");
+
+  const entity = document.createElement("div");
+  entity.className = "portfolio-entity-cell";
+  appendText(entity, "span", grainLabels[model.entityType] || model.entityType || "Объект");
+  const title = document.createElement("strong");
+  title.textContent = model.label;
+  entity.appendChild(title);
+  const ownership = ownershipBadge(model.abcRow || model.shareRow);
+  if (ownership) entity.appendChild(ownership);
+  node.appendChild(entity);
+
+  node.appendChild(portfolioCurrentReferenceCell(model));
+  node.appendChild(portfolioRankCell(model));
+  node.appendChild(portfolioShareCell(model));
+  node.appendChild(portfolioAbcCell(model));
+  return node;
+}
+
+function portfolioCurrentReferenceCell(model) {
+  const cell = document.createElement("div");
+  cell.className = "portfolio-current-cell";
+  appendText(cell, "span", "Текущий вклад");
+  const current = document.createElement("strong");
+  current.className = "metric-current";
+  current.appendChild(metricValueButton({
+    concept: model.valueRow?.basis_metric_id || model.valueItem?.concept_id || model.shareItem?.concept_id || model.abcItem?.concept_id,
+    text: formatValue(model.valueRow?.metric_value, catalogEntry(model.valueRow?.basis_metric_id)?.format || "decimal"),
+    result: portfolioRowResultForInspector(model.valueItem || model.shareItem || model.abcItem, model.valueRow || model.shareRow || model.abcRow),
+    response: state.portfolioMarketResponse,
+    sections: portfolioRowProvenanceSections(model.valueItem || model.abcItem || model.shareItem, model.valueRow || model.abcRow || model.shareRow, model)
+  }));
+  cell.appendChild(current);
+  const reference = document.createElement("small");
+  reference.className = "metric-reference";
+  reference.textContent = portfolioReferenceText(model.valueRow || model.shareRow || model.abcRow);
+  cell.appendChild(reference);
+  return cell;
+}
+
+function portfolioRankCell(model) {
+  const row = model.rankRow || model.shareRow;
+  const cell = document.createElement("div");
+  cell.className = "portfolio-rank-cell";
+  appendText(cell, "span", "Место");
+  const rank = document.createElement("strong");
+  rank.className = "rank-value";
+  rank.appendChild(metricValueButton({
+    concept: model.rankItem?.concept_id || "manufacturer_rank_revenue",
+    text: row.rank ? `№${row.rank}` : "н/д",
+    result: portfolioRowResultForInspector(model.rankItem || model.shareItem, row),
+    response: state.portfolioMarketResponse,
+    sections: portfolioRowProvenanceSections(model.rankItem || model.abcItem || model.shareItem, row, model)
+  }));
+  cell.appendChild(rank);
+  const movement = rankMovementBadge(row);
+  if (movement) cell.appendChild(movement);
+  return cell;
+}
+
+function portfolioShareCell(model) {
+  const shareRow = model.shareRow || model.abcRow || {};
+  const share = Number(shareRow.share);
+  const cumulative = Number(model.cumulativeRow?.cumulative_share ?? shareRow.cumulative_share);
+  const cell = document.createElement("div");
+  cell.className = "portfolio-share-cell";
+  appendText(cell, "span", "Доля / накопл.");
+  const value = document.createElement("strong");
+  value.className = "share-value";
+  value.appendChild(metricValueButton({
+    concept: model.shareItem?.concept_id || model.abcItem?.concept_id,
+    text: formatValue(shareRow.share, "percent"),
+    result: portfolioRowResultForInspector(model.shareItem || model.abcItem, shareRow),
+    response: state.portfolioMarketResponse,
+    sections: portfolioRowProvenanceSections(model.shareItem || model.abcItem, shareRow, model)
+  }));
+  cell.appendChild(value);
+  const track = document.createElement("div");
+  track.className = "share-track";
+  const fill = document.createElement("div");
+  fill.className = "share-fill";
+  fill.style.width = `${Number.isFinite(share) ? Math.max(3, Math.min(100, share * 100)) : 0}%`;
+  const cumulativeMarker = document.createElement("span");
+  cumulativeMarker.className = "cumulative-marker";
+  cumulativeMarker.style.left = `${Number.isFinite(cumulative) ? Math.max(0, Math.min(100, cumulative * 100)) : 0}%`;
+  track.append(fill, cumulativeMarker);
+  cell.appendChild(track);
+  const note = document.createElement("small");
+  note.className = "metric-reference";
+  note.textContent = Number.isFinite(cumulative) ? `накопл. ${formatValue(cumulative, "percent")}` : "накопл. н/д";
+  cell.appendChild(note);
+  return cell;
+}
+
+function portfolioAbcCell(model) {
+  const cell = document.createElement("div");
+  cell.className = "portfolio-abc-cell";
+  appendText(cell, "span", portfolioAbcContextLabel(model.abcItem));
+  const chip = abcChip(model.abcRow?.abc_class);
+  cell.appendChild(chip);
+  const basis = document.createElement("small");
+  basis.className = "metric-reference";
+  basis.textContent = portfolioBasisLabel(model.abcRow?.abc_basis_metric || model.shareRow?.basis_metric_id);
+  cell.appendChild(basis);
+  return cell;
+}
+
+function rowsByEntityId(rows) {
+  return new Map(rows.map((row) => [row.entity_id, row]));
+}
+
+function portfolioBasisMetric(item) {
+  return item?.rows?.[0]?.basis_metric_id || item?.rows?.[0]?.share_basis_metric || item?.rows?.[0]?.abc_basis_metric || "";
+}
+
+function portfolioBasisLabel(metric) {
+  return {
+    revenue: "по обороту",
+    units: "по штукам",
+    retailer_margin_abs: "по абсолютной марже"
+  }[metric] || "по выбранному показателю";
+}
+
+function portfolioReferenceText(row) {
+  if (row.reference_share !== null && row.reference_share !== undefined) {
+    const delta = row.share_delta_pp !== null && row.share_delta_pp !== undefined
+      ? ` · ${formatDeltaValue(row.share_delta_pp, "percentage_points")}`
+      : "";
+    return `сравн. ${formatValue(row.reference_share, "percent")}${delta}`;
+  }
+  return row.universe_metric_value !== null && row.universe_metric_value !== undefined
+    ? `вселенная ${formatValue(row.universe_metric_value, catalogEntry(row.basis_metric_id)?.format || "decimal")}`
+    : "сравнение недоступно";
+}
+
+function rankMovementBadge(row) {
+  const stateValue = row.rank_movement_state || row.movement_state;
+  const movement = row.rank_movement ?? row.rank_delta;
+  if (!stateValue && (movement === null || movement === undefined)) return null;
+  const badge = document.createElement("small");
+  const normalized = stateValue || (movement < 0 ? "IMPROVED" : movement > 0 ? "DECLINED" : "UNCHANGED");
+  badge.className = `rank-movement ${rankMovementClass(normalized)}`;
+  badge.textContent = rankMovementText(normalized, movement);
+  badge.setAttribute("aria-label", `Движение в рейтинге: ${badge.textContent}`);
+  return badge;
+}
+
+function rankMovementClass(stateValue) {
+  return {
+    IMPROVED: "is-improved",
+    DECLINED: "is-declined",
+    UNCHANGED: "is-stable",
+    NEW_IN_RANK_UNIVERSE: "is-new",
+    EXITED_RANK_UNIVERSE: "is-exited"
+  }[stateValue] || "is-stable";
+}
+
+function rankMovementText(stateValue, movement) {
+  if (stateValue === "NEW_IN_RANK_UNIVERSE") return "Новый";
+  if (stateValue === "EXITED_RANK_UNIVERSE") return "Вышел";
+  const amount = Math.abs(Number(movement) || 0);
+  if (stateValue === "IMPROVED") return `↑ ${formatValue(amount, "integer")}`;
+  if (stateValue === "DECLINED") return `↓ ${formatValue(amount, "integer")}`;
+  return "→";
+}
+
+function abcChip(value) {
+  const normalized = ["A", "B", "C"].includes(value) ? value : "н/д";
+  const chip = document.createElement("strong");
+  const classSuffix = normalized === "н/д" ? "na" : String(normalized).toLowerCase();
+  chip.className = `abc-chip abc-chip-${classSuffix}`;
+  chip.textContent = normalized;
+  chip.setAttribute("aria-label", normalized === "н/д" ? "ABC недоступна" : `ABC класс ${normalized}`);
+  return chip;
+}
+
+function portfolioAbcContextLabel(item) {
+  if (!item) return "ABC";
+  return displayLabel(item.concept_id).replace(/^ABC /, "ABC · ");
+}
+
+function ownershipBadge(row) {
+  const label = ownershipLabel(row);
+  if (!label) return null;
+  const badge = document.createElement("small");
+  badge.className = "ownership-badge";
+  badge.textContent = label;
+  return badge;
+}
+
+function ownershipLabel(row) {
+  const ownership = row?.ownership_universe;
+  if (ownership === "OWN_PORTFOLIO_CATEGORY") return `свой портфель · ${privateLabelDisplayName()}`;
+  if (ownership === "COMPETITOR_CATEGORY") return "конкуренты";
+  const scope = row?.private_label_scope;
+  if (scope === "ONLY") return `свой портфель · ${privateLabelDisplayName()}`;
+  if (scope === "EXCLUDE") return "конкуренты";
+  return "";
+}
+
+function portfolioOwnershipClass(row) {
+  const label = ownershipLabel(row);
+  if (label.startsWith("свой")) return "is-own";
+  if (label === "конкуренты") return "is-competitor";
+  return "";
+}
+
+function portfolioDecisionContextText() {
+  const row = portfolioContributionRows()[0];
+  const category = selectedFilterValues().category?.length === 1
+    ? entityDisplayLabel("category", selectedFilterValues().category[0])
+    : "";
+  const ownership = ownershipLabel(row?.abcRow || row?.shareRow) || privateLabelScopeText(document.getElementById("private-label-scope").value);
+  const basis = portfolioBasisLabel(row?.shareRow?.basis_metric_id);
+  return [
+    category ? `Категория: ${category}` : "Категория задана срезом",
+    ownership,
+    `вклад ${basis}`
+  ].filter(Boolean).join(" · ");
 }
 
 function renderPortfolioAssortment() {
@@ -3780,6 +4142,78 @@ function portfolioResultForInspector(item) {
   };
 }
 
+function portfolioRowResultForInspector(item, row) {
+  return {
+    metric_concept: item?.concept_id,
+    entity_id: row?.entity_id,
+    value: row?.abc_class ?? row?.share ?? row?.rank ?? row?.metric_value,
+    provenance: row?.provenance || item?.provenance
+  };
+}
+
+function portfolioRowProvenanceSections(item, row, model) {
+  const concept = item?.concept_id || row?.basis_metric_id || "revenue";
+  const definition = metricInspectorDefinition(concept);
+  const provenance = item?.provenance || {};
+  const scope = provenance.current_analytical_scope || {};
+  const projection = provenance.projection || {};
+  const inputFacts = provenance.input_metric_facts || {};
+  const run = provenance.run_lineage || {};
+  const source = provenance.source_evidence || {};
+  const quality = provenance.quality || {};
+  return [
+    section("Что это за показатель", [
+      ["Показатель", displayLabel(concept)],
+      ["Объект", [grainLabels[row?.entity_type] || row?.entity_type, entityDisplayLabel(row?.entity_type, row?.entity_id) || row?.entity_id].filter(Boolean).join(" / ") || "н/д"],
+      ["Значение", formatPortfolioRowValue(concept, row)],
+      ["Смысл", definition.business_meaning],
+      ["Единица", definition.unit_label],
+      ["Для решения", definition.decision_use]
+    ]),
+    section("Срез", [
+      ["Сеть / источник", [selectedRetailer().display_label, selectedRetailer().source_label].filter(Boolean).join(" / ") || "н/д"],
+      ["Категория", row?.category_scope || row?.category || projection.population_scope?.category || "н/д"],
+      ["Вселенная", row?.universe_type || projection.population_scope?.universe_type || "н/д"],
+      ["Учёт ассортимента", ownershipLabel(row) || privateLabelScopeText(row?.private_label_scope || scope.private_label_scope)]
+    ]),
+    section("Расчёт", [
+      ["Формула", definition.formula_summary],
+      ["Базовый показатель", displayLabel(row?.basis_metric_id || projection.population_scope?.share_basis_metric)],
+      ["Значение объекта", formatValue(row?.metric_value, catalogEntry(row?.basis_metric_id)?.format || "decimal")],
+      ["Значение вселенной", formatValue(row?.universe_metric_value, catalogEntry(row?.basis_metric_id)?.format || "decimal")],
+      ["Доля", formatValue(row?.share, "percent")],
+      ["Накопленная доля", formatValue(model?.cumulativeRow?.cumulative_share ?? row?.cumulative_share, "percent")],
+      ["Место", row?.rank ? `№${row.rank}` : "н/д"],
+      ["ABC", row?.abc_class || model?.abcRow?.abc_class || "н/д"]
+    ]),
+    section("Правила отображения", [
+      ["Семантика изменения", deltaSemanticsText(concept)],
+      ["Ранг", "меньшее место лучше; движение показывается отдельным маркером"],
+      ["ABC", "класс вклада, не оценка качества и не рекомендация"],
+      ["Портфель", ownershipLabel(row) || "общая аналитическая вселенная"]
+    ]),
+    section("Покрытие данных", [
+      ["Доступные периоды", compactList((projection.evaluated_periods || []).map(formatPeriod))],
+      ["Доказательство по источнику", source.status || "н/д"],
+      ["Статусы", compactList(quality.quality_statuses)]
+    ]),
+    section("Технические детали", [
+      ["Концепт", concept],
+      ["Определения показателей", compactList(inputFacts.metric_definition_ids)],
+      ["Запуск анализа", compactList(run.analysis_run_ids)],
+      ["Версия аналитической витрины", run.mart_build_id || "н/д"],
+      ["Ревизия источника", compactList(run.source_revision_ids)]
+    ])
+  ];
+}
+
+function formatPortfolioRowValue(concept, row) {
+  if (concept?.includes("_abc_")) return row?.abc_class || "н/д";
+  if (concept?.includes("_rank_")) return row?.rank ? `№${row.rank}` : "н/д";
+  if (concept?.includes("_share")) return formatValue(row?.share, "percent");
+  return formatValue(row?.metric_value, catalogEntry(row?.basis_metric_id || concept)?.format || "decimal");
+}
+
 function comparisonMarkerPeriods() {
   if (state.periodMode !== "COMPARE") return [];
   const comparison = state.summaryResponse?.comparisons?.[0];
@@ -4446,6 +4880,7 @@ function cellText(cell) {
 
 function formatValue(value, format) {
   if (value === null || value === undefined || Number.isNaN(value)) return "н/д";
+  if (format === "text" || format === "abc_class") return String(value);
   if (format === "currency") return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value);
   if (format === "percent") return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100)}%`;
   if (format === "percentage_points") return `${new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 }).format(value * 100)} п.п.`;

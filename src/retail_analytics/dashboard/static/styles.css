@@ -21,6 +21,25 @@
   --delta-neutral-down: #6c7890;
   --delta-rank-improved: #197a55;
   --delta-rank-declined: #b23a48;
+  --metric-current: #101828;
+  --metric-reference: #728198;
+  --delta-neutral: #637083;
+  --rank-improved: #197a55;
+  --rank-declined: #b23a48;
+  --rank-stable: #728198;
+  --classification-a: #2f7a52;
+  --classification-a-bg: #e8f5ef;
+  --classification-b: #1f6f8b;
+  --classification-b-bg: #e7f2f7;
+  --classification-c: #95515f;
+  --classification-c-bg: #f7ecef;
+  --ownership-own: #8a6500;
+  --ownership-own-bg: #fff5d6;
+  --ownership-competitor: #58677f;
+  --ownership-competitor-bg: #eef3f9;
+  --attention: #a76013;
+  --data-quality: #6b5ca5;
+  --limitation: #637083;
   --chart-primary: #0204fe;
   --chart-reference: #728198;
   --chart-series-2: #1687a7;
@@ -925,6 +944,16 @@ input {
   font-weight: 650;
 }
 
+.metric-current {
+  color: var(--metric-current);
+}
+
+.metric-reference {
+  color: var(--metric-reference);
+  font-size: 11px;
+  font-weight: 450;
+}
+
 .delta-outcome-up,
 .delta-rank-improved {
   color: var(--delta-outcome-up);
@@ -1420,6 +1449,7 @@ th:first-child {
   display: grid;
   gap: var(--space-2);
   margin-top: var(--space-3);
+  overflow-x: auto;
 }
 
 .ranked-bar-row {
@@ -1466,6 +1496,163 @@ th:first-child {
   height: 10px;
   background: var(--brand-menu-blue);
   border-radius: inherit;
+}
+
+.portfolio-decision-row {
+  display: grid;
+  grid-template-columns: minmax(190px, 1.1fr) minmax(140px, 0.75fr) minmax(96px, 0.42fr) minmax(180px, 0.9fr) minmax(110px, 0.45fr);
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 760px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid transparent;
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-decision-row.is-own {
+  border-left-color: var(--ownership-own);
+}
+
+.portfolio-decision-row.is-competitor {
+  border-left-color: var(--ownership-competitor);
+}
+
+.portfolio-entity-cell,
+.portfolio-current-cell,
+.portfolio-rank-cell,
+.portfolio-share-cell,
+.portfolio-abc-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.portfolio-entity-cell > span,
+.portfolio-current-cell > span,
+.portfolio-rank-cell > span,
+.portfolio-share-cell > span,
+.portfolio-abc-cell > span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.portfolio-entity-cell strong,
+.portfolio-current-cell strong,
+.portfolio-rank-cell strong,
+.portfolio-share-cell strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ownership-badge,
+.rank-movement,
+.abc-chip {
+  display: inline-flex;
+  width: fit-content;
+  min-height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.1;
+}
+
+.ownership-badge {
+  color: var(--ownership-own);
+  background: var(--ownership-own-bg);
+  border-color: color-mix(in srgb, var(--ownership-own) 22%, var(--border-default));
+}
+
+.portfolio-decision-row.is-competitor .ownership-badge {
+  color: var(--ownership-competitor);
+  background: var(--ownership-competitor-bg);
+  border-color: color-mix(in srgb, var(--ownership-competitor) 22%, var(--border-default));
+}
+
+.rank-value {
+  color: var(--text-primary);
+}
+
+.rank-movement {
+  background: var(--bg-subtle);
+  color: var(--rank-stable);
+  border-color: var(--border-default);
+}
+
+.rank-movement.is-improved {
+  color: var(--rank-improved);
+  border-color: color-mix(in srgb, var(--rank-improved) 26%, var(--border-default));
+}
+
+.rank-movement.is-declined {
+  color: var(--rank-declined);
+  border-color: color-mix(in srgb, var(--rank-declined) 24%, var(--border-default));
+}
+
+.rank-movement.is-new,
+.rank-movement.is-exited {
+  color: var(--delta-neutral);
+}
+
+.share-track {
+  position: relative;
+  height: 8px;
+  margin-top: 2px;
+  background: color-mix(in srgb, var(--delta-neutral) 12%, var(--bg-surface));
+  border-radius: 999px;
+}
+
+.share-fill {
+  height: 8px;
+  background: color-mix(in srgb, var(--brand-menu-blue) 54%, var(--bg-surface));
+  border-radius: inherit;
+}
+
+.cumulative-marker {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 14px;
+  background: var(--text-secondary);
+  transform: translateX(-1px);
+}
+
+.abc-chip {
+  min-width: 30px;
+  font-size: 12px;
+}
+
+.abc-chip-a {
+  color: var(--classification-a);
+  background: var(--classification-a-bg);
+  border-color: color-mix(in srgb, var(--classification-a) 28%, var(--border-default));
+}
+
+.abc-chip-b {
+  color: var(--classification-b);
+  background: var(--classification-b-bg);
+  border-color: color-mix(in srgb, var(--classification-b) 28%, var(--border-default));
+}
+
+.abc-chip-c {
+  color: var(--classification-c);
+  background: var(--classification-c-bg);
+  border-color: color-mix(in srgb, var(--classification-c) 22%, var(--border-default));
+}
+
+.abc-chip-na {
+  color: var(--text-muted);
+  background: var(--bg-subtle);
+  border-color: var(--border-default);
 }
 
 .store-ranking-bar {
@@ -1923,6 +2110,7 @@ th:first-child {
   .period-fields,
   .diagnosis-grid,
   .ranked-bar-row,
+  .portfolio-decision-row,
   .store-ranking-row,
   .signal-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));

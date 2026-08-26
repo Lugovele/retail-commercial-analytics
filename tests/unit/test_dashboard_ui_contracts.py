@@ -1657,6 +1657,76 @@ def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
     assert "--delta-rank-declined" in styles
 
 
+def test_excel_visual_grammar_tokens_and_portfolio_components_are_semantic() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    for token in (
+        "--metric-current",
+        "--metric-reference",
+        "--delta-neutral",
+        "--classification-a",
+        "--classification-b",
+        "--classification-c",
+        "--ownership-own",
+        "--ownership-competitor",
+        "--attention",
+        "--data-quality",
+        "--limitation",
+    ):
+        assert token in styles
+
+    assert "portfolio-decision-row" in script
+    assert "portfolioContributionRows()" in script
+    assert "portfolioCurrentReferenceCell(model)" in script
+    assert "portfolioRankCell(model)" in script
+    assert "portfolioShareCell(model)" in script
+    assert "portfolioAbcCell(model)" in script
+    assert ".portfolio-decision-row" in styles
+    assert ".share-track" in styles
+    assert ".cumulative-marker" in styles
+
+
+def test_portfolio_visual_grammar_keeps_rank_share_and_abc_distinct() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert "rankMovementBadge(row)" in script
+    assert "rankMovementText(stateValue, movement)" in script
+    assert "↑" in script
+    assert "↓" in script
+    assert "Новый" in script
+    assert "Вышел" in script
+    assert "share_delta_pp" in script
+    assert 'formatDeltaValue(row.share_delta_pp, "percentage_points")' in script
+    assert "abcChip(model.abcRow?.abc_class)" in script
+    assert "ABC недоступна" in script
+    assert "quality" not in script.split("function abcChip", 1)[1].split("function portfolioAbcContextLabel", 1)[0].lower()
+    assert ".abc-chip-c" in styles
+    assert "var(--negative)" not in styles.split(".abc-chip-c", 1)[1].split(".abc-chip-na", 1)[0]
+    assert ".rank-movement.is-improved" in styles
+    assert ".rank-movement.is-declined" in styles
+
+
+def test_current_reference_and_ownership_visual_hierarchy_is_not_color_only() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert 'valueWrap.className = "metric-current"' in script
+    assert 'reference.className = "metric-reference"' in script
+    assert 'metric-current' in styles
+    assert 'metric-reference' in styles
+    assert "ownershipBadge(row)" in script
+    assert "ownershipLabel(row)" in script
+    assert "свой портфель" in script
+    assert "конкуренты" in script
+    assert ".ownership-badge" in styles
+    assert ".portfolio-decision-row.is-own" in styles
+    assert ".portfolio-decision-row.is-competitor" in styles
+    assert "border-left-color: var(--ownership-own)" in styles
+    assert "border-left-color: var(--ownership-competitor)" in styles
+
+
 def test_provenance_drawer_uses_russian_presentation_labels() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")

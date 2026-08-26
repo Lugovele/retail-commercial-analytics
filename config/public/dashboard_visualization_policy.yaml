@@ -1,4 +1,4 @@
-policy_version: dashboard_visualization_policy.v1.2.0
+policy_version: dashboard_visualization_policy.v1.3.0
 purpose: Public-safe authority for dashboard screen design and visualization choices.
 semantic_boundary:
   metric_catalog_role: taxonomy_of_data
@@ -231,6 +231,48 @@ interaction_model:
     - bad
     - cause
     - recommendation
+  business_visual_grammar:
+    reference_report_role: familiar_visual_usage_evidence_not_formula_authority
+    current_reference_hierarchy:
+      current: primary
+      reference: muted_secondary
+      delta: adjacent_unit_specific
+    rank:
+      rank_value: neutral
+      movement: rank_directional_arrow_and_positions
+      lower_rank_number_is_better: true
+    share:
+      directional_semantics: neutral
+      cumulative_share_role: contribution_structure
+      delta_unit: percentage_points
+    abc:
+      role: contribution_classification
+      forbidden_meanings:
+      - quality_score
+      - warning
+      - recommendation
+      - tiering
+      - delisting
+    ownership:
+      role: identity_marker
+      color_only_allowed: false
+      separate_from_outcome_palette: true
+    spreadsheet_translation:
+      preserve:
+      - scan_order
+      - context
+      - current_reference_delta_relationship
+      - rank_movement
+      - contribution_share
+      - abc_recognition
+      - own_vs_competitor_identity
+      replace:
+      - literal_layout
+      - literal_palette
+      - heavy_borders
+      - full_row_fills
+      - hidden_column_interaction
+      - universal_legacy_thresholds
   drilldown:
     breadcrumb_represents: selected_analytical_entity_path_only
     breadcrumb_hidden_without_drilldown: true

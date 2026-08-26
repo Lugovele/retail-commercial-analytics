@@ -1,6 +1,6 @@
 # Dashboard Visualization and Screen Design Policy
 
-Version: `dashboard_visualization_policy.v1.2.0`
+Version: `dashboard_visualization_policy.v1.3.0`
 
 This document is the authoritative public-safe design policy for the
 `Аналитика продаж` dashboard. It governs dashboard information architecture,
@@ -391,6 +391,30 @@ policy:
 Percent-rate deltas, including margin rate and share-point gaps, are displayed
 in percentage points (`п.п.`), not as ordinary relative percent changes.
 
+## Business Visual Grammar
+
+When a registered analytical reference report provides familiar visual usage
+evidence, the dashboard may translate the visual semantics into web components.
+This does not make the reference report a formula or calculation authority.
+
+Required translation rules:
+
+- current values are visually primary;
+- reference values are secondary and muted;
+- deltas are adjacent and unit-specific;
+- rank values are neutral, while rank movement uses rank-directional arrows;
+- shares and cumulative shares are neutral contribution signals;
+- ABC is a contribution classification, not a quality score, warning,
+  recommendation, tier, or delisting signal;
+- own/focal portfolio identity uses a dedicated marker or badge, independent of
+  outcome colors;
+- totals and hierarchy use typography, spacing, separators, and sticky context
+  rather than heavy spreadsheet borders or full-row fills.
+
+Do not copy spreadsheet layout, literal colors, hidden-column interaction,
+legacy universal thresholds, or broad red/green highlighting. Color is semantic,
+not decorative, and no semantic distinction may rely on color alone.
+
 ## Metric Inspector
 
 Every important numeric value is an inspection affordance. The number itself,
@@ -532,7 +556,7 @@ Tests are required evidence, not a substitute for review.
 
 ## Versioning
 
-The current policy version is `dashboard_visualization_policy.v1.2.0`.
+The current policy version is `dashboard_visualization_policy.v1.3.0`.
 
 Semantic design changes require a version bump. CSS-only implementation changes
 do not require a policy version bump unless they alter screen hierarchy,
