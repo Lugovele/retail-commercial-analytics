@@ -40,6 +40,7 @@
   --attention: #a76013;
   --data-quality: #6b5ca5;
   --limitation: #637083;
+  --application-error: #b23a48;
   --chart-primary: #0204fe;
   --chart-reference: #728198;
   --chart-series-2: #1687a7;
@@ -848,6 +849,12 @@ input {
   line-height: 1.55;
 }
 
+.overview-brief {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
 .kpi-grid {
   display: grid;
   min-width: 0;
@@ -942,6 +949,50 @@ input {
 
 .metric-delta-button {
   font-weight: 650;
+}
+
+.metric-comparison-cell {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.metric-comparison-cell > span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.1;
+}
+
+.metric-comparison-cell strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.metric-comparison-cell--reference strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.metric-comparison-cell--delta strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.metric-table-cell--reference {
+  color: var(--metric-reference);
+}
+
+.metric-table-cell--neutral,
+.metric-table-cell--delta {
+  font-variant-numeric: tabular-nums;
+}
+
+.limitation-state-cell {
+  color: var(--limitation);
+  background: color-mix(in srgb, var(--limitation) 5%, var(--bg-surface));
 }
 
 .metric-current {
@@ -1354,15 +1405,16 @@ th:first-child {
 }
 
 .signal-row.commercial {
-  border-left-color: var(--brand-menu-blue);
+  border-left-color: var(--attention);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--attention) 10%, transparent);
 }
 
 .signal-row.pattern {
-  border-left-color: var(--warning);
+  border-left-color: var(--brand-menu-blue);
 }
 
 .signal-row.quality {
-  border-left-color: var(--neutral);
+  border-left-color: var(--data-quality);
 }
 
 .signal-priority,
@@ -1410,6 +1462,7 @@ th:first-child {
   padding: var(--space-3);
   background: var(--bg-subtle);
   border: 1px solid var(--border-default);
+  border-left: 3px solid var(--limitation);
   border-radius: var(--radius-sm);
 }
 
@@ -1743,6 +1796,12 @@ th:first-child {
   text-align: right;
 }
 
+.store-value-stack {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+}
+
 .store-kpi-strip {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1900,14 +1959,24 @@ th:first-child {
   font-weight: 650;
 }
 
-.quality-warning {
+.quality-warning,
+.quality-clear {
   grid-column: 1 / -1;
   margin: 0;
   padding: var(--space-3);
-  color: var(--warning);
-  border: 1px solid color-mix(in srgb, var(--warning) 36%, var(--border-default));
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, var(--warning) 8%, var(--bg-surface));
+}
+
+.quality-warning {
+  color: var(--data-quality);
+  border: 1px solid color-mix(in srgb, var(--data-quality) 36%, var(--border-default));
+  background: color-mix(in srgb, var(--data-quality) 8%, var(--bg-surface));
+}
+
+.quality-clear {
+  color: var(--text-secondary);
+  border: 1px solid color-mix(in srgb, var(--data-quality) 18%, var(--border-default));
+  background: color-mix(in srgb, var(--data-quality) 4%, var(--bg-surface));
 }
 
 .data-audit-panel {
@@ -1939,7 +2008,13 @@ th:first-child {
 }
 
 .error-state {
-  color: var(--negative);
+  color: var(--application-error);
+  border: 1px solid color-mix(in srgb, var(--application-error) 24%, var(--border-default));
+}
+
+.limitation-state {
+  color: var(--limitation);
+  border: 1px solid color-mix(in srgb, var(--limitation) 22%, var(--border-default));
 }
 
 .empty-state.compact {

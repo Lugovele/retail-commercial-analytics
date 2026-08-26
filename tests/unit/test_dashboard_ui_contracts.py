@@ -1810,6 +1810,85 @@ def test_current_reference_and_ownership_visual_hierarchy_is_not_color_only() ->
     assert "border-left-color: var(--ownership-competitor)" in styles
 
 
+def test_cross_screen_visual_grammar_uses_shared_current_reference_delta_cells() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert "overview-brief" in html
+    assert "Что произошло, где изменился результат" in html
+    assert "function metricComparisonCell" in script
+    assert 'metric-comparison-cell--${role}' in script
+    assert 'role === "reference" ? "metric-reference"' in script
+    assert 'role === "delta" ? "metric-delta"' in script
+    assert "metric-table-cell--reference" in styles
+    assert "metric-table-cell--delta" in styles
+    assert "metric-comparison-cell--reference" in styles
+
+
+def test_sales_drivers_and_stores_render_visual_hierarchy_without_frontend_calculation() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    sales_matrix = script.split("function renderSalesDriverMatrix()", 1)[1].split("function salesDriverMatrixHeaders()", 1)[0]
+    assert 'cell.role === "reference"' in sales_matrix
+    assert 'cell.role === "delta"' in sales_matrix
+    assert "metricComparisonCell({" in sales_matrix
+    assert "frontend" not in sales_matrix.lower()
+
+    stores = script.split("function renderStoreRanking()", 1)[1].split("function storeRowsByMetric", 1)[0]
+    assert "storeRankingValueNode(row.result" in stores
+    assert "function storeRankingValueNode" in stores
+    assert 'label: "Сейчас"' in stores
+    assert 'label: "Δ"' in stores
+    assert "store-value-stack" in styles
+
+
+def test_signal_quality_limitation_and_error_roles_are_distinct() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert "--attention" in styles
+    assert "--data-quality" in styles
+    assert "--limitation" in styles
+    assert "--application-error" in styles
+    assert ".signal-row.commercial" in styles
+    assert "border-left-color: var(--attention)" in styles
+    assert ".signal-row.quality" in styles
+    assert "border-left-color: var(--data-quality)" in styles
+    assert "signal-limitation limitation-state" in script
+    assert ".limitation-state" in styles
+    assert ".error-state" in styles
+    assert "var(--application-error)" in styles
+
+
+def test_data_quality_visual_role_is_not_business_negative() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    data_quality = script.split("function renderDataQuality()", 1)[1].split("function renderDataRows()", 1)[0]
+    assert "quality-list has-warning" in data_quality
+    assert "quality-warning data-quality-state" in data_quality
+    assert "quality-clear data-quality-state" in data_quality
+    quality_styles = styles.split(".quality-warning", 1)[1].split(".data-audit-panel", 1)[0]
+    assert "var(--data-quality)" in quality_styles
+    assert "var(--negative)" not in quality_styles
+
+
+def test_portfolio_surface_is_preserved_while_cross_screen_classes_are_shared() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert "portfolioContributionRows()" in script
+    assert "portfolioDecisionRow(row)" in script
+    assert "portfolioAnalysisGrain()" in script
+    assert "selectedPortfolioExecutionFilters(grain)" in script
+    assert "user_entity_filters: selectedFilterValuesForPortfolio()" in script
+    assert "entity_filters: selectedPortfolioExecutionFilters(grain)" in script
+    assert ".portfolio-decision-row.is-selected" in styles
+    assert "metric-comparison-cell" in styles
+
+
 def test_provenance_drawer_uses_russian_presentation_labels() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")

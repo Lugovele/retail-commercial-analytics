@@ -799,6 +799,25 @@ function metricDeltaButton({ concept, text, value, result = null, response = nul
   return button;
 }
 
+function metricComparisonCell({ concept, label, text, result = null, response = null, role = "current", deltaValue = null }) {
+  const wrap = document.createElement("div");
+  wrap.className = `metric-comparison-cell metric-comparison-cell--${role}`;
+  if (label) appendText(wrap, "span", label);
+  const value = document.createElement("strong");
+  value.className = role === "reference" ? "metric-reference" : role === "delta" ? "metric-delta" : "metric-current";
+  if (result) {
+    value.appendChild(
+      role === "delta"
+        ? metricDeltaButton({ concept, text, value: deltaValue, result, response })
+        : metricValueButton({ concept, text, result, response })
+    );
+  } else {
+    value.textContent = text;
+  }
+  wrap.appendChild(value);
+  return wrap;
+}
+
 function resetDataPagination() {
   state.dataPageOffset = 0;
 }
@@ -1693,20 +1712,25 @@ function renderSalesDriverMatrix() {
     tr.appendChild(metricCell);
     salesDriverMetricCells(result, entry).forEach((cell) => {
       const td = document.createElement("td");
+      if (cell.role) td.className = `metric-table-cell metric-table-cell--${cell.role}`;
       if (cell.inspectable) {
-        const buttonOptions = {
+        const label = cell.role === "reference"
+          ? "Период сравнения"
+          : cell.role === "delta"
+            ? "Изменение"
+            : "Текущий период";
+        td.appendChild(metricComparisonCell({
           concept,
+          label,
           text: cell.text,
           result,
-          response: state.salesDriversResponse
-        };
-        td.appendChild(
-          cell.isDelta
-            ? metricDeltaButton({ ...buttonOptions, value: cell.deltaValue })
-            : metricValueButton(buttonOptions)
-        );
+          response: state.salesDriversResponse,
+          role: cell.role || "current",
+          deltaValue: cell.deltaValue
+        }));
       } else {
         td.textContent = cell.text;
+        if (cell.text.includes("Недоступно") || cell.text.includes("только")) td.classList.add("limitation-state-cell");
       }
       tr.appendChild(td);
     });
@@ -1757,8 +1781,8 @@ function salesDriverRows() {
 
 function salesDriverMetricCells(result, entry) {
   const staticCell = (text) => ({ text, inspectable: false });
-  const valueCell = (text) => ({ text, inspectable: true, isDelta: false });
-  const deltaCell = (text, deltaValue) => ({ text, inspectable: true, isDelta: true, deltaValue });
+  const valueCell = (text, role = "current") => ({ text, inspectable: true, isDelta: false, role });
+  const deltaCell = (text, deltaValue) => ({ text, inspectable: true, isDelta: true, deltaValue, role: "delta" });
   if (!result || !entry) {
     return state.periodMode === "COMPARE"
       ? [staticCell("Недоступно"), staticCell("Недоступно"), staticCell("Недоступно")]
@@ -1780,8 +1804,8 @@ function salesDriverMetricCells(result, entry) {
   }
   const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
   return [
-    valueCell(formatValue(comparison.current_value, entry.format)),
-    valueCell(formatValue(comparison.comparison_value, entry.format)),
+    valueCell(formatValue(comparison.current_value, entry.format), "current"),
+    valueCell(formatValue(comparison.comparison_value, entry.format), "reference"),
     deltaCell(`${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`, comparison.delta)
   ];
 }
@@ -2052,12 +2076,12 @@ function renderSignalLimitations() {
   const target = document.getElementById("signals-limitations");
   const limitations = signalLimitations();
   if (!limitations.length) {
-    replaceWithMessage(target, "empty-state compact", "Ограничений доступности для выбранного среза нет.");
+    replaceWithMessage(target, "empty-state compact limitation-state", "Ограничений доступности для выбранного среза нет.");
     return;
   }
   target.replaceChildren(...limitations.map((item) => {
     const node = document.createElement("article");
-    node.className = "signal-limitation";
+    node.className = "signal-limitation limitation-state";
     appendText(node, "strong", "Ограничение доступности");
     appendText(node, "span", item.message || signalLimitationText(item.code || item));
     return node;
@@ -2205,7 +2229,7 @@ function renderDataQuality() {
     ["Проверки", quality.warnings?.length ? `${quality.warnings.length} требует внимания` : "доступные проверки без предупреждений"]
   ];
   const list = document.createElement("div");
-  list.className = "quality-list";
+  list.className = quality.warnings?.length ? "quality-list has-warning" : "quality-list is-clear";
   items.forEach(([label, value]) => {
     const item = document.createElement("div");
     appendText(item, "span", label);
@@ -2214,9 +2238,14 @@ function renderDataQuality() {
   });
   if (quality.warnings?.length) {
     const warning = document.createElement("p");
-    warning.className = "quality-warning";
+    warning.className = "quality-warning data-quality-state";
     warning.textContent = "Есть предупреждения качества. Подробности доступны в аудите расчёта.";
     list.appendChild(warning);
+  } else {
+    const clear = document.createElement("p");
+    clear.className = "quality-clear data-quality-state";
+    clear.textContent = "Доступные проверки качества не нашли предупреждений для текущей витрины.";
+    list.appendChild(clear);
   }
   target.replaceChildren(list);
 }
@@ -2447,12 +2476,7 @@ function renderStoreRanking() {
     barWrap.appendChild(bar);
     node.appendChild(barWrap);
     const valueWrap = document.createElement("strong");
-    valueWrap.appendChild(metricValueButton({
-      concept: state.storesMetric,
-      text: storeMetricWithDelta(row.result, catalogEntry(state.storesMetric), state.storesResponse),
-      result: row.result,
-      response: state.storesResponse
-    }));
+    valueWrap.appendChild(storeRankingValueNode(row.result, catalogEntry(state.storesMetric), state.storesResponse));
     node.appendChild(valueWrap);
     return node;
   }));
@@ -2535,17 +2559,42 @@ function storeKpiCard(result) {
   const node = document.createElement("article");
   node.className = "store-kpi";
   appendText(node, "span", displayLabel(result.metric_concept));
-  const valueWrap = document.createElement("strong");
-  valueWrap.appendChild(metricValueButton({
-    concept: result.metric_concept,
-    text: storeMetricWithDelta(result, entry, state.storesResponse),
-    result,
-    response: state.storesResponse
-  }));
-  node.appendChild(valueWrap);
+  node.appendChild(storeRankingValueNode(result, entry, state.storesResponse));
   const limitation = limitationText(result);
   if (limitation) appendText(node, "small", limitation);
   return node;
+}
+
+function storeRankingValueNode(result, entry, response) {
+  const comparison = comparisonFor(response, result);
+  if (state.periodMode === "COMPARE" && comparison) {
+    const wrap = document.createElement("span");
+    wrap.className = "store-value-stack";
+    wrap.appendChild(metricComparisonCell({
+      concept: result.metric_concept,
+      label: "Сейчас",
+      text: formatValue(comparison.current_value, entry.format),
+      result,
+      response,
+      role: "current"
+    }));
+    wrap.appendChild(metricComparisonCell({
+      concept: result.metric_concept,
+      label: "Δ",
+      text: formatDeltaValue(comparison.delta, deltaFormatFor(entry.format)),
+      result,
+      response,
+      role: "delta",
+      deltaValue: comparison.delta
+    }));
+    return wrap;
+  }
+  return metricValueButton({
+    concept: result.metric_concept,
+    text: storeMetricWithDelta(result, entry, response),
+    result,
+    response
+  });
 }
 
 function storeRowsByMetric(metricConcept) {
@@ -2579,7 +2628,8 @@ function storeTableInspectableCell(concept, entityId) {
     concept,
     result,
     response: state.storesResponse,
-    inspectable: Boolean(result && entry && !result.limitations?.includes("range_aggregation_period_only"))
+    inspectable: Boolean(result && entry && !result.limitations?.includes("range_aggregation_period_only")),
+    role: "current"
   };
 }
 
@@ -2602,7 +2652,8 @@ function storeTableDeltaCell(concept, entityId) {
     result,
     response: state.storesResponse,
     inspectable: Boolean(result && comparison),
-    deltaValue: comparison?.delta
+    deltaValue: comparison?.delta,
+    role: "delta"
   };
 }
 
@@ -3195,7 +3246,8 @@ function renderOverviewTable() {
             result,
             response: state.tableResponse,
             inspectable: true,
-            deltaValue: comparisonFor(state.tableResponse, result)?.delta
+            deltaValue: comparisonFor(state.tableResponse, result)?.delta,
+            role: comparisonFor(state.tableResponse, result)?.delta === undefined ? "current" : "delta"
           }
         : "Недоступно";
     });
@@ -3252,17 +3304,19 @@ function renderContributionTable(table) {
     entityCell.appendChild(entityButton);
     tr.appendChild(entityCell);
     [
-      { text: formatValue(row.current_value, metric?.format || "decimal"), value: row.current_value, type: "value" },
-      { text: formatValue(row.reference_value, metric?.format || "decimal"), value: row.reference_value, type: "value" },
-      { text: formatDeltaValue(row.delta, deltaFormatFor(metric?.format || "decimal")), value: row.delta, type: "delta" },
+      { text: formatValue(row.current_value, metric?.format || "decimal"), value: row.current_value, type: "value", role: "current" },
+      { text: formatValue(row.reference_value, metric?.format || "decimal"), value: row.reference_value, type: "value", role: "reference" },
+      { text: formatDeltaValue(row.delta, deltaFormatFor(metric?.format || "decimal")), value: row.delta, type: "delta", role: "delta" },
       {
         text: row.contribution_share === null ? "н/д" : formatValue(row.contribution_share, "percent"),
         value: row.contribution_share,
-        type: "contribution"
+        type: "contribution",
+        role: "neutral"
       }
     ].forEach((cell) => {
       const rowSections = contributionProvenanceSections(row.provenance || {}, row);
       const td = document.createElement("td");
+      td.className = `metric-table-cell metric-table-cell--${cell.role}`;
       if (cell.text === "н/д") {
         td.textContent = cell.text;
       } else if (cell.type === "delta") {
@@ -4999,6 +5053,9 @@ function renderRows(table, headers, rows, options = {}) {
     const tr = document.createElement("tr");
     row.cells.forEach((cell, index) => {
       const td = document.createElement("td");
+      if (cell && typeof cell === "object" && cell.role) {
+        td.className = `metric-table-cell metric-table-cell--${cell.role}`;
+      }
       if (index === 0 && options.onFirstCellClick) {
         const button = document.createElement("button");
         button.type = "button";
@@ -5007,19 +5064,20 @@ function renderRows(table, headers, rows, options = {}) {
         button.addEventListener("click", () => options.onFirstCellClick(cell, row.meta));
         td.appendChild(button);
       } else if (cell && typeof cell === "object" && cell.inspectable) {
-        const buttonOptions = {
+        td.appendChild(metricComparisonCell({
           concept: cell.concept,
+          label: cell.role === "delta" ? "Δ" : "",
           text: cell.text,
           result: cell.result,
-          response: cell.response
-        };
-        td.appendChild(
-          cell.deltaValue === null || cell.deltaValue === undefined
-            ? metricValueButton(buttonOptions)
-            : metricDeltaButton({ ...buttonOptions, value: cell.deltaValue })
-        );
+          response: cell.response,
+          role: cell.role || (cell.deltaValue === null || cell.deltaValue === undefined ? "current" : "delta"),
+          deltaValue: cell.deltaValue
+        }));
       } else {
         td.textContent = cellText(cell);
+        if (td.textContent.includes("Недоступно") || td.textContent.includes("только")) {
+          td.classList.add("limitation-state-cell");
+        }
       }
       tr.appendChild(td);
     });
@@ -5032,7 +5090,7 @@ function renderMessageRow(table, message) {
   const tbody = document.createElement("tbody");
   const tr = document.createElement("tr");
   const td = document.createElement("td");
-  td.className = "empty-state";
+  td.className = "empty-state table-message-cell";
   td.textContent = message;
   tr.appendChild(td);
   tbody.appendChild(tr);
