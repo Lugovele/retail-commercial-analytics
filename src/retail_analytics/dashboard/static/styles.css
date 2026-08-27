@@ -1352,6 +1352,32 @@ th:first-child {
   min-width: 760px;
 }
 
+.local-control-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0 0 var(--space-2);
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.local-control-row label {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.local-control-row select {
+  min-height: 32px;
+  max-width: 220px;
+  padding: 4px 28px 4px 10px;
+  font-size: 12px;
+}
+
+.local-control-row span {
+  color: var(--text-muted);
+}
+
 .stores-table-wrap table {
   min-width: 860px;
 }

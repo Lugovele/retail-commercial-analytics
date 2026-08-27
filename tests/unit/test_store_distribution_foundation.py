@@ -62,6 +62,19 @@ def test_store_format_sku_distribution_uses_format_denominator_not_category_rows
     assert response.limitations == ()
 
 
+def test_store_format_distribution_accepts_separate_store_universe_lineage(tmp_path) -> None:
+    service = _service(tmp_path, separate_store_universe_lineage=True)
+
+    response = service.query(_distribution_request("sku", ("SKU_A",), entity_filters={"store_format": ("format_a",)}))
+
+    result = _single_result(response)
+    assert result.numerator_value == 1.0
+    assert result.denominator_value == 3.0
+    assert result.value == pytest.approx(1.0 / 3.0)
+    assert result.provenance is not None
+    assert result.provenance.payload["source_evidence"]["denominator_universe_type"] == "monthly_store_format_universe"
+
+
 def test_store_format_distribution_returns_zero_for_observed_no_sales_entity(tmp_path) -> None:
     service = _service(tmp_path)
 
@@ -243,7 +256,7 @@ def test_store_format_distribution_metric_definition_ids_fail_closed(tmp_path) -
     }
 
 
-def _service(tmp_path) -> DashboardMartQueryService:
+def _service(tmp_path, *, separate_store_universe_lineage: bool = False) -> DashboardMartQueryService:
     metric_facts_path = tmp_path / "metric_facts.parquet"
     product_store_path = tmp_path / "product_store.parquet"
     store_universe_path = tmp_path / "store_universe.parquet"
@@ -266,16 +279,20 @@ def _service(tmp_path) -> DashboardMartQueryService:
         ),
         product_store_path,
     )
-    write_monthly_store_universe(
-        build_monthly_store_universe(
-            source,
-            build_metadata=build,
-            source_revision_id="revision_a",
-            store_alias_mapping_version="alias_hash_a",
-            created_at=_created_at(),
-        ),
-        store_universe_path,
+    store_universe = build_monthly_store_universe(
+        source,
+        build_metadata=build,
+        source_revision_id="revision_a",
+        store_alias_mapping_version="alias_hash_a",
+        created_at=_created_at(),
     )
+    if separate_store_universe_lineage:
+        store_universe = store_universe.with_columns(
+            pl.lit("store_universe_build_a").alias("mart_build_id"),
+            pl.lit("store_universe_revision_a").alias("source_revision_id"),
+            pl.col("period_start").dt.strftime("%Y-%m").alias("business_period_id"),
+        )
+    write_monthly_store_universe(store_universe, store_universe_path)
     return DashboardMartQueryService(
         metric_facts_path,
         mart_builds=(build,),

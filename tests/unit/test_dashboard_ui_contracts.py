@@ -256,8 +256,10 @@ def test_private_runtime_loads_configured_mart_without_synthetic_fallback(tmp_pa
     ledger_path = tmp_path / "mart_source_ledger" / "ledger.parquet"
     private_catalog_path = tmp_path / "private_dashboard_metric_catalog.yaml"
     config_path = tmp_path / "dashboard_runtime.yaml"
+    store_universe_path = tmp_path / "store_universe.parquet"
     write_mart_build_metadata(demo.query_service.mart_builds, builds_path)
     write_source_ledger(demo.query_service.source_ledger, ledger_path)
+    store_universe_path.write_bytes(b"placeholder")
     private_catalog_path.write_text(
         """
 overrides:
@@ -283,6 +285,7 @@ mode: PRIVATE
 metric_facts_path: {(tmp_path / "demo" / "synthetic_metric_facts.parquet").as_posix()}
 mart_builds_path: {builds_path.as_posix()}
 source_ledger_path: {ledger_path.as_posix()}
+store_universe_path: {store_universe_path.as_posix()}
 public_metric_catalog_path: {Path("config/public/dashboard_metric_catalog.yaml").resolve().as_posix()}
 private_metric_catalog_path: {private_catalog_path.as_posix()}
 retailers:
@@ -306,7 +309,9 @@ retailers:
     assert metadata["retailers"][0]["default_mart_build_id"] == "build_dashboard_synthetic"
     assert metadata["signal_feed_configured"] is False
     assert metadata["source_like_rows_configured"] is False
+    assert metadata["store_universe_configured"] is True
     assert runtime.query_service.metric_facts_path == tmp_path / "demo" / "synthetic_metric_facts.parquet"
+    assert runtime.query_service.store_universe_path == store_universe_path
     assert len(runtime.catalog) == 1
 
 
@@ -766,9 +771,9 @@ def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
     assert 'const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
     assert "state.salesDriversTableResponse = salesDriversTableResponse;" in script
     assert "const summaryGrain = salesDriverSummaryGrain();" in script
-    assert "buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), concepts)" in script
+    assert "buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), salesDriverBackendConcepts(summaryGrain))" in script
     assert "buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts())" in script
-    assert "comparisonFor(state.salesDriversResponse, result)" in script
+    assert "comparisonFor(response, result)" in script
     assert '["READY", "PARTIAL"].includes(entry.availability_status)' in script
     assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "!salesDriverGrainSupport[concept]?.includes(grain)" in script
@@ -785,13 +790,13 @@ def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fa
     script = html_or_script("app.js")
 
     buckets = script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
-    assert '"Присутствие", concepts: ["selling_store_count", "active_store_count", "distribution"]' in buckets
+    assert '"Присутствие", concepts: ["selling_store_count", "active_store_count", "distribution", "numeric_distribution_store_format"]' in buckets
     assert '"Скорость", concepts: ["velocity", "revenue_velocity", "margin_velocity"]' in buckets
 
     row_builder = script.split("function salesDriverRows()", 1)[1].split("function salesDriverMetricCells", 1)[0]
     assert ".filter((concept) => salesDriverDisplayEntry(concept))" in row_builder
     matrix_renderer = script.split("function renderSalesDriverMatrix()", 1)[1].split("function salesDriverMatrixHeaders()", 1)[0]
-    assert "if (result && salesDriverMetricEntry(concept))" in matrix_renderer
+    assert "if (result && salesDriverMetricEntry(concept) && concept !== storeFormatDistributionConcept)" in matrix_renderer
     assert 'metricCell.className = "limitation-state-cell";' in matrix_renderer
     summary_grain = script.split("function salesDriverSummaryGrain()", 1)[1].split("function entityIdsForSalesDriverSummary", 1)[0]
     assert 'const focalOrder = ["sku", "brand", "manufacturer", "category"];' in summary_grain
@@ -803,19 +808,49 @@ def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fa
 
     support = script.split("const salesDriverGrainSupport = ", 1)[1].split("};", 1)[0]
     assert 'active_store_count: ["network", "category", "manufacturer", "brand", "sku"]' in support
-    for concept in ("distribution", "velocity", "revenue_velocity", "margin_velocity"):
+    for concept in ("distribution", "numeric_distribution_store_format", "velocity", "revenue_velocity", "margin_velocity"):
         support_line = next(line for line in support.splitlines() if line.strip().startswith(f"{concept}:"))
         assert '"store"' not in support_line
 
     for concept in (
         "active_store_count",
         "distribution",
+        "numeric_distribution_store_format",
         "velocity",
         "revenue_velocity",
         "margin_velocity",
     ):
         neutral_line = script.split("const neutralDirectionalMetrics = new Set([", 1)[1].split("]);", 1)[0]
         assert f'"{concept}"' in neutral_line
+
+
+def test_sales_drivers_store_format_distribution_is_user_visible_and_backend_owned() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    assert 'id="sales-driver-store-format"' in html
+    assert "Дистрибуция сети показана отдельно" in html
+    assert 'const storeFormatDistributionConcept = "numeric_distribution_store_format";' in script
+    assert "buildSalesDriverStoreFormatOptionsPayload()" in script
+    assert 'postJson("/api/dashboard/geography", buildSalesDriverStoreFormatOptionsPayload())' in script
+    assert "buildSalesDriverStoreFormatDistributionPayload(summaryGrain, resolvedStoreFormat)" in script
+    assert 'postJson("/api/dashboard/query", formatDistributionPayload)' in script
+
+    backend_concepts = script.split("function salesDriverBackendConcepts", 1)[1].split("function storeConcepts", 1)[0]
+    assert "concept !== storeFormatDistributionConcept" in backend_concepts
+    distribution_payload = script.split("function buildSalesDriverStoreFormatDistributionPayload", 1)[1].split("function storeFormatOptionsFromResponse", 1)[0]
+    assert "[storeFormat]" in distribution_payload
+    assert "[storeFormatDistributionConcept]" in distribution_payload
+    assert "numerator" not in distribution_payload.lower()
+    assert "denominator" not in distribution_payload.lower()
+    assert " / " not in distribution_payload
+
+    assert "Выберите формат ТТ, чтобы увидеть дистрибуцию в выбранном формате." in script
+    assert "Для выбранной ТТ дистрибуция по формату не поддерживается." in script
+    assert "Для этого показателя сравнение по сопоставимым месяцам пока не поддерживается." in script
+    assert "Дистрибуция по формату доступна только по отдельным месяцам." in script
+    assert "region_distribution" not in script
+    assert "fo2_distribution" not in script
 
 
 def test_sales_drivers_provenance_and_drilldown_keep_view_identity() -> None:

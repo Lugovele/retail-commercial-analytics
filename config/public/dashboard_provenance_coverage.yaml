@@ -312,7 +312,7 @@ coverage:
     tab: Показатели
     group: Присутствие
     availability_status: READY
-    presentation_level: AUDIT_ONLY
+    presentation_level: DEFAULT_TABLE
     grain_support:
     - category
     - manufacturer

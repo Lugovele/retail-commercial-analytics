@@ -737,10 +737,10 @@ class DashboardMartQueryService:
             "retailer_id = ?",
             "source_id = ?",
             "period_grain = ?",
-            "mart_build_id = ?",
             "store_format = ?",
         ]
-        params: list[Any] = [request.retailer_id, request.source_id, request.period_grain, mart_build_id, store_format]
+        del mart_build_id
+        params: list[Any] = [request.retailer_id, request.source_id, request.period_grain, store_format]
         if period_start is not None:
             clauses.append("period_start >= CAST(? AS DATE)")
             params.append(period_start.isoformat())
@@ -1661,12 +1661,9 @@ def _store_format_distribution_metric_rows(
             [
                 "retailer_id",
                 "source_id",
-                "source_revision_id",
-                "mart_build_id",
                 "period_grain",
                 "period_start",
                 "period_end",
-                "business_period_id",
             ]
         )
         .agg(
@@ -1707,12 +1704,9 @@ def _store_format_distribution_metric_rows(
         on=[
             "retailer_id",
             "source_id",
-            "source_revision_id",
-            "mart_build_id",
             "period_grain",
             "period_start",
             "period_end",
-            "business_period_id",
         ],
         how="inner",
         suffix="_universe",

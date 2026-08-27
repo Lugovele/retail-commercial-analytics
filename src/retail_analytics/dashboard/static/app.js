@@ -7,6 +7,8 @@ const state = {
   tableResponse: null,
   contributionResponse: null,
   salesDriversResponse: null,
+  salesDriversFormatDistributionResponse: null,
+  salesDriverStoreFormatOptions: [],
   salesDriversChartResponse: null,
   salesDriversTableResponse: null,
   portfolioMarketResponse: null,
@@ -38,6 +40,7 @@ const state = {
   salesDriverMetric: "revenue",
   storesMetric: "revenue",
   storesGroupMode: "store",
+  salesDriverStoreFormat: "",
   portfolioAnalysisMode: "position",
   portfolioEntityLevel: "manufacturer",
   portfolioBasis: "revenue",
@@ -50,6 +53,7 @@ const state = {
 };
 
 const primaryKpis = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"];
+const storeFormatDistributionConcept = "numeric_distribution_store_format";
 const additiveContributionMetrics = ["revenue_vat", "revenue", "units", "retailer_margin_abs"];
 const chartMetrics = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "weighted_shelf_price_vat"];
 const secondaryContextByGrain = {
@@ -114,7 +118,7 @@ const salesDriverBuckets = [
   { title: "Результат", concepts: ["revenue"] },
   { title: "Объём", concepts: ["units"] },
   { title: "Цена", concepts: ["weighted_shelf_price_vat", "weighted_input_price_vat"] },
-  { title: "Присутствие", concepts: ["selling_store_count", "active_store_count", "distribution"] },
+  { title: "Присутствие", concepts: ["selling_store_count", "active_store_count", "distribution", "numeric_distribution_store_format"] },
   { title: "Скорость", concepts: ["velocity", "revenue_velocity", "margin_velocity"] },
   { title: "Экономика", concepts: ["retailer_margin_abs", "retailer_margin_pct"] },
   { title: "Структура", concepts: ["sku_count", "brand_count", "category_count"] }
@@ -129,6 +133,7 @@ const salesDriverGrainSupport = {
   selling_store_count: ["network", "category", "manufacturer", "brand", "sku"],
   active_store_count: ["network", "category", "manufacturer", "brand", "sku"],
   distribution: ["category", "manufacturer", "brand", "sku"],
+  numeric_distribution_store_format: ["category", "manufacturer", "brand", "sku"],
   velocity: ["category", "manufacturer", "brand", "sku"],
   revenue_velocity: ["category", "manufacturer", "brand", "sku"],
   margin_velocity: ["category", "manufacturer", "brand", "sku"],
@@ -260,6 +265,16 @@ const signalSeverityLabels = {
   INFO: "Информационный"
 };
 const portfolioPresentationFallback = {
+  numeric_distribution_store_format: {
+    display_label: "Дистрибуция в формате ТТ",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Доля торговых точек выбранного формата, где есть наблюдаемые продажи выбранного объекта.",
+    business_question: "В какой доле ТТ выбранного формата товар, бренд, производитель или категория имеет продажи?",
+    decision_use: "Показывает присутствие внутри конкретного формата без замены сетевой дистрибуции и без трактовки как листинг или OOS.",
+    formula_summary: "ТТ с продажами в выбранном формате / все ТТ выбранного формата в месячной вселенной",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
   category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" },
   category_units_share: { display_label: "Доля в штуках категории", format: "percent" },
   category_margin_share: { display_label: "Доля в марже категории", format: "percent" },
@@ -346,6 +361,7 @@ const neutralDirectionalMetrics = new Set([
   "selling_store_count",
   "active_store_count",
   "distribution",
+  "numeric_distribution_store_format",
   "velocity",
   "revenue_velocity",
   "margin_velocity",
@@ -936,6 +952,14 @@ function bindDynamicControls() {
     state.sortDirection = "desc";
     await runStoresQuery();
   });
+  document.getElementById("sales-driver-store-format")?.addEventListener("change", async (event) => {
+    await applyScopeChange(async () => {
+      state.salesDriverStoreFormat = event.target.value || "";
+      state.salesDriversFormatDistributionResponse = null;
+      invalidateLoadedViews();
+      await runActiveViewQuery();
+    });
+  });
 
   multiFilterIds.forEach((id) => {
     document.getElementById(`${id}-filter-trigger`)?.addEventListener("click", (event) => {
@@ -1127,15 +1151,29 @@ async function runSalesDriversQuery() {
       setLoading(false, "Данные обновлены");
       return;
     }
-    if (!concepts.includes(state.salesDriverMetric)) state.salesDriverMetric = concepts[0];
-    const summaryPayload = buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), concepts);
+    const trendConcepts = salesDriverBackendConcepts(summaryGrain);
+    if (!trendConcepts.includes(state.salesDriverMetric)) state.salesDriverMetric = trendConcepts[0] || concepts[0];
+    const summaryPayload = buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), salesDriverBackendConcepts(summaryGrain));
     const chartPayload = buildSalesDriverChartQueryPayload();
     const detailPayload = buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts());
+    const formatOptionsResponse = await postJson("/api/dashboard/geography", buildSalesDriverStoreFormatOptionsPayload());
+    const formatOptions = storeFormatOptionsFromResponse(formatOptionsResponse);
+    const resolvedStoreFormat = state.salesDriverStoreFormat && formatOptions.some((item) => item.value === state.salesDriverStoreFormat)
+      ? state.salesDriverStoreFormat
+      : "";
+    const formatDistributionPayload = buildSalesDriverStoreFormatDistributionPayload(summaryGrain, resolvedStoreFormat);
+    const formatDistributionPromise = formatDistributionPayload
+      ? postJson("/api/dashboard/query", formatDistributionPayload)
+      : Promise.resolve(null);
     const salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);
     const salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);
     const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);
+    const salesDriversFormatDistributionResponse = await formatDistributionPromise;
     if (!isCurrentSectionRequest(token)) return;
+    state.salesDriverStoreFormatOptions = formatOptions;
+    state.salesDriverStoreFormat = resolvedStoreFormat;
     state.salesDriversResponse = salesDriversResponse;
+    state.salesDriversFormatDistributionResponse = salesDriversFormatDistributionResponse;
     state.salesDriversChartResponse = salesDriversChartResponse;
     state.salesDriversTableResponse = salesDriversTableResponse;
     renderSalesDrivers();
@@ -1403,6 +1441,50 @@ function buildStoresGeographyPayload() {
   };
 }
 
+function buildSalesDriverStoreFormatOptionsPayload() {
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    grouping: "store_format",
+    entity_filters: selectedFilterValuesForPortfolio(),
+    metric_concepts: ["revenue"],
+    comparison_mode: "NONE",
+    include_lineage: false,
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value
+  };
+}
+
+function buildSalesDriverStoreFormatDistributionPayload(grain = salesDriverSummaryGrain(), storeFormat = state.salesDriverStoreFormat) {
+  if (!storeFormat) return null;
+  if (!salesDriverGrainSupport[storeFormatDistributionConcept]?.includes(grain)) return null;
+  const formatFilters = {
+    ...selectedParentFiltersForGrain(grain),
+    store_format: [storeFormat]
+  };
+  return {
+    ...buildQueryPayload(grain, entityIdsForSalesDriverSummary(grain), [storeFormatDistributionConcept]),
+    entity_filters: formatFilters
+  };
+}
+
+function storeFormatOptionsFromResponse(response) {
+  const seen = new Set();
+  return (response?.metric_results || [])
+    .filter((result) => result.metric_concept === "revenue")
+    .map((result) => ({
+      value: result.dimension_values?.store_format || result.entity_id,
+      label: result.label || result.dimension_values?.store_format || result.entity_id
+    }))
+    .filter((item) => item.value && !seen.has(item.value) && seen.add(item.value))
+    .sort((left, right) => left.label.localeCompare(right.label, "ru"));
+}
+
 function buildSignalsPayload() {
   const retailer = selectedRetailer();
   return {
@@ -1465,6 +1547,10 @@ function salesDriverConcepts(grain = salesDriverSummaryGrain()) {
     .filter((concept) => salesDriverMetricEntry(concept, grain));
 }
 
+function salesDriverBackendConcepts(grain = salesDriverSummaryGrain()) {
+  return salesDriverConcepts(grain).filter((concept) => concept !== storeFormatDistributionConcept);
+}
+
 function storeConcepts() {
   return [...new Set([...storeRankingMetrics, ...storeKpiConcepts, ...storeTableConcepts])]
     .filter((concept) => metricEntryForGrain(concept, "store"));
@@ -1495,6 +1581,7 @@ function renderOverview() {
 function renderSalesDrivers() {
   renderContextStripForResponse(state.salesDriversResponse);
   renderBreadcrumb();
+  renderSalesDriverStoreFormatControl();
   renderSalesDriverMatrix();
   renderSalesDriverTrend();
   renderSalesDriverDetailTable();
@@ -1802,13 +1889,14 @@ function renderSalesDriverMatrix() {
   thead.appendChild(headRow);
   const tbody = document.createElement("tbody");
   salesDriverRows().forEach(({ group, concept, result, entry }) => {
+    const response = salesDriverResponseForConcept(concept);
     const tr = document.createElement("tr");
     tr.className = concept === state.salesDriverMetric ? "is-selected" : "";
     const groupCell = document.createElement("td");
     groupCell.textContent = group;
     tr.appendChild(groupCell);
     const metricCell = document.createElement("td");
-    if (result && salesDriverMetricEntry(concept)) {
+    if (result && salesDriverMetricEntry(concept) && concept !== storeFormatDistributionConcept) {
       const metricButton = document.createElement("button");
       metricButton.type = "button";
       metricButton.className = "table-link";
@@ -1824,7 +1912,7 @@ function renderSalesDriverMatrix() {
       metricCell.className = "limitation-state-cell";
     }
     tr.appendChild(metricCell);
-    salesDriverMetricCells(result, entry).forEach((cell) => {
+    salesDriverMetricCells(result, entry, concept, response).forEach((cell) => {
       const td = document.createElement("td");
       if (cell.role) td.className = `metric-table-cell metric-table-cell--${cell.role}`;
       if (cell.inspectable) {
@@ -1838,7 +1926,7 @@ function renderSalesDriverMatrix() {
           label,
           text: cell.text,
           result,
-          response: state.salesDriversResponse,
+          response,
           role: cell.role || "current",
           deltaValue: cell.deltaValue
         }));
@@ -1868,6 +1956,26 @@ function renderSalesDriverMatrix() {
   document.getElementById("sales-drivers-context").textContent = salesDriversContextText();
 }
 
+function renderSalesDriverStoreFormatControl() {
+  const select = document.getElementById("sales-driver-store-format");
+  const context = document.getElementById("sales-driver-store-format-context");
+  if (!select || !context) return;
+  const options = state.salesDriverStoreFormatOptions || [];
+  select.replaceChildren(
+    option("", "Сеть"),
+    ...options.map((item) => option(item.value, item.label))
+  );
+  select.value = options.some((item) => item.value === state.salesDriverStoreFormat) ? state.salesDriverStoreFormat : "";
+  const selectedLabel = options.find((item) => item.value === state.salesDriverStoreFormat)?.label;
+  if (!state.salesDriverStoreFormat) {
+    context.textContent = "Дистрибуция сети показана отдельно; выберите формат, чтобы увидеть знаменатель формата ТТ.";
+    return;
+  }
+  context.textContent = selectedLabel
+    ? `Знаменатель: все ТТ формата «${selectedLabel}» в месячной вселенной.`
+    : "Знаменатель: все ТТ выбранного формата в месячной вселенной.";
+}
+
 function salesDriverMatrixHeaders() {
   if (isComparisonDisplayMode()) {
     return ["Группа", "Показатель", "Сейчас", "Сравнение", "Изменение", "Доказательство"];
@@ -1893,10 +2001,16 @@ function salesDriverRows() {
   return rows;
 }
 
-function salesDriverMetricCells(result, entry) {
+function salesDriverMetricCells(result, entry, concept, response = state.salesDriversResponse) {
   const staticCell = (text) => ({ text, inspectable: false });
   const valueCell = (text, role = "current") => ({ text, inspectable: true, isDelta: false, role });
   const deltaCell = (text, deltaValue) => ({ text, inspectable: true, isDelta: true, deltaValue, role: "delta" });
+  const localLimitation = salesDriverLocalLimitation(concept);
+  if (localLimitation) {
+    return isComparisonDisplayMode()
+      ? [staticCell("Недоступно"), staticCell("Недоступно"), staticCell(localLimitation)]
+      : [staticCell("Недоступно"), staticCell(localLimitation)];
+  }
   if (!result || !entry) {
     return isComparisonDisplayMode()
       ? [staticCell("Недоступно"), staticCell("Недоступно"), staticCell("Недоступно")]
@@ -1915,7 +2029,7 @@ function salesDriverMetricCells(result, entry) {
   if (state.periodMode === "AVAILABLE_MONTH_SET" && result.limitations?.includes("range_aggregation_period_only")) {
     return [staticCell("Недоступно"), staticCell("Недоступно"), staticCell(periodOnlyLimitationText())];
   }
-  const comparison = comparisonFor(state.salesDriversResponse, result);
+  const comparison = comparisonFor(response, result);
   if (!comparison) {
     return [valueCell(formatValue(result.value, entry.format)), staticCell("Нет периода"), staticCell("Нет подходящего периода сравнения.")];
   }
@@ -4872,7 +4986,16 @@ function summaryResultFor(concept) {
 }
 
 function salesDriverResultFor(concept) {
+  if (concept === storeFormatDistributionConcept) {
+    return state.salesDriversFormatDistributionResponse?.metric_results.find((result) => result.metric_concept === concept);
+  }
   return state.salesDriversResponse?.metric_results.find((result) => result.metric_concept === concept);
+}
+
+function salesDriverResponseForConcept(concept) {
+  return concept === storeFormatDistributionConcept
+    ? state.salesDriversFormatDistributionResponse
+    : state.salesDriversResponse;
 }
 
 function salesDriverChartResultFor(concept) {
@@ -5071,6 +5194,28 @@ function limitationText(result) {
   if (!result?.limitations?.length) return "";
   if (result.limitations.includes("range_aggregation_period_only")) return periodOnlyLimitationText();
   return "Есть ограничения для выбранного среза.";
+}
+
+function salesDriverLocalLimitation(concept) {
+  if (concept !== storeFormatDistributionConcept) return "";
+  if (!state.salesDriverStoreFormat) return "Выберите формат ТТ, чтобы увидеть дистрибуцию в выбранном формате.";
+  if (selectedStoreIds().length) return "Для выбранной ТТ дистрибуция по формату не поддерживается.";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "Для этого показателя сравнение по сопоставимым месяцам пока не поддерживается.";
+  if (state.periodMode === "DATE_RANGE") return "Дистрибуция по формату доступна только по отдельным месяцам.";
+  const limitations = state.salesDriversFormatDistributionResponse?.limitations || [];
+  if (limitations.some((item) => item.issue_code === "store_format_distribution_period_mode_unsupported")) {
+    return "Для выбранного режима периода дистрибуция по формату пока не поддерживается.";
+  }
+  if (limitations.some((item) => item.issue_code === "store_format_distribution_universe_empty")) {
+    return "Для выбранного формата нет подтверждённой месячной вселенной ТТ.";
+  }
+  if (limitations.some((item) => item.issue_code === "store_format_distribution_requires_single_format")) {
+    return "Выберите один формат ТТ для расчёта.";
+  }
+  if (limitations.length && !state.salesDriversFormatDistributionResponse?.metric_results?.length) {
+    return "Для выбранного среза дистрибуция по формату пока не поддерживается.";
+  }
+  return "";
 }
 
 function periodOnlyLimitationText() {
@@ -5530,6 +5675,7 @@ function provenanceSections(provenance, result, options = {}) {
       ...(periodSet.scope_type ? [["Режим периода", "Среднее за сопоставимые месяцы"]] : []),
       ...(periodSet.included_periods?.length ? [["Включённые месяцы", formatPeriodList(periodSet.included_periods)]] : []),
       ["Объект", [grainLabels[scope.grain_id] || scope.grain_id, entityDisplayLabel(scope.grain_id, scope.entity_id)].filter(Boolean).join(" / ") || "н/д"],
+      ...(scope.entity_filters?.store_format?.length ? [["Формат ТТ", compactList(scope.entity_filters.store_format)]] : []),
       ["Учёт ассортимента", privateLabelScopeText(scope.private_label_scope)]
     ]),
     section("Расчёт", [
@@ -5554,7 +5700,8 @@ function provenanceSections(provenance, result, options = {}) {
       ["Пропущенные периоды", compactList(scope.missing_periods)]
     ]),
     section("Бизнес-правило", [
-      ["Правило", [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "н/д"]
+      ["Правило", [rule.business_rule_id, rule.business_rule_version].filter(Boolean).join(" / ") || "н/д"],
+      ["Вселенная знаменателя", source.denominator_universe_type || value.share_scope || "н/д"]
     ]),
     section("Качество", [
       ["Статусы", compactList(quality.quality_statuses)],

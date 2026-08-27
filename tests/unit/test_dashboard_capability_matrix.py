@@ -23,6 +23,7 @@ CORE_PUBLIC_CONCEPTS = {
     "selling_store_count",
     "active_store_count",
     "distribution",
+    "numeric_distribution_store_format",
     "velocity",
     "revenue_velocity",
     "margin_velocity",
@@ -139,8 +140,23 @@ def test_top_kpis_are_ready_and_range_claims_are_safe() -> None:
 def test_store_grain_does_not_expose_distribution_or_velocity() -> None:
     matrix = {row["concept_id"]: row for row in _matrix_rows()}
 
-    for concept in ("distribution", "velocity", "revenue_velocity", "margin_velocity"):
+    for concept in ("distribution", "numeric_distribution_store_format", "velocity", "revenue_velocity", "margin_velocity"):
         assert "store" not in matrix[concept]["grain_support"]
+
+
+def test_store_format_distribution_is_user_facing_with_fail_closed_scope_limits() -> None:
+    matrix = {row["concept_id"]: row for row in _matrix_rows()}
+    row = matrix["numeric_distribution_store_format"]
+
+    assert row["presentation_level"] == "DEFAULT_TABLE"
+    assert row["group"] == "Присутствие"
+    assert row["range_aggregation_strategy"] == "period_only"
+    assert row["date_range_support"] != "READY"
+    assert "requires_store_format_universe" in row["limitations"]
+    assert "store_filter_not_supported" in row["limitations"]
+    assert "available_month_set_not_supported" in row["limitations"]
+    assert "region_distribution_not_supported" in row["limitations"]
+    assert "fo2_distribution_not_supported" in row["limitations"]
 
 
 def test_private_label_scope_support_is_never_claimed_for_unavailable_features() -> None:
