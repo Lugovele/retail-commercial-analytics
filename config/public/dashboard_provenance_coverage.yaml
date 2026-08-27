@@ -1483,6 +1483,69 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - store
+- concept_id: stores_region_additive_grouping
+  fact_type: dashboard.geography.GeographyQueryService
+  coverage_status: COMPLETE
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Точки продаж
+    group: География
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - region
+- concept_id: stores_store_format_additive_grouping
+  fact_type: dashboard.geography.GeographyQueryService
+  coverage_status: COMPLETE
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Точки продаж
+    group: География
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - store_format
+- concept_id: stores_region_store_format_additive_grouping
+  fact_type: dashboard.geography.GeographyQueryService
+  coverage_status: COMPLETE
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: PARTIAL
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Точки продаж
+    group: География
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - region_store_format
 - concept_id: contribution_to_delta
   fact_type: mart.contribution.AdditiveContributionService
   coverage_status: PARTIAL

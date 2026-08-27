@@ -11,6 +11,7 @@ const state = {
   salesDriversTableResponse: null,
   portfolioMarketResponse: null,
   storesResponse: null,
+  storesGeographyResponse: null,
   storesScopeStatus: "ready",
   signalsResponse: null,
   signalsLoadStatus: "idle",
@@ -35,6 +36,7 @@ const state = {
   chartMetric: "revenue",
   salesDriverMetric: "revenue",
   storesMetric: "revenue",
+  storesGroupMode: "store",
   portfolioEntityLevel: "manufacturer",
   portfolioBasis: "revenue",
   previewGrain: "category",
@@ -206,6 +208,14 @@ const portfolioCompetitorConcepts = ["broad_competitors"];
 const storeRankingMetrics = ["revenue", "units", "retailer_margin_abs"];
 const storeKpiConcepts = ["revenue", "units", "retailer_margin_abs", "sku_count"];
 const storeTableConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count"];
+const storeGroupModes = [
+  { value: "store", label: "ТТ" },
+  { value: "region", label: "Регионы" },
+  { value: "store_format", label: "Форматы ТТ" },
+  { value: "region_store_format", label: "Регион × формат" }
+];
+const geographyMetricConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"];
+const geographyRankingMetrics = ["revenue", "units", "retailer_margin_abs"];
 const signalKindLabels = {
   all: "Все",
   commercial: "Коммерческие",
@@ -749,6 +759,7 @@ function markInactiveSectionsPending() {
         renderPortfolioMarketSkeletons();
       } else if (view === "stores") {
         state.storesResponse = null;
+        state.storesGeographyResponse = null;
         state.storesScopeStatus = "ready";
         renderStoresSkeletons();
       } else if (view === "signals") {
@@ -895,6 +906,12 @@ function bindDynamicControls() {
     state.sortColumn = storeSortColumn();
     state.sortDirection = "desc";
     renderStores();
+  });
+  document.getElementById("stores-group-mode")?.addEventListener("change", async (event) => {
+    state.storesGroupMode = event.target.value || "store";
+    state.sortColumn = storeSortColumn();
+    state.sortDirection = "desc";
+    await runStoresQuery();
   });
 
   multiFilterIds.forEach((id) => {
@@ -1136,8 +1153,25 @@ async function runStoresQuery() {
   const token = sectionRequestToken("stores");
   setLoading(true, "Запрос к витрине");
   renderStoresSkeletons();
+  if (state.storesGroupMode !== "store") {
+    state.storesScopeStatus = "ready";
+    try {
+      const geographyResponse = await postJson("/api/dashboard/geography", buildStoresGeographyPayload());
+      if (!isCurrentSectionRequest(token)) return;
+      state.storesGeographyResponse = geographyResponse;
+      renderStores();
+      state.loadedViews.stores = true;
+      setLoading(false, "Данные обновлены");
+    } catch (error) {
+      if (!isCurrentSectionRequest(token)) return;
+      setLoading(false, "Не удалось загрузить данные.");
+      showPageError(error);
+    }
+    return;
+  }
   if (!storeConcepts().length) {
     state.storesResponse = null;
+    state.storesGeographyResponse = null;
     state.storesScopeStatus = "no_supported_metrics";
     renderStores();
     state.loadedViews.stores = true;
@@ -1149,6 +1183,7 @@ async function runStoresQuery() {
     const storesResponse = await postJson("/api/dashboard/query", buildStoresPayload());
     if (!isCurrentSectionRequest(token)) return;
     state.storesResponse = storesResponse;
+    state.storesGeographyResponse = null;
     renderStores();
     state.loadedViews.stores = true;
     setLoading(false, "Данные обновлены");
@@ -1300,6 +1335,25 @@ function buildPortfolioMarketPayload() {
 
 function buildStoresPayload() {
   return buildQueryPayload("store", entityIdsForStores(), storeConcepts());
+}
+
+function buildStoresGeographyPayload() {
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    grouping: state.storesGroupMode,
+    entity_filters: selectedFilterValuesForPortfolio(),
+    metric_concepts: geographyMetricConcepts,
+    comparison_mode: selectedComparisonMode(),
+    include_lineage: true,
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value
+  };
 }
 
 function buildSignalsPayload() {
@@ -1934,15 +1988,21 @@ function renderPortfolioMarketSkeletons() {
 }
 
 function renderStores() {
-  if (state.storesResponse) {
-    renderContextStripForResponse(state.storesResponse);
+  const response = state.storesGroupMode === "store" ? state.storesResponse : state.storesGeographyResponse;
+  if (response) {
+    renderContextStripForResponse(response);
   } else {
     renderStoresContextStripWithoutResponse();
   }
   renderBreadcrumb();
+  renderStoreGroupModeOptions();
   renderStoreMetricOptions();
   if (state.storesScopeStatus === "no_supported_metrics") {
     renderStoresNoSupportedMetrics();
+    return;
+  }
+  if (state.storesGroupMode !== "store") {
+    renderStoresGeography();
     return;
   }
   renderStoreRanking();
@@ -2455,7 +2515,10 @@ function renderStoresContextStripWithoutResponse() {
 
 function renderStoreMetricOptions() {
   const select = document.getElementById("stores-metric");
-  const metrics = storeRankingMetrics.filter((concept) => metricEntryForGrain(concept, "store"));
+  const sourceMetrics = state.storesGroupMode === "store" ? storeRankingMetrics : geographyRankingMetrics;
+  const metrics = sourceMetrics.filter((concept) =>
+    state.storesGroupMode === "store" ? metricEntryForGrain(concept, "store") : catalogEntry(concept)
+  );
   select.replaceChildren(...metrics.map((concept) => option(concept, displayLabel(concept))));
   if (!metrics.includes(state.storesMetric)) {
     state.storesMetric = metrics[0] || "revenue";
@@ -2463,6 +2526,191 @@ function renderStoreMetricOptions() {
     state.sortDirection = "desc";
   }
   select.value = state.storesMetric;
+}
+
+function renderStoreGroupModeOptions() {
+  const select = document.getElementById("stores-group-mode");
+  if (!select) return;
+  select.replaceChildren(...storeGroupModes.map((mode) => option(mode.value, mode.label)));
+  if (!storeGroupModes.some((mode) => mode.value === state.storesGroupMode)) state.storesGroupMode = "store";
+  select.value = state.storesGroupMode;
+}
+
+function renderStoresGeography() {
+  renderGeographyRanking();
+  renderGeographyContextPanel();
+  renderGeographyTable();
+  renderGeographyDetailState();
+}
+
+function renderGeographyRanking() {
+  const target = document.getElementById("stores-ranking");
+  const rows = geographyRowsByMetric(state.storesMetric);
+  if (!rows.length) {
+    replaceWithMessage(target, "empty-state compact", "Для выбранного географического разреза данных нет.");
+    document.getElementById("stores-ranking-context").textContent =
+      "Регион и формат показываются только по подтверждённым additive показателям.";
+    return;
+  }
+  const maxValue = Math.max(...rows.map((row) => Math.abs(Number(row.result.value) || 0)), 1);
+  target.replaceChildren(...rows.map((row, index) => {
+    const node = document.createElement("article");
+    node.className = "store-ranking-row";
+    const label = document.createElement("div");
+    label.className = "store-rank-label";
+    label.textContent = `${index + 1}. ${geographyEntityLabel(row.entityId)}`;
+    node.appendChild(label);
+    const barWrap = document.createElement("div");
+    barWrap.className = "ranked-bar-track";
+    const bar = document.createElement("div");
+    bar.className = "ranked-bar-fill";
+    bar.style.width = `${Math.max(3, (Math.abs(Number(row.result.value) || 0) / maxValue) * 100)}%`;
+    barWrap.appendChild(bar);
+    node.appendChild(barWrap);
+    const valueWrap = document.createElement("strong");
+    valueWrap.appendChild(storeRankingValueNode(row.result, catalogEntry(state.storesMetric), state.storesGeographyResponse));
+    node.appendChild(valueWrap);
+    return node;
+  }));
+  document.getElementById("stores-ranking-context").textContent = isComparisonDisplayMode()
+    ? `${storeGroupModeLabel()} · текущий уровень и изменение к периоду сравнения.`
+    : `${storeGroupModeLabel()} · ранжирование по выбранному additive показателю.`;
+}
+
+function renderGeographyContextPanel() {
+  const target = document.getElementById("stores-selected-kpi");
+  const rows = geographyRowsByMetric("revenue");
+  const totalStores = rows.reduce((sum, row) => sum + Number(row.result.store_count || 0), 0);
+  const items = [
+    ["Режим", storeGroupModeLabel()],
+    ["Строк", formatValue(geographyEntityIds().length, "integer")],
+    ["ТТ в строках", totalStores ? formatValue(totalStores, "integer") : "н/д"]
+  ];
+  const cards = items.map(([label, value]) => {
+    const card = document.createElement("article");
+    card.className = "store-kpi";
+    appendText(card, "span", label);
+    appendText(card, "strong", value);
+    return card;
+  });
+  target.replaceChildren(...cards);
+  const selectedStore = selectedStoreId();
+  document.getElementById("stores-selected-context").textContent = selectedStore
+    ? `Выбранная ТТ учитывается как обычный фильтр: ${entityDisplayLabel("store", selectedStore)}.`
+    : "География агрегируется по текущему срезу без неподтверждённых разрезов и дистрибуции.";
+}
+
+function renderGeographyTable() {
+  const table = document.getElementById("stores-table");
+  const rows = geographyRowsByMetric(state.storesMetric);
+  if (!rows.length) {
+    renderMessageRow(table, "Для выбранного географического разреза данных нет.");
+    document.getElementById("stores-table-context").textContent =
+      "Нет строк с подтверждёнными значениями региона или формата ТТ в текущем срезе.";
+    return;
+  }
+  const headers = geographyTableHeaders();
+  if (!headers.includes(state.sortColumn)) {
+    state.sortColumn = storeSortColumn();
+    state.sortDirection = "desc";
+  }
+  const tableRows = rows.map((row) => ({
+    cells: [
+      ...geographyIdentityCells(row.entityId),
+      geographyTableInspectableCell("revenue", row.entityId),
+      geographyTableDeltaCell("revenue", row.entityId),
+      geographyTableInspectableCell("units", row.entityId),
+      geographyTableDeltaCell("units", row.entityId),
+      geographyTableInspectableCell("retailer_margin_abs", row.entityId),
+      geographyTableInspectableCell("retailer_margin_pct", row.entityId),
+      formatValue(row.result.store_count, "integer")
+    ],
+    meta: { entityId: row.entityId }
+  }));
+  renderRows(table, headers, tableRows, {
+    rowLimit: state.tablePageSize,
+    onSort: renderGeographyTable
+  });
+  const caption = table.createCaption();
+  caption.textContent = `Показаны ${Math.min(tableRows.length, state.tablePageSize)} из ${tableRows.length} строк · ${storeGroupModeLabel()}`;
+  document.getElementById("stores-table-context").textContent = isComparisonDisplayMode()
+    ? "Δ показывает изменение к периоду сравнения; margin % пересчитан backend как отношение сумм."
+    : "Таблица показывает revenue, units, абсолютную маржу и margin % по выбранной группировке.";
+}
+
+function renderGeographyDetailState() {
+  const target = document.getElementById("stores-detail");
+  target.textContent =
+    "Неподтверждённые географические разрезы и дистрибуция по географии остаются закрытыми до отдельного правила.";
+}
+
+function geographyTableHeaders() {
+  const identity = state.storesGroupMode === "region_store_format" ? ["Регион", "Формат ТТ"] : [storeGroupModeLabel()];
+  return [...identity, "Оборот", "Δ", "Продажи, шт.", "Δ", "Абсолютная маржа", "Маржинальность", "ТТ"];
+}
+
+function geographyIdentityCells(entityId) {
+  const result = geographyResultFor("revenue", entityId) || geographyResultFor(state.storesMetric, entityId);
+  if (state.storesGroupMode === "region_store_format") {
+    return [
+      result?.dimension_values?.region || "н/д",
+      result?.dimension_values?.store_format || "н/д"
+    ];
+  }
+  return [geographyEntityLabel(entityId)];
+}
+
+function geographyRowsByMetric(metricConcept) {
+  return geographyEntityIds()
+    .map((entityId) => ({ entityId, result: geographyResultFor(metricConcept, entityId) }))
+    .filter((row) => row.result && row.result.value !== null && row.result.value !== undefined)
+    .sort((left, right) => Number(right.result.value || 0) - Number(left.result.value || 0));
+}
+
+function geographyEntityIds() {
+  return [...new Set((state.storesGeographyResponse?.metric_results || []).map((result) => result.entity_id))];
+}
+
+function geographyResultFor(concept, entityId) {
+  return state.storesGeographyResponse?.metric_results.find((result) => result.metric_concept === concept && result.entity_id === entityId);
+}
+
+function geographyEntityLabel(entityId) {
+  const result = geographyResultFor("revenue", entityId) || geographyResultFor(state.storesMetric, entityId);
+  return result?.label || entityId || "н/д";
+}
+
+function geographyTableInspectableCell(concept, entityId) {
+  const result = geographyResultFor(concept, entityId);
+  const entry = catalogEntry(concept);
+  return {
+    text: result && entry ? formatValue(result.value, entry.format) : "Недоступно",
+    concept,
+    result,
+    response: state.storesGeographyResponse,
+    inspectable: Boolean(result && entry),
+    role: "current"
+  };
+}
+
+function geographyTableDeltaCell(concept, entityId) {
+  const result = geographyResultFor(concept, entityId);
+  const entry = catalogEntry(concept);
+  const comparison = comparisonFor(state.storesGeographyResponse, result);
+  const deltaFormat = entry?.format === "percent" ? "percentage_points" : entry?.format;
+  return {
+    text: isComparisonDisplayMode() && comparison && entry ? formatDeltaValue(comparison.delta, deltaFormat) : "—",
+    concept,
+    result,
+    response: state.storesGeographyResponse,
+    inspectable: Boolean(result && comparison),
+    deltaValue: comparison?.delta,
+    role: "delta"
+  };
+}
+
+function storeGroupModeLabel() {
+  return storeGroupModes.find((mode) => mode.value === state.storesGroupMode)?.label || "ТТ";
 }
 
 function renderStoreRanking() {
@@ -4444,6 +4692,10 @@ function metricCellTextForResponse(result, entry, response) {
 
 function resultForProvenance(concept) {
   if (state.activeView === "stores") {
+    if (state.storesGroupMode !== "store") {
+      const entityId = geographyEntityIds()[0];
+      return geographyResultFor(concept, entityId) || state.storesGeographyResponse?.metric_results[0];
+    }
     const storeId = selectedStoreId() || storeEntityIds()[0];
     return storeResultFor(concept, storeId) || state.storesResponse?.metric_results[0];
   }

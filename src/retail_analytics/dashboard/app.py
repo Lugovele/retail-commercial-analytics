@@ -17,6 +17,7 @@ from retail_analytics.dashboard.data import (
     build_data_request,
     data_response_to_dict,
 )
+from retail_analytics.dashboard.geography import GeographyQueryService, build_geography_request
 from retail_analytics.dashboard.runtime import (
     DashboardRuntime,
     build_dashboard_runtime,
@@ -58,6 +59,11 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
         mart_builds=resolved_runtime.query_service.mart_builds,
         source_ledger=resolved_runtime.query_service.source_ledger,
         source_like_rows_path=resolved_runtime.source_like_rows_path,
+    )
+    geography_service = GeographyQueryService(
+        resolved_runtime.product_store_facts_path,
+        mart_builds=resolved_runtime.query_service.mart_builds,
+        source_ledger=resolved_runtime.query_service.source_ledger,
     )
 
     def app(environ: WSGIEnvironment, start_response: StartResponse) -> list[bytes]:
@@ -147,6 +153,13 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 data_request = build_data_request(payload)
                 data_response = data_service.query(data_request)
                 data = data_response_to_dict(data_response)
+                _attach_user_execution_filters(data, original_entity_filters)
+                return _json_response(start_response, data)
+            if method == "POST" and path == "/api/dashboard/geography":
+                payload = _read_json(environ)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
+                geography_request = build_geography_request(payload)
+                data = geography_service.query(geography_request)
                 _attach_user_execution_filters(data, original_entity_filters)
                 return _json_response(start_response, data)
             return _json_response(start_response, {"error": "not_found"}, status="404 Not Found")

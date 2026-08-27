@@ -95,6 +95,9 @@ enums:
   - brand
   - sku
   - store
+  - region
+  - store_format
+  - region_store_format
   presentation_priority:
   - PRIMARY
   - SECONDARY
@@ -1920,6 +1923,66 @@ metric_rules:
   - SINGLE_PERIOD
   - DATE_RANGE
   readiness_requirement: PARTIAL
+- concept_id: stores_region_additive_grouping
+  allowed_screens:
+  - stores
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - region
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  - AVAILABLE_MONTH_SET
+  readiness_requirement: READY_QUERY
+- concept_id: stores_store_format_additive_grouping
+  allowed_screens:
+  - stores
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - store_format
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  - AVAILABLE_MONTH_SET
+  readiness_requirement: READY_QUERY
+- concept_id: stores_region_store_format_additive_grouping
+  allowed_screens:
+  - stores
+  preferred_visualization: DETAIL_TABLE
+  alternative_visualizations:
+  - RANKED_BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - region_store_format
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - DATE_RANGE
+  - AVAILABLE_MONTH_SET
+  readiness_requirement: READY_QUERY
 - concept_id: contribution_to_delta
   allowed_screens:
   - overview

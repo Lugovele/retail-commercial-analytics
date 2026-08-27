@@ -1095,6 +1095,14 @@ input {
   margin-bottom: var(--space-2);
 }
 
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  justify-content: flex-end;
+  align-items: end;
+}
+
 .chart-actions,
 .table-actions {
   display: flex;
