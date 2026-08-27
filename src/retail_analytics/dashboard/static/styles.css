@@ -1610,6 +1610,35 @@ th:first-child {
   background: color-mix(in srgb, var(--brand-primary) 7%, var(--bg-surface));
 }
 
+.portfolio-mix-row {
+  display: grid;
+  grid-template-columns: minmax(170px, 0.85fr) minmax(145px, 0.62fr) minmax(180px, 0.8fr) minmax(210px, 0.95fr) minmax(120px, 0.55fr);
+  gap: var(--space-3);
+  align-items: center;
+  min-width: 760px;
+  padding: 10px 12px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-default);
+  border-left: 3px solid var(--delta-neutral);
+  border-radius: var(--radius-sm);
+}
+
+.portfolio-mix-secondary,
+.portfolio-mix-visual {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.portfolio-mix-secondary span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .portfolio-entity-cell,
 .portfolio-current-cell,
 .portfolio-rank-cell,
@@ -2240,6 +2269,7 @@ th:first-child {
   .diagnosis-grid,
   .ranked-bar-row,
   .portfolio-decision-row,
+  .portfolio-mix-row,
   .store-ranking-row,
   .signal-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));

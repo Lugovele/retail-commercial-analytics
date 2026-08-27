@@ -10,6 +10,7 @@ const state = {
   salesDriversChartResponse: null,
   salesDriversTableResponse: null,
   portfolioMarketResponse: null,
+  portfolioMixResponse: null,
   storesResponse: null,
   storesGeographyResponse: null,
   storesScopeStatus: "ready",
@@ -37,6 +38,7 @@ const state = {
   salesDriverMetric: "revenue",
   storesMetric: "revenue",
   storesGroupMode: "store",
+  portfolioAnalysisMode: "position",
   portfolioEntityLevel: "manufacturer",
   portfolioBasis: "revenue",
   previewGrain: "category",
@@ -205,6 +207,13 @@ const portfolioActiveSkuConcepts = ["active_sku_count", "historical_peak_active_
 const portfolioBrandCategoryConcepts = ["brand_delta_pct", "category_delta_pct", "brand_category_delta_gap_pp"];
 const portfolioMarketUniverseConcepts = ["market_segment_delta_pct"];
 const portfolioCompetitorConcepts = ["broad_competitors"];
+const portfolioMixMetricConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"];
+const portfolioMixModes = {
+  position: "Позиция",
+  package: "Упаковка",
+  volume: "Объём",
+  package_volume: "Упаковка × объём"
+};
 const storeRankingMetrics = ["revenue", "units", "retailer_margin_abs"];
 const storeKpiConcepts = ["revenue", "units", "retailer_margin_abs", "sku_count"];
 const storeTableConcepts = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count"];
@@ -325,6 +334,9 @@ const portfolioPresentationFallback = {
   brand_category_delta_gap_pp: { display_label: "Отклонение бренда от категории", format: "percentage_points" },
   market_segment_delta_pct: { display_label: "Изменение сегмента рынка", format: "percent" },
   contribution_to_delta: { display_label: "Вклад в изменение", format: "percent", delta_semantics: "NEUTRAL_DIRECTIONAL" },
+  package_share: { display_label: "Доля упаковки", format: "percent", delta_semantics: "NEUTRAL_DIRECTIONAL" },
+  volume_share: { display_label: "Доля объёма", format: "percent", delta_semantics: "NEUTRAL_DIRECTIONAL" },
+  package_volume_share: { display_label: "Доля упаковки × объём", format: "percent", delta_semantics: "NEUTRAL_DIRECTIONAL" },
   broad_competitors: { display_label: "Конкуренты категории", format: "text" }
 };
 const outcomeDirectionalMetrics = new Set(["revenue", "revenue_vat", "units", "retailer_margin_abs", "retailer_margin_pct"]);
@@ -339,6 +351,9 @@ const neutralDirectionalMetrics = new Set([
   "margin_velocity",
   "sku_count",
   "brand_count",
+  "package_share",
+  "volume_share",
+  "package_volume_share",
   "category_count",
   "category_revenue_share",
   "category_units_share",
@@ -464,6 +479,14 @@ function bindStaticControls() {
   document.getElementById("portfolio-entity-level")?.addEventListener("change", async (event) => {
     await applyScopeChange(async () => {
       state.portfolioEntityLevel = event.target.value || "manufacturer";
+      invalidateLoadedViews();
+      await runActiveViewQuery();
+    });
+  });
+  document.getElementById("portfolio-analysis-mode")?.addEventListener("change", async (event) => {
+    await applyScopeChange(async () => {
+      state.portfolioAnalysisMode = event.target.value || "position";
+      state.portfolioMixResponse = null;
       invalidateLoadedViews();
       await runActiveViewQuery();
     });
@@ -1137,8 +1160,12 @@ async function runPortfolioMarketQuery() {
   renderPortfolioMarketSkeletons();
   try {
     const portfolioMarketResponse = await postJson("/api/dashboard/portfolio-market", buildPortfolioMarketPayload());
+    const portfolioMixResponse = state.portfolioAnalysisMode === "position"
+      ? null
+      : await postJson("/api/dashboard/package-volume", buildPortfolioMixPayload());
     if (!isCurrentSectionRequest(token)) return;
     state.portfolioMarketResponse = portfolioMarketResponse;
+    state.portfolioMixResponse = portfolioMixResponse;
     renderPortfolioMarket();
     state.loadedViews.portfolio_market = true;
     setLoading(false, "Данные обновлены");
@@ -1327,6 +1354,26 @@ function buildPortfolioMarketPayload() {
     user_entity_filters: selectedFilterValuesForPortfolio(),
     concept_ids: portfolioMarketConcepts,
     comparison_mode: state.periodMode === "AVAILABLE_MONTH_SET" ? "NONE" : selectedComparisonMode(),
+    include_lineage: true,
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value
+  };
+}
+
+function buildPortfolioMixPayload() {
+  const retailer = selectedRetailer();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    grouping: state.portfolioAnalysisMode,
+    basis_metric: state.portfolioBasis,
+    entity_filters: selectedFilterValuesForPortfolio(),
+    metric_concepts: portfolioMixMetricConcepts,
+    comparison_mode: selectedComparisonMode(),
     include_lineage: true,
     mart_build_id: retailer.default_mart_build_id,
     private_label_scope: document.getElementById("private-label-scope").value
@@ -2961,6 +3008,10 @@ function renderPortfolioContextStripForResponse(response) {
 function renderPortfolioPosition() {
   const shareStrip = document.getElementById("portfolio-share-strip");
   const rankList = document.getElementById("portfolio-rank-list");
+  if (state.portfolioAnalysisMode !== "position") {
+    renderPortfolioMix(shareStrip, rankList);
+    return;
+  }
   const shareItems = portfolioItems(portfolioShareConcepts).filter(isDisplayablePortfolioItem);
   const contributionRows = portfolioContributionRows();
   const rank = portfolioItem(portfolioBasisConcept("rank"));
@@ -3023,6 +3074,175 @@ function renderPortfolioPosition() {
   } else {
     replaceWithMessage(rankList, "empty-state compact", portfolioRankUnavailableText(rank));
   }
+}
+
+function renderPortfolioMix(shareStrip, rankList) {
+  const response = state.portfolioMixResponse;
+  const rows = response?.rows || [];
+  const modeLabel = portfolioMixModes[state.portfolioAnalysisMode] || "Состав";
+  if (!response) {
+    replaceWithMessage(shareStrip, "loading-state compact", "Загрузка состава портфеля...");
+    replaceWithMessage(rankList, "loading-state compact", "Загрузка mix-аналитики...");
+    return;
+  }
+  if (!rows.length) {
+    shareStrip.replaceChildren(...portfolioMixSummaryTiles(response, rows));
+    replaceWithMessage(rankList, "limitation-state compact", portfolioMixLimitationText(response));
+    document.getElementById("portfolio-position-context").textContent =
+      `${modeLabel}: нет доступных строк для текущего среза без вывода неподдержанных атрибутов.`;
+    return;
+  }
+  shareStrip.replaceChildren(...portfolioMixSummaryTiles(response, rows));
+  const maxValue = Math.max(...rows.map((row) => Math.abs(Number(row.metric_value) || 0)), 1);
+  rankList.replaceChildren(...rows.slice(0, 14).map((row) => portfolioMixRow(row, response, maxValue)));
+  document.getElementById("portfolio-position-context").textContent =
+    `${modeLabel}: структурная доля рассчитана от выбранной портфельной вселенной ${portfolioBasisLabel(response.basis_metric)}; это не ABC и не оценка качества.`;
+}
+
+function portfolioMixSummaryTiles(response, rows) {
+  const period = state.periodMode === "AVAILABLE_MONTH_SET"
+    ? "сопоставимые месяцы"
+    : state.periodMode === "COMPARE" ? "сравнение периодов" : state.periodMode === "DATE_RANGE" ? "диапазон" : "один период";
+  const denominator = rows.reduce((total, row) => total + Number(row.metric_value || 0), 0);
+  const skuCount = rows.reduce((total, row) => total + Number(row.sku_count || 0), 0);
+  return [
+    portfolioSummaryTile("Анализ", portfolioMixModes[response.grouping] || response.grouping, "локально в Portfolio"),
+    portfolioSummaryTile("Показатель", portfolioBasisLabel(response.basis_metric), period),
+    portfolioSummaryTile("Вселенная", formatValue(denominator, catalogEntry(response.basis_metric)?.format || "decimal"), `${formatValue(rows.length, "integer")} групп · ${formatValue(skuCount, "integer")} SKU`)
+  ];
+}
+
+function portfolioMixRow(row, response, maxValue) {
+  const node = document.createElement("article");
+  node.className = "portfolio-mix-row";
+  const entity = document.createElement("div");
+  entity.className = "portfolio-entity-cell";
+  appendText(entity, "span", portfolioMixDimensionLabel(response.grouping));
+  appendText(entity, "strong", row.label || row.entity_id);
+  appendText(entity, "small", `${formatValue(row.sku_count, "integer")} SKU`);
+  node.appendChild(entity);
+
+  const current = document.createElement("div");
+  current.className = "portfolio-current-cell";
+  appendText(current, "span", "Текущий вклад");
+  const value = document.createElement("strong");
+  value.className = "metric-current";
+  value.appendChild(metricValueButton({
+    concept: row.basis_metric_id || response.basis_metric,
+    text: formatValue(row.metric_value, catalogEntry(row.basis_metric_id)?.format || "decimal"),
+    result: portfolioMixResultForInspector(row, response),
+    response
+  }));
+  current.appendChild(value);
+  const reference = document.createElement("small");
+  reference.className = "metric-reference";
+  reference.textContent = portfolioMixReferenceText(row);
+  current.appendChild(reference);
+  node.appendChild(current);
+
+  const share = document.createElement("div");
+  share.className = "portfolio-share-cell";
+  appendText(share, "span", "Доля mix");
+  const shareValue = document.createElement("strong");
+  shareValue.className = "share-value";
+  shareValue.appendChild(metricValueButton({
+    concept: `${response.grouping}_share`,
+    text: formatValue(row.share, "percent"),
+    result: portfolioMixResultForInspector(row, response),
+    response
+  }));
+  share.appendChild(shareValue);
+  const track = document.createElement("div");
+  track.className = "share-track";
+  const fill = document.createElement("div");
+  fill.className = "share-fill";
+  fill.style.width = `${Math.max(0, Math.min(100, (Number(row.share) || 0) * 100))}%`;
+  track.appendChild(fill);
+  share.appendChild(track);
+  const denominator = document.createElement("small");
+  denominator.className = "metric-reference";
+  denominator.textContent = `знаменатель ${formatValue(row.share_denominator_value, catalogEntry(row.basis_metric_id)?.format || "decimal")}`;
+  share.appendChild(denominator);
+  node.appendChild(share);
+
+  const secondary = document.createElement("div");
+  secondary.className = "portfolio-mix-secondary";
+  portfolioMixSecondaryMetrics(row).forEach((item) => {
+    const line = document.createElement("span");
+    line.textContent = `${item.label}: ${formatValue(item.value, item.format)}`;
+    secondary.appendChild(line);
+  });
+  node.appendChild(secondary);
+
+  const visual = document.createElement("div");
+  visual.className = "portfolio-mix-visual";
+  const barTrack = document.createElement("div");
+  barTrack.className = "ranked-bar-track";
+  const bar = document.createElement("div");
+  bar.className = "ranked-bar-fill";
+  bar.style.width = `${Math.max(4, (Math.abs(Number(row.metric_value) || 0) / maxValue) * 100)}%`;
+  barTrack.appendChild(bar);
+  visual.appendChild(barTrack);
+  node.appendChild(visual);
+  return node;
+}
+
+function portfolioMixReferenceText(row) {
+  const pieces = [];
+  if (row.reference_metric_value !== null && row.reference_metric_value !== undefined) {
+    pieces.push(`сравн. ${formatValue(row.reference_metric_value, catalogEntry(row.basis_metric_id)?.format || "decimal")}`);
+  }
+  if (row.pct_delta !== null && row.pct_delta !== undefined) {
+    pieces.push(formatDeltaValue(row.pct_delta, "percent"));
+  }
+  if (row.share_delta_pp !== null && row.share_delta_pp !== undefined) {
+    pieces.push(`${formatDeltaValue(row.share_delta_pp, "percentage_points")} доли`);
+  }
+  return pieces.length ? pieces.join(" · ") : "сравнение недоступно";
+}
+
+function portfolioMixSecondaryMetrics(row) {
+  const metrics = row.metrics || {};
+  return [
+    { label: "РТО", value: metrics.revenue, format: catalogEntry("revenue")?.format || "currency" },
+    { label: "Шт.", value: metrics.units, format: catalogEntry("units")?.format || "decimal" },
+    { label: "Маржа", value: metrics.retailer_margin_abs, format: catalogEntry("retailer_margin_abs")?.format || "currency" },
+    { label: "Марж. %", value: metrics.retailer_margin_pct, format: "percent" }
+  ].filter((item) => item.value !== null && item.value !== undefined);
+}
+
+function portfolioMixResultForInspector(row, response) {
+  const basisValue = row.metric_value;
+  return {
+    metric_concept: row.basis_metric_id || response.basis_metric,
+    metric_name: displayLabel(row.basis_metric_id || response.basis_metric),
+    grain_id: response.grouping,
+    entity_id: row.entity_id,
+    label: row.label,
+    value: basisValue,
+    current_value: basisValue,
+    reference_value: row.reference_metric_value,
+    delta: row.delta,
+    pct_delta: row.pct_delta,
+    share: row.share,
+    share_delta_pp: row.share_delta_pp,
+    lineage: row.lineage || {},
+    provenance: row.provenance || {}
+  };
+}
+
+function portfolioMixDimensionLabel(grouping) {
+  return {
+    package: "Упаковка",
+    volume: "Объём",
+    package_volume: "Упаковка × объём"
+  }[grouping] || "Группа";
+}
+
+function portfolioMixLimitationText(response) {
+  const limitation = response?.limitations?.[0];
+  if (limitation?.message) return limitation.message;
+  return "Для текущего среза package/volume mix недоступен; атрибуты не выводятся по догадке из SKU.";
 }
 
 function portfolioContributionRows() {
@@ -4537,15 +4757,22 @@ function portfolioBasisConcept(prefix) {
 
 function syncPortfolioControls() {
   const entityLevel = document.getElementById("portfolio-entity-level");
+  const analysisMode = document.getElementById("portfolio-analysis-mode");
   const basis = document.getElementById("portfolio-basis");
+  const isMixMode = state.portfolioAnalysisMode !== "position";
+  if (analysisMode) {
+    analysisMode.value = state.portfolioAnalysisMode;
+  }
   if (entityLevel) {
     const effectiveGrain = portfolioAnalysisGrain();
     Array.from(entityLevel.options).forEach((item) => {
       item.disabled = item.value !== "category" && !hasSingleCategoryScope();
     });
     entityLevel.value = effectiveGrain;
-    entityLevel.disabled = !hasSingleCategoryScope();
-    entityLevel.title = hasSingleCategoryScope()
+    entityLevel.disabled = isMixMode || !hasSingleCategoryScope();
+    entityLevel.title = isMixMode
+      ? "Упаковка и объём показываются как структурный mix, а не как ранговый уровень"
+      : hasSingleCategoryScope()
       ? "Выберите уровень объектов внутри категории"
       : "Выберите одну категорию, чтобы перейти к производителям, брендам или SKU";
   }

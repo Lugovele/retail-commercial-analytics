@@ -1597,6 +1597,66 @@ coverage:
     - brand
     - sku
     - store
+- concept_id: portfolio_package_mix
+  fact_type: dashboard.package_volume.PackageVolumeQueryService
+  coverage_status: COMPLETE
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
+  source_evidence: COMPLETE
+  quality: COMPLETE
+  missing_fields: []
+  UI_provenance_supported: true
+  applicability:
+    tab: Портфель и рынок
+    group: Структура товара
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - package
+- concept_id: portfolio_volume_mix
+  fact_type: dashboard.package_volume.PackageVolumeQueryService
+  coverage_status: COMPLETE
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
+  source_evidence: COMPLETE
+  quality: COMPLETE
+  missing_fields: []
+  UI_provenance_supported: true
+  applicability:
+    tab: Портфель и рынок
+    group: Структура товара
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - volume
+- concept_id: portfolio_package_volume_mix
+  fact_type: dashboard.package_volume.PackageVolumeQueryService
+  coverage_status: COMPLETE
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
+  source_evidence: COMPLETE
+  quality: COMPLETE
+  missing_fields: []
+  UI_provenance_supported: true
+  applicability:
+    tab: Портфель и рынок
+    group: Структура товара
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - package_volume
 - concept_id: recommendations
   fact_type: none
   coverage_status: NOT_APPLICABLE

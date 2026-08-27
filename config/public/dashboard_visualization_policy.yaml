@@ -1738,6 +1738,63 @@ metric_rules:
   - SINGLE_PERIOD
   - DATE_RANGE
   readiness_requirement: READY_PROJECTION
+- concept_id: portfolio_package_mix
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - AVAILABLE_MONTH_SET
+  readiness_requirement: READY_QUERY
+- concept_id: portfolio_volume_mix
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - AVAILABLE_MONTH_SET
+  readiness_requirement: READY_QUERY
+- concept_id: portfolio_package_volume_mix
+  allowed_screens:
+  - portfolio_market
+  preferred_visualization: RANKED_TABLE
+  alternative_visualizations:
+  - BAR
+  - PROVENANCE_DRAWER
+  forbidden_visualizations:
+  - KPI
+  - PIE
+  - DONUT
+  presentation_priority: DETAIL
+  grain_support:
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  - AVAILABLE_MONTH_SET
+  readiness_requirement: READY_QUERY
 - concept_id: manufacturer_abc_revenue
   allowed_screens:
   - portfolio_market

@@ -18,6 +18,10 @@ from retail_analytics.dashboard.data import (
     data_response_to_dict,
 )
 from retail_analytics.dashboard.geography import GeographyQueryService, build_geography_request
+from retail_analytics.dashboard.package_volume import (
+    PackageVolumeQueryService,
+    build_package_volume_request,
+)
 from retail_analytics.dashboard.runtime import (
     DashboardRuntime,
     build_dashboard_runtime,
@@ -61,6 +65,12 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
         source_like_rows_path=resolved_runtime.source_like_rows_path,
     )
     geography_service = GeographyQueryService(
+        resolved_runtime.product_store_facts_path,
+        mart_builds=resolved_runtime.query_service.mart_builds,
+        source_ledger=resolved_runtime.query_service.source_ledger,
+    )
+    package_volume_service = PackageVolumeQueryService(
+        resolved_runtime.source_like_rows_path,
         resolved_runtime.product_store_facts_path,
         mart_builds=resolved_runtime.query_service.mart_builds,
         source_ledger=resolved_runtime.query_service.source_ledger,
@@ -162,6 +172,13 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 data = geography_service.query(geography_request)
                 _attach_user_execution_filters(data, original_entity_filters)
                 return _json_response(start_response, data)
+            if method == "POST" and path == "/api/dashboard/package-volume":
+                payload = _read_json(environ)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
+                package_volume_request = build_package_volume_request(payload)
+                data = package_volume_service.query(package_volume_request)
+                _attach_user_execution_filters(data, original_entity_filters)
+                return _json_response(start_response, data)
             return _json_response(start_response, {"error": "not_found"}, status="404 Not Found")
         except (FileNotFoundError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
             return _json_response(
@@ -217,6 +234,8 @@ def _attach_user_execution_filters(data: dict[str, Any], original_entity_filters
     request_scope["execution_entity_filters"] = execution_filters
     for result in data.get("metric_results") or ():
         _attach_filters_to_provenance(result.get("provenance"), original_entity_filters, execution_filters)
+    for row in data.get("rows") or ():
+        _attach_filters_to_provenance(row.get("provenance"), original_entity_filters, execution_filters)
     for item in data.get("items") or ():
         _attach_filters_to_provenance(item.get("provenance"), original_entity_filters, execution_filters)
         for row in item.get("rows") or ():

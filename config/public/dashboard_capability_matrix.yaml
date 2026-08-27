@@ -2175,3 +2175,108 @@ capabilities:
   provenance_supported: true
   signal_eligible: false
   recommendation_eligible_future: false
+- concept_id: portfolio_package_mix
+  ui_label_ru: Состав портфеля по упаковке
+  ui_description_ru: Portfolio mix grouped by canonical package/container attribute; metrics come from approved product-store facts joined to canonical product attributes.
+  tab: Портфель и рынок
+  group: Структура товара
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - package
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: READY
+  available_month_set_support: READY
+  range_aggregation_strategy: additive_ratio_safe
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: mixed
+  unit: structural_mix
+  backend_fact_source: dashboard.package_volume.PackageVolumeQueryService
+  availability_status: READY
+  limitations:
+  - canonical_package_required
+  - additive_metrics_only
+  - margin_pct_ratio_of_sums
+  - share_recomputed_not_averaged
+  - no_package_abc
+  - no_flavor_inference
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: false
+- concept_id: portfolio_volume_mix
+  ui_label_ru: Состав портфеля по объёму упаковки
+  ui_description_ru: Portfolio mix grouped by canonical exact product-pack volume attribute; this is not sales volume in liters.
+  tab: Портфель и рынок
+  group: Структура товара
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - volume
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: READY
+  available_month_set_support: READY
+  range_aggregation_strategy: additive_ratio_safe
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: mixed
+  unit: structural_mix
+  backend_fact_source: dashboard.package_volume.PackageVolumeQueryService
+  availability_status: READY
+  limitations:
+  - canonical_exact_volume_required
+  - product_pack_volume_not_sales_volume
+  - volume_bands_not_productized
+  - additive_metrics_only
+  - margin_pct_ratio_of_sums
+  - share_recomputed_not_averaged
+  - no_volume_abc
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: false
+- concept_id: portfolio_package_volume_mix
+  ui_label_ru: Состав портфеля по упаковке и объёму
+  ui_description_ru: Compact portfolio mix grouped by canonical package and exact product-pack volume together.
+  tab: Портфель и рынок
+  group: Структура товара
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - package_volume
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: READY
+  available_month_set_support: READY
+  range_aggregation_strategy: additive_ratio_safe
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: mixed
+  unit: structural_mix
+  backend_fact_source: dashboard.package_volume.PackageVolumeQueryService
+  availability_status: READY
+  limitations:
+  - canonical_package_and_exact_volume_required
+  - additive_metrics_only
+  - cardinality_managed_by_compact_rows
+  - share_recomputed_not_averaged
+  - no_package_volume_abc
+  provenance_supported: true
+  signal_eligible: false
+  recommendation_eligible_future: false
