@@ -13,9 +13,12 @@ import duckdb
 import polars as pl
 import yaml  # type: ignore[import-untyped]
 
+from retail_analytics.core.events.engine import detect_events
+from retail_analytics.core.events.registry import load_event_rule_config
 from retail_analytics.mart.builds import MartBuildMetadata, MartBuildStatus
 from retail_analytics.mart.query import ComparisonMode, PeriodMode
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
+from retail_analytics.pipeline.context import AnalysisContext
 
 COMMERCIAL_SIGNAL_FAMILIES = frozenset(
     {
@@ -168,10 +171,12 @@ class SignalFeedService:
         self,
         *,
         events_path: str | Path | None = None,
+        event_facts_path: str | Path | None = None,
         event_rules_path: str | Path | None = None,
         mart_builds: tuple[MartBuildMetadata, ...] = (),
     ) -> None:
         self.events_path = Path(events_path) if events_path is not None else None
+        self.event_facts_path = Path(event_facts_path) if event_facts_path is not None else None
         self.event_rules_path = Path(event_rules_path) if event_rules_path is not None else None
         self.mart_builds = mart_builds
 
@@ -179,7 +184,15 @@ class SignalFeedService:
         """Return confirmed signals, separate quality alerts, and limitations."""
 
         mart_build_id = self._resolve_build_id(request)
-        if self.events_path is None:
+        period_limitations = _period_mode_limitations(request)
+        if period_limitations:
+            return self._empty(
+                request,
+                mart_build_id,
+                SignalFeedStatus.NO_SURFACED_SIGNALS,
+                period_limitations,
+            )
+        if self.events_path is None and self.event_facts_path is None:
             return self._empty(
                 request,
                 mart_build_id,
@@ -187,7 +200,7 @@ class SignalFeedService:
                 ("signal_events_path_not_configured",),
             )
 
-        frame = _read_events(self.events_path)
+        frame = self._event_frame(request, mart_build_id)
         enabled_rule_count = _enabled_rule_count(self.event_rules_path)
         if frame.is_empty() or not frame.columns:
             reason = "no_enabled_event_rules" if enabled_rule_count == 0 else "no_confirmed_events"
@@ -256,6 +269,31 @@ class SignalFeedService:
             source_revision_ids=source_revision_ids,
             private_label_scope=request.private_label_scope,
         )
+
+    def _event_frame(self, request: SignalFeedRequest, mart_build_id: str | None) -> pl.DataFrame:
+        if self.events_path is not None:
+            frame = _read_events(self.events_path)
+            if not frame.is_empty() and frame.columns:
+                return frame
+        if self.event_facts_path is None or self.event_rules_path is None:
+            return pl.DataFrame()
+        event_facts = _read_events(self.event_facts_path)
+        if event_facts.is_empty():
+            return pl.DataFrame()
+        context = _event_context(event_facts, request, mart_build_id, self.mart_builds)
+        if context is None:
+            return pl.DataFrame()
+        registry = load_event_rule_config(self.event_rules_path)
+        result = detect_events(
+            event_facts,
+            registry.rules,
+            context,
+            upstream_quality_report=registry.quality_report,
+            event_config_hash=registry.config_hash,
+        )
+        if result.events.is_empty():
+            return result.events
+        return result.events.with_columns(pl.lit("EVENT_FACTS_RUNTIME_MATERIALIZATION").alias("event_source"))
 
     def _resolve_build_id(self, request: SignalFeedRequest) -> str | None:
         if request.mart_build_id:
@@ -345,6 +383,65 @@ def _read_events(path: Path) -> pl.DataFrame:
     if path.is_dir():
         return duckdb.sql("SELECT * FROM read_parquet(?)", params=[_duckdb_path(path)]).pl()
     return pl.read_parquet(path)
+
+
+def _event_context(
+    event_facts: pl.DataFrame,
+    request: SignalFeedRequest,
+    mart_build_id: str | None,
+    mart_builds: tuple[MartBuildMetadata, ...],
+) -> AnalysisContext | None:
+    scoped = event_facts
+    for column, value in (("retailer_id", request.retailer_id), ("source_id", request.source_id)):
+        if column in scoped.columns:
+            scoped = scoped.filter(pl.col(column) == value)
+    if scoped.is_empty():
+        return None
+    build = _build_for_id(mart_build_id, mart_builds)
+    analysis_run_id = _build_value_present_in_frame(
+        build.analysis_run_ids if build is not None else (),
+        scoped,
+        "analysis_run_id",
+    ) or _first_value(
+        scoped,
+        "analysis_run_id",
+    )
+    rule_version = _build_value_present_in_frame(
+        build.rule_versions if build is not None else (),
+        scoped,
+        "rule_version",
+    ) or _first_value(
+        scoped,
+        "rule_version",
+    )
+    if analysis_run_id is None or rule_version is None:
+        return None
+    return AnalysisContext(
+        analysis_run_id=analysis_run_id,
+        retailer_id=request.retailer_id,
+        source_id=request.source_id,
+        source_version=request.source_id,
+        rule_version=rule_version,
+    )
+
+
+def _single_build_value(values: tuple[str, ...]) -> str | None:
+    return values[0] if len(values) == 1 else None
+
+
+def _build_value_present_in_frame(values: tuple[str, ...], frame: pl.DataFrame, column: str) -> str | None:
+    value = _single_build_value(values)
+    if value is None or column not in frame.columns:
+        return None
+    present_values = {str(item) for item in frame.get_column(column).drop_nulls().unique().to_list()}
+    return value if value in present_values else None
+
+
+def _first_value(frame: pl.DataFrame, column: str) -> str | None:
+    if column not in frame.columns:
+        return None
+    values = frame.get_column(column).drop_nulls().unique().sort().to_list()
+    return str(values[0]) if len(values) == 1 else None
 
 
 def _enabled_rule_count(path: Path | None) -> int | None:
@@ -460,6 +557,7 @@ def _provenance(
         "lineage": {
             "analysis_run_id": event.get("analysis_run_id"),
             "mart_build_id": mart_build_id,
+            "event_source": event.get("event_source") or "CONFIRMED_EVENT_OUTPUT",
             "source_revision_ids": source_revision_ids,
             "rule_version": event.get("rule_version"),
             "metric_lineage": _json_field(event.get("metric_lineage"), {}),
@@ -537,6 +635,16 @@ def _capability_limitations(
     return tuple(rows)
 
 
+def _period_mode_limitations(request: SignalFeedRequest) -> tuple[str, ...]:
+    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
+        return ("signals_available_month_set_unsupported",)
+    if request.period_mode == PeriodMode.DATE_RANGE:
+        return ("signals_date_range_unsupported",)
+    if request.period_mode == PeriodMode.FULL_AVAILABLE_HISTORY:
+        return ("signals_full_history_unsupported",)
+    return ()
+
+
 def _limitation_message(code: str) -> str:
     return {
         "signal_events_path_not_configured": "Лента сигналов не подключена к подтверждённым событиям.",
@@ -555,6 +663,15 @@ def _limitation_message(code: str) -> str:
         "event_brand_scope_not_materialized": "Материализованные события не содержат подтверждённого среза бренда.",
         "event_sku_scope_not_materialized": "Материализованные события не содержат подтверждённого среза SKU.",
         "event_store_scope_not_materialized": "Материализованные события не содержат подтверждённого среза ТТ.",
+        "signals_available_month_set_unsupported": (
+            "Сигналы по сопоставимым месяцам пока не оцениваются по подтверждённому контракту."
+        ),
+        "signals_date_range_unsupported": (
+            "Сигналы для произвольного диапазона пока не оцениваются по подтверждённому контракту."
+        ),
+        "signals_full_history_unsupported": (
+            "Сигналы за всю доступную историю пока не оцениваются по подтверждённому контракту."
+        ),
     }.get(code, code)
 
 

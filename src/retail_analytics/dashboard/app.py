@@ -55,6 +55,7 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
     portfolio_market_service = PortfolioMarketService(resolved_runtime.query_service)
     signal_feed_service = SignalFeedService(
         events_path=resolved_runtime.events_path,
+        event_facts_path=resolved_runtime.event_facts_path,
         event_rules_path=resolved_runtime.event_rules_path,
         mart_builds=resolved_runtime.query_service.mart_builds,
     )

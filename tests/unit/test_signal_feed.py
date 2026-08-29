@@ -227,6 +227,88 @@ event_rules:
     assert response.capability_limitations[0].code == "no_confirmed_events"
 
 
+def test_signal_feed_materializes_confirmed_events_from_event_facts_when_events_output_is_empty(tmp_path: Path) -> None:
+    events_path = tmp_path / "empty_events.parquet"
+    pl.DataFrame().write_parquet(events_path)
+    event_facts_path = tmp_path / "event_facts.parquet"
+    _event_facts().write_parquet(event_facts_path)
+    rules_path = _rules_path(tmp_path)
+    service = SignalFeedService(
+        events_path=events_path,
+        event_facts_path=event_facts_path,
+        event_rules_path=rules_path,
+        mart_builds=(_build(),),
+    )
+
+    response = service.feed(_request())
+
+    assert response.status == SignalFeedStatus.PARTIAL
+    assert [row.event_type for row in response.signals] == ["MATERIAL_REVENUE_DECLINE"]
+    assert response.signals[0].provenance["lineage"]["event_source"] == "EVENT_FACTS_RUNTIME_MATERIALIZATION"
+    assert response.excluded_event_counts == {}
+
+
+def test_signal_feed_does_not_fire_material_signal_below_threshold_from_event_facts(tmp_path: Path) -> None:
+    events_path = tmp_path / "empty_events.parquet"
+    pl.DataFrame().write_parquet(events_path)
+    event_facts_path = tmp_path / "event_facts.parquet"
+    _event_facts(delta_pct=-0.099).write_parquet(event_facts_path)
+    service = SignalFeedService(
+        events_path=events_path,
+        event_facts_path=event_facts_path,
+        event_rules_path=_rules_path(tmp_path),
+        mart_builds=(_build(),),
+    )
+
+    response = service.feed(_request())
+
+    assert response.status == SignalFeedStatus.NO_CONFIRMED_EVENTS
+    assert response.signals == ()
+
+
+def test_signal_feed_fails_closed_for_available_month_period_sets(tmp_path: Path) -> None:
+    service = _service(tmp_path, _events())
+
+    response = service.feed(
+        SignalFeedRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.AVAILABLE_MONTH_SET,
+            period_grain="month",
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    assert response.status == SignalFeedStatus.NO_SURFACED_SIGNALS
+    assert response.signals == ()
+    assert response.limitations == ("signals_available_month_set_unsupported",)
+    assert response.capability_limitations[0].message.startswith("Сигналы по сопоставимым месяцам")
+
+
+def test_signal_feed_fails_closed_for_store_filter_without_store_materialization(tmp_path: Path) -> None:
+    service = _service(tmp_path, _events())
+
+    response = service.feed(
+        SignalFeedRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_filters={"store": ("store_a",)},
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    assert response.status == SignalFeedStatus.NO_SURFACED_SIGNALS
+    assert response.signals == ()
+    assert response.limitations == ("event_store_scope_not_materialized",)
+
+
 def test_signal_feed_not_configured_is_separate_from_empty_feed() -> None:
     service = SignalFeedService(mart_builds=(_build(),))
 
@@ -358,3 +440,63 @@ def _event(
         "benchmark_lineage": json.dumps({}, sort_keys=True),
         "private_label_scope": private_label_scope,
     }
+
+
+def _event_facts(*, delta_pct: float = -0.2) -> pl.DataFrame:
+    return pl.DataFrame(
+        (
+            {
+                "analysis_run_id": "analysis_a",
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "rule_version": "rules_v1",
+                "entity_type": "sku",
+                "entity_id": "sku_a",
+                "category": "category_a",
+                "input_source": "comparison",
+                "feature_name": "revenue",
+                "period": date(2026, 1, 1),
+                "reference_period": date(2025, 1, 1),
+                "comparison_type": "YOY",
+                "comparison_quality": "HIGH",
+                "observed_value": 80.0,
+                "reference_value": 100.0,
+                "observed_label": None,
+                "reference_label": None,
+                "label_changed": None,
+                "delta_abs": -20.0,
+                "delta_pct": delta_pct,
+                "delta_pp": None,
+                "metric_definition_id": "metric_a",
+                "metric_definition_version": "v1",
+                "metric_config_hash": "hash_a",
+            },
+        )
+    )
+
+
+def _rules_path(tmp_path: Path) -> Path:
+    path = tmp_path / "event_rules.yaml"
+    path.write_text(
+        """
+event_rules:
+  - event_rule_id: retailer_a.revenue_decline.v1
+    retailer_id: retailer_a
+    source_id: source_a
+    rule_version: rules_v1
+    event_type: MATERIAL_REVENUE_DECLINE
+    event_family: GROWTH_DECLINE
+    input_source: comparison
+    required_features: [revenue]
+    comparison_types: [YOY]
+    entity_types: [sku]
+    conditions:
+      - field: delta_pct
+        operator: lte
+        value: -0.10
+    severity: HIGH
+    confidence: HIGH
+""".strip(),
+        encoding="utf-8",
+    )
+    return path

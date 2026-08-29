@@ -249,6 +249,8 @@ const signalEventLabels = {
   MATERIAL_UNITS_GROWTH: "Продажи, шт. выросли по подтверждённому правилу",
   MATERIAL_MARGIN_DECLINE: "Абсолютная маржа снизилась по подтверждённому правилу",
   MATERIAL_MARGIN_GROWTH: "Абсолютная маржа выросла по подтверждённому правилу",
+  MARGIN_PCT_EROSION: "Маржинальность снизилась сильнее подтверждённого порога",
+  MARGIN_PCT_GAIN: "Маржинальность выросла сильнее подтверждённого порога",
   DISTRIBUTION_LOSS: "Снижение присутствия по подтверждённому правилу",
   DISTRIBUTION_GAIN: "Рост присутствия по подтверждённому правилу",
   VELOCITY_LOSS: "Снижение продаж на ТТ по подтверждённому правилу",
@@ -1495,7 +1497,7 @@ function buildSignalsPayload() {
     period_mode: backendPeriodMode(),
     period_grain: "month",
     grain_id: state.currentGrain,
-    entity_ids: entityIdsForSummary(),
+    entity_ids: state.currentGrain === "network" ? [] : entityIdsForSummary(),
     entity_filters: selectedFilterValuesForPortfolio(),
     comparison_mode: selectedComparisonMode(),
     include_lineage: true,
@@ -2638,7 +2640,10 @@ function signalLimitationText(code) {
     event_manufacturer_scope_not_materialized: "События не содержат подтверждённого среза производителя.",
     event_brand_scope_not_materialized: "События не содержат подтверждённого среза бренда.",
     event_sku_scope_not_materialized: "События не содержат подтверждённого среза SKU.",
-    event_store_scope_not_materialized: "События не содержат подтверждённого среза ТТ."
+    event_store_scope_not_materialized: "События не содержат подтверждённого среза ТТ.",
+    signals_available_month_set_unsupported: "Сигналы по сопоставимым месяцам пока не оцениваются по подтверждённому контракту.",
+    signals_date_range_unsupported: "Сигналы для произвольного диапазона пока не оцениваются по подтверждённому контракту.",
+    signals_full_history_unsupported: "Сигналы за всю доступную историю пока не оцениваются по подтверждённому контракту."
   }[code] || "Есть ограничение доступности ленты сигналов.";
 }
 
@@ -2653,6 +2658,7 @@ function signalQualityText(value) {
     MISSING_EVIDENCE: "не хватает доказательств",
     NO_CONFIRMED_EVENTS: "нет подтверждённых событий",
     NOT_CONFIGURED: "не подключено",
+    PARTIAL_EVIDENCE: "частичные доказательства",
     HIGH: "высокое",
     MEDIUM: "среднее",
     LOW: "низкое"

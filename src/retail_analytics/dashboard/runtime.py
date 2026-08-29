@@ -106,6 +106,7 @@ class DashboardRuntimeConfig:
     metric_facts_path: Path | None = None
     mart_builds_path: Path | None = None
     source_ledger_path: Path | None = None
+    event_facts_path: Path | None = None
     events_path: Path | None = None
     event_rules_path: Path | None = None
     source_like_rows_path: Path | None = None
@@ -121,6 +122,7 @@ class DashboardRuntimeConfig:
             "metric_facts_path",
             "mart_builds_path",
             "source_ledger_path",
+            "event_facts_path",
             "events_path",
             "event_rules_path",
             "source_like_rows_path",
@@ -157,6 +159,7 @@ class DashboardRuntime:
     catalog: tuple[EffectiveMetricCatalogEntry, ...]
     retailers: tuple[DashboardRuntimeRetailer, ...]
     mode: DashboardRuntimeMode = DashboardRuntimeMode.DEMO
+    event_facts_path: Path | None = None
     events_path: Path | None = None
     event_rules_path: Path | None = None
     source_like_rows_path: Path | None = None
@@ -187,7 +190,8 @@ class DashboardRuntime:
             "supported_period_modes": list(SUPPORTED_PERIOD_MODES),
             "supported_comparison_modes": list(SUPPORTED_COMPARISON_MODES),
             "supported_private_label_scopes": list(SUPPORTED_PRIVATE_LABEL_SCOPES),
-            "signal_feed_configured": self.events_path is not None,
+            "signal_feed_configured": self.events_path is not None or self.event_facts_path is not None,
+            "signal_event_facts_configured": self.event_facts_path is not None,
             "source_like_rows_configured": self.source_like_rows_path is not None,
             "product_store_facts_configured": self.product_store_facts_path is not None,
             "store_universe_configured": self.store_universe_path is not None,
@@ -412,6 +416,7 @@ def load_dashboard_runtime_config(
         metric_facts_path=_config_path(payload.get("metric_facts_path"), base),
         mart_builds_path=_config_path(payload.get("mart_builds_path"), base),
         source_ledger_path=_config_path(payload.get("source_ledger_path"), base),
+        event_facts_path=_config_path(payload.get("event_facts_path"), base),
         events_path=_config_path(payload.get("events_path"), base),
         event_rules_path=_config_path(payload.get("event_rules_path"), base),
         source_like_rows_path=_config_path(payload.get("source_like_rows_path"), base),
@@ -440,6 +445,7 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
         str(path)
         for path in (
             config.events_path,
+            config.event_facts_path,
             config.event_rules_path,
             config.source_like_rows_path,
             config.product_store_facts_path,
@@ -480,6 +486,7 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
         catalog=catalog,
         retailers=config.retailers,
         mode=config.mode,
+        event_facts_path=config.event_facts_path,
         events_path=config.events_path,
         event_rules_path=config.event_rules_path,
         source_like_rows_path=config.source_like_rows_path,
