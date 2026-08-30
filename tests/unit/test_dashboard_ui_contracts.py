@@ -1655,26 +1655,68 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "Для этой пары уровней вклад пока недоступен." in script
 
 
-def test_overview_uses_exactly_four_primary_kpi_concepts() -> None:
+def test_overview_uses_ordered_business_kpi_surface() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")
         .joinpath("app.js")
         .read_text(encoding="utf-8")
     )
 
-    assert 'const primaryKpis = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"]' in script
-    assert "primaryKpis.map" in script
-    assert "revenue_velocity" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
-    assert "distribution" not in script.split("const primaryKpis = ", 1)[1].split("];", 1)[0]
+    overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
+    expected_order = [
+        '"units"',
+        '"revenue_vat"',
+        '"retailer_margin_pct"',
+        '"retailer_margin_abs"',
+        '"velocity"',
+        '"average_price_per_liter"',
+        '"distribution"',
+        '"weighted_distribution"',
+        '"weighted_shelf_price_vat"',
+        '"weighted_input_price_vat"',
+        '"active_sku_count"',
+        '"reserved_kpi_slot_12"',
+        '"reserved_kpi_slot_13"',
+    ]
+    positions = [overview_surface.index(item) for item in expected_order]
+    assert positions == sorted(positions)
+    assert "Оборот, шт." in overview_surface
+    assert "Оборот, ₽ с НДС" in overview_surface
+    assert "V\\u0050O на ТТ" in overview_surface
+    assert "Средняя цена за литр" in overview_surface
+    assert "Взвешенная дистрибуция" in overview_surface
+    assert "reserved: true" in overview_surface
+    assert "primaryKpis" not in script
+
+
+def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
+
+    assert "BUSINESS_RULE_REQUIRED" in overview_surface
+    assert "Требуется утверждённая формула." in overview_surface
+    assert "Требуется правило веса и вселенной." in overview_surface
+    assert "revenue_vat /" not in script
+    assert "revenue_vat/" not in script
+    assert "weighted_distribution =" not in script
+    assert "average_price_per_liter =" not in script
+    assert "const overviewQueryKpis" in script
+    assert 'concept_ids: ["active_sku_count"]' in script
 
 
 def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     css = html_or_script("styles.css")
 
-    assert "min-height: 104px" in css
-    assert "padding: 13px 14px 12px" in css
+    assert "grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))" in css
+    assert "min-height: 86px" in css
+    assert "padding: 10px 11px 9px" in css
     assert "border: 1px solid var(--border-default)" in css
-    assert "font-size: 23px" in css
+    assert "font-size: 19px" in css
+    assert ".kpi-unit" in css
     assert "padding: 7px 10px" in css
     assert "border: 1px solid rgba(219, 227, 238, 0.78)" in css
     assert "min-height: 132px" not in css

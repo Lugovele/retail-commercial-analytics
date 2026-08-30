@@ -858,8 +858,8 @@ input {
 .kpi-grid {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: var(--space-2);
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
 }
 
 .kpi-secondary {
@@ -890,8 +890,8 @@ input {
 
 .kpi-card {
   min-width: 0;
-  min-height: 104px;
-  padding: 13px 14px 12px;
+  min-height: 86px;
+  padding: 10px 11px 9px;
   background: var(--bg-surface);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -899,24 +899,45 @@ input {
 
 .kpi-card small {
   display: block;
-  margin-bottom: var(--space-1);
+  min-height: 30px;
+  margin-bottom: 5px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
 }
 
 .kpi-card strong {
   display: block;
-  margin-bottom: 6px;
-  font-size: 23px;
+  margin-bottom: 4px;
+  overflow-wrap: anywhere;
+  font-size: 19px;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
 }
 
 .kpi-meta {
   display: block;
-  min-height: 18px;
+  min-height: 16px;
   color: var(--text-secondary);
-  font-size: 12px;
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.kpi-unit {
+  display: block;
+  margin-top: 4px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.15;
+}
+
+.kpi-card.is-unavailable {
+  background: rgba(248, 250, 252, 0.78);
+  border-style: dashed;
+}
+
+.kpi-card.is-unavailable strong {
+  color: var(--text-muted);
 }
 
 .metric-value-button {
