@@ -1809,67 +1809,83 @@ def test_overview_kpi_groups_preserve_business_reading_order() -> None:
     assert "card.dataset.kpiGroup = definition.group" in script
 
 
-def test_overview_kpi_microtrends_use_backend_points_without_placeholder_series() -> None:
+def test_overview_kpi_cards_use_generic_comparison_visual_without_sparklines() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")
         .joinpath("app.js")
         .read_text(encoding="utf-8")
     )
     overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
-    microtrend_helpers = script.split("function renderKpiMicrotrend", 1)[1].split("function overviewKpiModel", 1)[0]
+    kpi_renderer = script.split("function renderKpiCard", 1)[1].split("function overviewKpiModel", 1)[0]
+    comparator_helpers = script.split("function renderKpiComparator", 1)[1].split("function overviewKpiModel", 1)[0]
 
-    assert "microtrend: true" in overview_surface
-    assert "backend-period-values" in microtrend_helpers
-    assert "backend-portfolio-rows" in microtrend_helpers
-    assert "chartResultFor(definition.concept) || model.result" in microtrend_helpers
-    assert "queryKpiMicrotrendPoints(definition, model, scope)" in microtrend_helpers
-    assert "portfolioKpiMicrotrendPoints(model, scope)" in microtrend_helpers
-    assert "trendResult?.period_values" in microtrend_helpers
-    assert "model.item?.rows" in microtrend_helpers
+    assert "microtrend" not in overview_surface
+    assert "function renderKpiMicrotrend" not in script
+    assert "function kpiMicrotrendPoints" not in script
+    assert "kpi-sparkline" not in script
+    assert "kpi-microtrend" not in script
+    assert "kpi-card-content" in kpi_renderer
+    assert "kpi-card-main" in kpi_renderer
+    assert 'value.className = "metric-current kpi-current-value"' in kpi_renderer
+    assert "renderKpiComparator(definition, model)" in kpi_renderer
+    assert "kpi-comparator" in comparator_helpers
+    assert "kpi-comparator-track" in comparator_helpers
+    assert "kpi-comparator-connector" in comparator_helpers
+    assert "kpi-comparator-marker--${role}" in comparator_helpers
+    assert "comparison.current_value" in comparator_helpers
+    assert "comparison.comparison_value" in comparator_helpers
+    assert "local-symmetric-current-reference" in comparator_helpers
+    assert "kpiComparatorScale(current, reference)" in comparator_helpers
+    assert "Number.isFinite(current)" in comparator_helpers
+    assert "Number.isFinite(reference)" in comparator_helpers
+    assert "formatPeriod(period)" in comparator_helpers
+    assert "kpiValueWithUnit(formatValue(value, entry.format), definition)" in comparator_helpers
     assert "source: \"business_rule_required\"" in overview_surface
-    assert 'definition.status === "BUSINESS_RULE_REQUIRED"' in microtrend_helpers
-    assert "Number.isFinite(point.value)" in microtrend_helpers
-    assert "points.length < 3" in microtrend_helpers
-    assert "kpiMicrotrendPeriodScope(model)" in microtrend_helpers
-    assert 'scope.mode === "single"' in microtrend_helpers
-    assert "kpiMicrotrendPeriodInScope(point.period, scope)" in microtrend_helpers
-    assert "String(period) >= scope.start && String(period) <= scope.end" in microtrend_helpers
-    assert ".slice(-8)" not in microtrend_helpers
-    assert "kpi-sparkline-period" not in microtrend_helpers
-    assert "kpi-sparkline-hitpoint" in microtrend_helpers
-    assert "kpi-sparkline-point" in microtrend_helpers
-    assert "kpi-microtrend--neutral-history" in microtrend_helpers
-    assert "kpiValueWithUnit(formatValue(point.value" in microtrend_helpers
-    assert '"data-period": point.period' in microtrend_helpers
-    assert '"data-value": String(point.value)' in microtrend_helpers
-    assert "value || 0" not in microtrend_helpers
-    assert "fillMissing" not in microtrend_helpers
-    assert "interpolate" not in microtrend_helpers
-    assert "const microtrendConcepts = overviewKpiDefinitions" in script
     assert "const selectedDefinition = overviewTrendDefinition(state.chartMetric);" in script
-    assert 'const selectedMetricConcepts = selectedDefinition?.source === "query" ? [state.chartMetric] : [];' in script
-    assert "const metricConcepts = Array.from(new Set([...selectedMetricConcepts, ...microtrendConcepts]));" in script
+    assert "const metricConcepts = selectedDefinition?.source === \"query\" ? [state.chartMetric] : [];" in script
 
 
-def test_overview_kpi_microtrends_are_bound_to_selected_period_scope() -> None:
+def test_overview_kpi_comparator_has_marker_semantics_and_safe_normalization() -> None:
     script = html_or_script("app.js")
-    microtrend_helpers = script.split("function renderKpiMicrotrend", 1)[1].split("function overviewKpiModel", 1)[0]
+    styles = html_or_script("styles.css")
+    comparator_helpers = script.split("function renderKpiComparator", 1)[1].split("function overviewKpiModel", 1)[0]
 
-    assert 'if (scope.mode === "single") return [];' in microtrend_helpers
-    assert 'if (points.length < 3) return null;' in microtrend_helpers
-    assert 'return { mode: "range", start, end };' in microtrend_helpers
-    assert 'return { mode: "set", periods: new Set(periods.map(String)) };' in microtrend_helpers
-    assert "model.comparison?.current_included_periods" in microtrend_helpers
-    assert "point.period && Number.isFinite(point.value)" in microtrend_helpers
-    assert "kpiMicrotrendPeriodInScope(point.period, scope)" in microtrend_helpers
-    assert "String(period) >= scope.start && String(period) <= scope.end" in microtrend_helpers
-    assert "scope.periods.has(String(period))" in microtrend_helpers
-    assert "comparison_period_start" not in microtrend_helpers
-    assert "comparison_included_periods" not in microtrend_helpers
-    assert "svgText(" not in microtrend_helpers
-    assert "kpi-sparkline-period" not in microtrend_helpers
-    assert "fillMissing" not in microtrend_helpers
-    assert "interpolate" not in microtrend_helpers
+    assert "if (!isComparisonDisplayMode() || !comparison) return null;" in comparator_helpers
+    assert "comparison.current_value === null || comparison.current_value === undefined" in comparator_helpers
+    assert "comparison.comparison_value === null || comparison.comparison_value === undefined" in comparator_helpers
+    assert "if (!Number.isFinite(current) || !Number.isFinite(reference)) return null;" in comparator_helpers
+    assert 'if (scale.equal) comparator.classList.add("kpi-comparator--equal");' in comparator_helpers
+    assert "deltaSemanticClass(definition.concept" not in comparator_helpers
+    assert "current === reference" in comparator_helpers
+    assert "const magnitude = Math.max(Math.abs(current), Math.abs(reference), 1);" in comparator_helpers
+    assert "const normalizedCurrent = current / magnitude;" in comparator_helpers
+    assert "Math.abs(normalizedCurrent - normalizedReference)" in comparator_helpers
+    assert "Number.EPSILON" in comparator_helpers
+    assert "Math.min(92, Math.max(8" in comparator_helpers
+    assert "marker.dataset.role = role" in comparator_helpers
+    assert "marker.dataset.value = String(value)" in comparator_helpers
+    assert "marker.dataset.period = period" in comparator_helpers
+    assert "kpi-comparator-marker--${role}" in comparator_helpers
+    assert "сейчас" not in comparator_helpers.lower()
+    assert "было" not in comparator_helpers.lower()
+    assert ">current<" not in comparator_helpers.lower()
+    assert ">reference<" not in comparator_helpers.lower()
+    assert "--status-positive" in styles
+    assert "--status-negative" in styles
+    assert "--status-neutral" in styles
+    assert "--reference-marker" in styles
+    assert "--comparison-track" in styles
+    assert ".kpi-comparator-marker--reference" in styles
+    assert "background: var(--bg-surface)" in styles
+    assert ".kpi-comparator-marker--current" in styles
+    assert "background: currentColor" in styles
+    assert "color: var(--status-neutral)" in styles
+    assert ".kpi-comparator--equal .kpi-comparator-marker--reference" in styles
+    assert ".kpi-comparator--equal .kpi-comparator-marker--current" in styles
+    assert ".kpi-comparator.delta-neutral-up" not in styles
+    assert ".kpi-comparator.delta-neutral-down" not in styles
+    assert "fillMissing" not in comparator_helpers
+    assert "interpolate" not in comparator_helpers
 
 
 def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
@@ -1904,11 +1920,15 @@ def test_overview_kpi_cards_remove_generic_period_caption_and_show_dynamics() ->
     assert "без сравнения" not in kpi_renderer.lower()
     assert 'unit.className = "kpi-unit"' not in kpi_renderer
     assert "kpiValueWithUnit(overviewKpiValueText(result, entry, definition), definition)" in kpi_renderer
-    assert 'valueRow.className = "kpi-value-row"' in kpi_renderer
+    assert 'content.className = "kpi-card-content"' in kpi_renderer
+    assert 'left.className = "kpi-card-main"' in kpi_renderer
     assert 'valueWrap.className = "metric-current kpi-current-value"' in kpi_renderer
     assert 'meta.className = "kpi-meta kpi-meta--delta"' in kpi_renderer
     assert "text: kpiDeltaText(comparison, entry)" in kpi_renderer
-    assert 'referenceContext.className = "kpi-reference"' in kpi_renderer
+    assert "kpiReferenceText(comparison, entry, definition)" not in kpi_renderer
+    assert "referenceContext" not in kpi_renderer
+    assert "kpi-reference" not in kpi_renderer
+    assert "renderKpiComparator(definition, model)" in kpi_renderer
     assert "meta.textContent = kpiContextText(comparison, entry)" not in kpi_renderer
     assert "comparison.comparison_value" not in kpi_helpers
     assert 'return "";' in kpi_helpers
@@ -1934,6 +1954,7 @@ def test_overview_portfolio_kpi_uses_backend_comparison_and_available_month_limi
     assert "item.reference_value" in kpi_model
     assert "item.delta" in kpi_model
     assert "item.pct_delta" in kpi_model
+    assert "current_value: item.current_value" in kpi_model
     assert "comparison_value: item.reference_value" in kpi_model
     assert "comparison_included_periods" in kpi_model
     assert "!overviewKpiPeriodUnsupported(definition)" in kpi_model
@@ -1962,15 +1983,21 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "border: 1px solid rgba(219, 227, 238, 0.66)" in css
     assert "font-size: 19px" in css
     assert ".kpi-unit" not in css
-    assert ".kpi-value-row" in css
+    assert ".kpi-card-content" in css
+    assert ".kpi-card-main" in css
     assert ".kpi-meta--delta" in css
     assert ".kpi-card--primary .kpi-meta--delta" in css
-    assert ".kpi-reference" in css
-    assert ".kpi-microtrend" in css
-    assert "height: 34px" in css
+    assert ".kpi-reference" not in css
+    assert ".kpi-comparator" in css
+    assert ".kpi-comparator-track" in css
+    assert ".kpi-comparator-marker--reference" in css
+    assert ".kpi-comparator-marker--current" in css
+    assert ".kpi-microtrend" not in css
     assert ".kpi-sparkline-period" not in css
-    assert ".kpi-sparkline-hitpoint" in css
-    assert ".kpi-sparkline-line" in css
+    assert ".kpi-sparkline-hitpoint" not in css
+    assert ".kpi-sparkline-line" not in css
+    assert "font-weight: 700" not in css.split(".kpi-card strong", 1)[1].split(".kpi-comparator", 1)[0]
+    assert ".kpi-meta--delta .metric-delta-button {\n  font-weight: 400;" in css
     assert "padding: 7px 10px" in css
     assert "border: 1px solid rgba(219, 227, 238, 0.78)" in css
     assert "min-height: 132px" not in css
@@ -2255,6 +2282,13 @@ def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
 
     assert "--delta-outcome-up" in styles
     assert "--delta-outcome-down" in styles
+    assert "--status-positive" in styles
+    assert "--status-negative" in styles
+    assert "--status-neutral" in styles
+    assert "--reference-marker" in styles
+    assert "--comparison-track" in styles
+    assert "--brand-secondary-blue" in styles
+    assert "--brand-berry" in styles
     assert "--delta-neutral-up" in styles
     assert "--delta-neutral-down" in styles
     assert "--delta-rank-improved" in styles

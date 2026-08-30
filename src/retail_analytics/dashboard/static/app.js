@@ -54,11 +54,11 @@ const state = {
 };
 
 const overviewKpiDefinitions = [
-  { slot: 1, group: "result", visualTier: "primary", concept: "units", label: "Продажи", unit: "шт.", source: "query", microtrend: true },
-  { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот", unit: "₽", source: "query", microtrend: true },
-  { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржа", unit: "₽", source: "query", microtrend: true },
-  { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность", unit: "%", source: "query", microtrend: true },
-  { slot: 5, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query", microtrend: true },
+  { slot: 1, group: "result", visualTier: "primary", concept: "units", label: "Продажи", unit: "шт.", source: "query" },
+  { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот", unit: "₽", source: "query" },
+  { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржа", unit: "₽", source: "query" },
+  { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность", unit: "%", source: "query" },
+  { slot: 5, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
   {
     slot: 6,
     group: "coverage",
@@ -70,8 +70,8 @@ const overviewKpiDefinitions = [
     unavailableText: "Требуется правило веса и вселенной.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 7, group: "coverage", visualTier: "secondary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query", microtrend: true },
-  { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio", microtrend: true },
+  { slot: 7, group: "coverage", visualTier: "secondary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query" },
+  { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio" },
   {
     slot: 9,
     group: "price",
@@ -83,8 +83,8 @@ const overviewKpiDefinitions = [
     unavailableText: "Требуется утверждённая формула.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Средняя цена на полке", unit: "₽", source: "query", microtrend: true },
-  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Средняя цена входа", unit: "₽", source: "query", microtrend: true }
+  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Средняя цена на полке", unit: "₽", source: "query" },
+  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Средняя цена входа", unit: "₽", source: "query" }
 ];
 const overviewKpiGroups = [
   { id: "result", label: "РЕЗУЛЬТАТ", visualTier: "primary" },
@@ -1371,12 +1371,8 @@ function buildChartQueryPayload() {
   const periods = state.options.periods.map((period) => period.value);
   const dateFrom = state.periodMode === "DATE_RANGE" ? selectedDateFrom() : periods[0] || selectedDateFrom();
   const dateTo = state.periodMode === "DATE_RANGE" ? selectedDateTo() : periods[periods.length - 1] || selectedDateTo();
-  const microtrendConcepts = overviewKpiDefinitions
-    .filter((definition) => definition.source === "query" && definition.microtrend)
-    .map((definition) => definition.concept);
   const selectedDefinition = overviewTrendDefinition(state.chartMetric);
-  const selectedMetricConcepts = selectedDefinition?.source === "query" ? [state.chartMetric] : [];
-  const metricConcepts = Array.from(new Set([...selectedMetricConcepts, ...microtrendConcepts]));
+  const metricConcepts = selectedDefinition?.source === "query" ? [state.chartMetric] : [];
   return {
     ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), metricConcepts),
     date_from: dateFrom,
@@ -1688,17 +1684,26 @@ function renderKpiCard(definition) {
   });
   if (!model.available) {
     card.classList.add("is-unavailable");
-    appendText(card, "small", definition.label);
+    const content = document.createElement("div");
+    content.className = "kpi-card-content";
+    const left = document.createElement("div");
+    left.className = "kpi-card-main";
+    appendText(left, "small", definition.label);
     const value = document.createElement("strong");
+    value.className = "metric-current kpi-current-value";
     value.textContent = "н/д";
-    card.appendChild(value);
-    appendText(card, "span", conciseKpiUnavailableText(definition, model));
+    left.appendChild(value);
+    appendText(left, "span", conciseKpiUnavailableText(definition, model));
+    content.appendChild(left);
+    card.appendChild(content);
     return card;
   }
   const comparison = model.comparison;
-  appendText(card, "small", definition.label);
-  const valueRow = document.createElement("div");
-  valueRow.className = "kpi-value-row";
+  const content = document.createElement("div");
+  content.className = "kpi-card-content";
+  const left = document.createElement("div");
+  left.className = "kpi-card-main";
+  appendText(left, "small", definition.label);
   const valueWrap = document.createElement("strong");
   valueWrap.className = "metric-current kpi-current-value";
   valueWrap.appendChild(metricValueButton({
@@ -1708,7 +1713,7 @@ function renderKpiCard(definition) {
     response: model.response,
     className: "metric-value-button--kpi"
   }));
-  valueRow.appendChild(valueWrap);
+  left.appendChild(valueWrap);
   if (isComparisonDisplayMode() && comparison) {
     const meta = document.createElement("span");
     meta.className = "kpi-meta kpi-meta--delta";
@@ -1719,60 +1724,13 @@ function renderKpiCard(definition) {
       result,
       response: model.response
     }));
-    valueRow.appendChild(meta);
+    left.appendChild(meta);
   }
-  card.appendChild(valueRow);
-  if (isComparisonDisplayMode() && comparison) {
-    const reference = kpiReferenceText(comparison, entry, definition);
-    if (reference) {
-      const referenceContext = document.createElement("span");
-      referenceContext.className = "kpi-reference";
-      referenceContext.textContent = reference;
-      card.appendChild(referenceContext);
-    }
-  }
-  const microtrend = renderKpiMicrotrend(definition, model);
-  if (microtrend) card.appendChild(microtrend);
+  content.appendChild(left);
+  const comparator = renderKpiComparator(definition, model);
+  if (comparator) content.appendChild(comparator);
+  card.appendChild(content);
   return card;
-}
-
-function renderKpiMicrotrend(definition, model) {
-  const points = kpiMicrotrendPoints(definition, model);
-  if (points.length < 3) return null;
-  return buildKpiSparkline(points, definition, model.entry);
-}
-
-function kpiMicrotrendPoints(definition, model) {
-  if (!definition.microtrend || !model.available || definition.status === "BUSINESS_RULE_REQUIRED") return [];
-  const scope = kpiMicrotrendPeriodScope(model);
-  if (scope.mode === "single") return [];
-  if (definition.source === "portfolio") return portfolioKpiMicrotrendPoints(model, scope);
-  return queryKpiMicrotrendPoints(definition, model, scope);
-}
-
-function queryKpiMicrotrendPoints(definition, model, scope) {
-  const trendResult = chartResultFor(definition.concept) || model.result;
-  return scopedChronologicalMetricPoints(trendResult?.period_values || [], "backend-period-values", scope);
-}
-
-function portfolioKpiMicrotrendPoints(model, scope) {
-  return scopedChronologicalMetricPoints(model.item?.rows || [], "backend-portfolio-rows", scope);
-}
-
-function kpiMicrotrendPeriodScope(model) {
-  if (state.periodMode === "AVAILABLE_MONTH_SET") {
-    const periods = model.comparison?.current_included_periods || model.item?.provenance?.available_month_set?.current_periods || [];
-    return { mode: "set", periods: new Set(periods.map(String)) };
-  }
-  const start = selectedDateFrom();
-  const end = selectedDateTo();
-  if (!start || !end || start === end) return { mode: "single", start, end };
-  return { mode: "range", start, end };
-}
-
-function scopedChronologicalMetricPoints(rows, source, scope) {
-  return chronologicalMetricPoints(rows, source)
-    .filter((point) => kpiMicrotrendPeriodInScope(point.period, scope));
 }
 
 function chronologicalMetricPoints(rows, source) {
@@ -1786,60 +1744,74 @@ function chronologicalMetricPoints(rows, source) {
     .sort((left, right) => String(left.period).localeCompare(String(right.period)));
 }
 
-function kpiMicrotrendPeriodInScope(period, scope) {
-  if (scope.mode === "set") return scope.periods.has(String(period));
-  if (scope.mode === "range") return String(period) >= scope.start && String(period) <= scope.end;
-  return false;
+function renderKpiComparator(definition, model) {
+  const comparison = model.comparison;
+  if (!isComparisonDisplayMode() || !comparison) return null;
+  if (comparison.current_value === null || comparison.current_value === undefined) return null;
+  if (comparison.comparison_value === null || comparison.comparison_value === undefined) return null;
+  const current = Number(comparison.current_value);
+  const reference = Number(comparison.comparison_value);
+  if (!Number.isFinite(current) || !Number.isFinite(reference)) return null;
+  const scale = kpiComparatorScale(current, reference);
+  if (!scale) return null;
+  const semantics = deltaSemanticsFor(definition.concept);
+  const comparator = document.createElement("div");
+  comparator.className = `kpi-comparator kpi-comparator--${semantics.toLowerCase().replace("_", "-")}`;
+  if (scale.equal) comparator.classList.add("kpi-comparator--equal");
+  comparator.dataset.currentValue = String(current);
+  comparator.dataset.referenceValue = String(reference);
+  comparator.dataset.normalization = "local-symmetric-current-reference";
+  comparator.setAttribute("aria-label", `${definition.label}: ${formatValue(current, model.entry.format)} к ${formatValue(reference, model.entry.format)}`);
+
+  const track = document.createElement("span");
+  track.className = "kpi-comparator-track";
+  const connector = document.createElement("span");
+  connector.className = "kpi-comparator-connector";
+  connector.style.left = `${Math.min(scale.currentPct, scale.referencePct)}%`;
+  connector.style.width = `${Math.abs(scale.currentPct - scale.referencePct)}%`;
+  track.appendChild(connector);
+  const currentMarker = kpiComparatorMarker("current", scale.currentPct, current, comparison.current_period_start || selectedDateFrom(), definition, model.entry);
+  const referenceMarker = kpiComparatorMarker("reference", scale.referencePct, reference, comparison.comparison_period_start, definition, model.entry);
+  track.appendChild(referenceMarker);
+  track.appendChild(currentMarker);
+  comparator.appendChild(track);
+  return comparator;
 }
 
-function buildKpiSparkline(points, definition, entry) {
-  const width = 190;
-  const height = 34;
-  const pad = { left: 4, right: 4, top: 5, bottom: 5 };
-  const values = points.map((point) => point.value);
-  const max = Math.max(...values);
-  const min = Math.min(...values);
-  const range = max - min || 1;
-  const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(points.length - 1, 1);
-  const y = (value) => pad.top + (max - value) * (height - pad.top - pad.bottom) / range;
-  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(2)} ${y(point.value).toFixed(2)}`).join(" ");
-  const wrap = document.createElement("span");
-  wrap.className = "kpi-microtrend kpi-microtrend--neutral-history";
-  wrap.dataset.microtrendSource = points[0]?.source || "";
-  wrap.dataset.pointCount = String(points.length);
-  wrap.dataset.periods = points.map((point) => point.period).join(",");
-  wrap.setAttribute("aria-label", `${definition.label}: микродинамика по ${points.length} доступным периодам`);
-  const svg = svgEl("svg", { class: "kpi-sparkline", viewBox: `0 0 ${width} ${height}`, role: "img" });
-  svg.appendChild(svgEl("path", { class: "kpi-sparkline-line", d: path }));
-  points.forEach((point, index) => {
-    const hit = svgEl("circle", {
-      class: "kpi-sparkline-hitpoint",
-      cx: x(index),
-      cy: y(point.value),
-      r: 7,
-      tabindex: 0,
-      "data-period": point.period,
-      "data-value": String(point.value)
-    });
-    const tooltip = `${formatPeriod(point.period)} · ${kpiValueWithUnit(formatValue(point.value, entry?.format || "decimal"), definition)}`;
-    hit.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
-    hit.addEventListener("focus", (event) => showTooltip(event, tooltip));
-    hit.addEventListener("mouseleave", hideTooltip);
-    hit.addEventListener("blur", hideTooltip);
-    svg.appendChild(hit);
-  });
-  const last = points[points.length - 1];
-  svg.appendChild(svgEl("circle", {
-    class: "kpi-sparkline-point",
-    cx: x(points.length - 1),
-    cy: y(last.value),
-    r: 2.6
-  }));
-  const title = svgEl("title", {});
-  title.textContent = `${formatCompactPeriod(last.period)} · ${kpiValueWithUnit(formatValue(last.value, entry?.format || "decimal"), definition)}`;
-  svg.appendChild(title);
-  wrap.appendChild(svg);
-  return wrap;
+function kpiComparatorScale(current, reference) {
+  if (current === reference) return { currentPct: 50, referencePct: 50, equal: true };
+  const magnitude = Math.max(Math.abs(current), Math.abs(reference), 1);
+  const normalizedCurrent = current / magnitude;
+  const normalizedReference = reference / magnitude;
+  const center = (normalizedCurrent + normalizedReference) / 2;
+  const spread = Math.max(
+    Math.abs(normalizedCurrent - normalizedReference),
+    Math.abs(center) * 0.08,
+    Math.abs(normalizedCurrent) * 0.04,
+    Math.abs(normalizedReference) * 0.04,
+    Number.EPSILON
+  );
+  const min = center - spread;
+  const max = center + spread;
+  const pct = (value) => Math.min(92, Math.max(8, ((value - min) / (max - min)) * 100));
+  return { currentPct: pct(normalizedCurrent), referencePct: pct(normalizedReference), equal: false };
+}
+
+function kpiComparatorMarker(role, pct, value, period, definition, entry) {
+  const marker = document.createElement("button");
+  marker.type = "button";
+  marker.className = `kpi-comparator-marker kpi-comparator-marker--${role}`;
+  marker.style.left = `${pct}%`;
+  marker.dataset.role = role;
+  marker.dataset.value = String(value);
+  if (period) marker.dataset.period = period;
+  const tooltip = `${period ? formatPeriod(period) : ""}${period ? " · " : ""}${kpiValueWithUnit(formatValue(value, entry.format), definition)}`;
+  marker.setAttribute("aria-label", tooltip);
+  marker.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
+  marker.addEventListener("focus", (event) => showTooltip(event, tooltip));
+  marker.addEventListener("mouseleave", hideTooltip);
+  marker.addEventListener("blur", hideTooltip);
+  return marker;
 }
 
 function overviewKpiModel(definition) {
@@ -1885,6 +1857,7 @@ function overviewPortfolioKpiComparison(item) {
   if (item.reference_value === null || item.reference_value === undefined) return null;
   if (item.delta === null || item.delta === undefined) return null;
   return {
+    current_value: item.current_value,
     comparison_value: item.reference_value,
     delta: item.delta,
     pct_delta: item.pct_delta,
