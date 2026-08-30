@@ -980,6 +980,19 @@ input {
   line-height: 1.25;
 }
 
+.kpi-meta--delta {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.kpi-reference {
+  display: block;
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+
 .kpi-unit {
   display: block;
   margin-top: 4px;

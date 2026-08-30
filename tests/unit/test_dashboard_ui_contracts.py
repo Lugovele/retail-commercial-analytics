@@ -1731,6 +1731,50 @@ def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> Non
     assert 'concept_ids: ["active_sku_count"]' in script
 
 
+def test_overview_kpi_cards_remove_generic_period_caption_and_show_dynamics() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    kpi_renderer = script.split("function renderKpiCard", 1)[1].split("function overviewKpiModel", 1)[0]
+    kpi_helpers = script.split("function kpiContextText", 1)[1].split("function compactMetricText", 1)[0]
+
+    assert "За выбранный период" not in kpi_renderer
+    assert "без сравнения" not in kpi_renderer.lower()
+    assert 'meta.className = "kpi-meta kpi-meta--delta"' in kpi_renderer
+    assert "text: kpiDeltaText(comparison, entry)" in kpi_renderer
+    assert 'referenceContext.className = "kpi-reference"' in kpi_renderer
+    assert "meta.textContent = kpiContextText(comparison, entry)" not in kpi_renderer
+    assert 'return "";' in kpi_helpers
+    assert 'if (entry.format === "percent") return formatDeltaValue(comparison.delta, deltaFormat);' in kpi_helpers
+    assert 'return formatDeltaValue(comparison.pct_delta, "percent");' in kpi_helpers
+    assert "comparison.comparison_value" in kpi_helpers
+    assert "comparison.comparison_period_start" in kpi_helpers
+
+
+def test_overview_portfolio_kpi_uses_backend_comparison_and_available_month_limitation() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    kpi_model = script.split("function overviewKpiModel", 1)[1].split("function overviewKpiHasBlockingLimitation", 1)[0]
+    unavailable = script.split("function overviewKpiUnavailableText", 1)[1].split("function renderChart", 1)[0]
+
+    assert "const comparison = overviewPortfolioKpiComparison(item);" in kpi_model
+    assert "comparison," in kpi_model
+    assert "item.reference_value" in kpi_model
+    assert "item.delta" in kpi_model
+    assert "item.pct_delta" in kpi_model
+    assert "comparison_value: item.reference_value" in kpi_model
+    assert "comparison_included_periods" in kpi_model
+    assert "!overviewKpiPeriodUnsupported(definition)" in kpi_model
+    assert "function overviewKpiPeriodUnsupported(definition)" in script
+    assert '["velocity", "distribution", "active_sku_count"].includes(definition.concept)' in script
+    assert "overviewKpiPeriodUnsupported(definition)" in unavailable
+
+
 def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     css = html_or_script("styles.css")
 
@@ -1748,6 +1792,8 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "border: 1px solid var(--border-default)" in css
     assert "font-size: 19px" in css
     assert ".kpi-unit" in css
+    assert ".kpi-meta--delta" in css
+    assert ".kpi-reference" in css
     assert "padding: 7px 10px" in css
     assert "border: 1px solid rgba(219, 227, 238, 0.78)" in css
     assert "min-height: 132px" not in css

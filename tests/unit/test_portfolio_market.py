@@ -856,6 +856,26 @@ def test_active_sku_uses_available_history_and_private_label_scope(tmp_path) -> 
     assert response.items[0].provenance["current_analytical_scope"]["private_label_scope"] == "EXCLUDE"
 
 
+def test_active_sku_yoy_exposes_backend_comparison_fields(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts(current_active_skus=("sku_a",)))
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 1
+    assert item.current_value == 1
+    assert item.reference_value == 2
+    assert item.delta == -1
+    assert item.pct_delta == pytest.approx(-0.5)
+    assert item.provenance["projection"]["reference_period"] == date(2025, 1, 1)
+
+
 def test_active_sku_records_zero_active_period_as_evaluated(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts(current_active_skus=()))
 

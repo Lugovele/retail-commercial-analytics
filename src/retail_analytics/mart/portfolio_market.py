@@ -755,21 +755,39 @@ class PortfolioMarketService:
         current_count = counts.get(current_period, 0)
         peak_period, peak_count = _peak_count(counts)
         change = None if peak_count == 0 else (current_count - peak_count) / peak_count
+        reference_period, reference_limitation = _active_sku_reference_period(
+            current_period,
+            tuple(sorted(counts)),
+            request.comparison_mode,
+        )
+        reference_count = counts.get(reference_period) if reference_period is not None else None
+        delta: int | None = None
+        pct_delta: float | None = None
+        if reference_count is not None:
+            delta = current_count - reference_count
+            pct_delta = None if reference_count == 0 else delta / abs(reference_count)
         values = {
             "active_sku_count": current_count,
             "historical_peak_active_sku_count": peak_count,
             "active_sku_change_pct": change,
         }
+        limitations = () if counts else ("no_sku_units_metric_facts",)
+        if concept_id == "active_sku_count" and reference_limitation:
+            limitations = (*limitations, reference_limitation)
         return PortfolioMarketItem(
             concept_id=concept_id,
-            status=PortfolioConceptStatus.READY if counts else PortfolioConceptStatus.PARTIAL,
+            status=PortfolioConceptStatus.READY if counts and not reference_limitation else PortfolioConceptStatus.PARTIAL,
             block_id="assortment",
             grain_id="sku",
             entity_id=None,
             label=None,
             value=values[concept_id] if counts else None,
             unit="percent" if concept_id == "active_sku_change_pct" else "sku_count",
-            limitations=() if counts else ("no_sku_units_metric_facts",),
+            current_value=current_count if concept_id == "active_sku_count" and counts else None,
+            reference_value=reference_count if concept_id == "active_sku_count" else None,
+            delta=delta if concept_id == "active_sku_count" else None,
+            pct_delta=pct_delta if concept_id == "active_sku_count" else None,
+            limitations=limitations,
             provenance=_projection_provenance(
                 request,
                 concept_id=concept_id,
@@ -779,6 +797,7 @@ class PortfolioMarketService:
                 population_scope={"scope": "selected_category_or_network", "peak_period": peak_period},
                 tie_policy=None,
                 evaluated_periods=tuple(sorted(counts)),
+                reference_period=reference_period,
             ),
         )
 
@@ -1304,6 +1323,25 @@ def _peak_count(counts: dict[date, int]) -> tuple[date | None, int]:
     if not counts:
         return None, 0
     return min(counts.items(), key=lambda item: (-item[1], item[0]))
+
+
+def _active_sku_reference_period(
+    current_period: date,
+    periods: tuple[date, ...],
+    comparison_mode: ComparisonMode,
+) -> tuple[date | None, str | None]:
+    if comparison_mode == ComparisonMode.NONE:
+        return None, None
+    previous_periods = tuple(period for period in periods if period < current_period)
+    if comparison_mode == ComparisonMode.YOY:
+        candidate = date(current_period.year - 1, current_period.month, current_period.day)
+        return (candidate, None) if candidate in previous_periods else (None, "comparison_period_unavailable")
+    if comparison_mode == ComparisonMode.MOM:
+        candidate = _add_months(current_period, -1)
+        return (candidate, None) if candidate in previous_periods else (None, "comparison_period_unavailable")
+    if comparison_mode == ComparisonMode.PREVIOUS_AVAILABLE:
+        return (previous_periods[-1], None) if previous_periods else (None, "comparison_period_unavailable")
+    return None, "active_sku_comparison_mode_unsupported"
 
 
 def _projection_provenance(

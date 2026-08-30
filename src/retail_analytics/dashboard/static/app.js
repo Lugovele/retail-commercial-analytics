@@ -1695,20 +1695,25 @@ function renderKpiCard(definition) {
     className: "metric-value-button--kpi"
   }));
   card.appendChild(valueWrap);
-  const meta = document.createElement("span");
-  meta.className = "kpi-meta";
   if (isComparisonDisplayMode() && comparison) {
+    const meta = document.createElement("span");
+    meta.className = "kpi-meta kpi-meta--delta";
     meta.appendChild(metricDeltaButton({
       concept,
-      text: kpiContextText(comparison, entry),
+      text: kpiDeltaText(comparison, entry),
       value: comparison.delta,
       result,
       response: model.response
     }));
-  } else {
-    meta.textContent = kpiContextText(comparison, entry);
+    card.appendChild(meta);
+    const reference = kpiReferenceText(comparison, entry);
+    if (reference) {
+      const referenceContext = document.createElement("span");
+      referenceContext.className = "kpi-reference";
+      referenceContext.textContent = reference;
+      card.appendChild(referenceContext);
+    }
   }
-  card.appendChild(meta);
   const unit = document.createElement("span");
   unit.className = "kpi-unit";
   unit.textContent = definition.unit;
@@ -1720,12 +1725,13 @@ function overviewKpiModel(definition) {
   if (definition.source === "portfolio") {
     const item = overviewPortfolioItem(definition.concept);
     const result = item ? portfolioResultForInspector(item) : null;
+    const comparison = overviewPortfolioKpiComparison(item);
     return {
       result,
       entry: catalogEntry(definition.concept) || portfolioPresentationFallback[definition.concept] || { format: "integer" },
-      comparison: null,
+      comparison,
       response: state.overviewPortfolioResponse,
-      available: Boolean(item && isDisplayablePortfolioItem(item))
+      available: Boolean(item && isDisplayablePortfolioItem(item) && !overviewKpiPeriodUnsupported(definition))
     };
   }
   if (definition.source !== "query") {
@@ -1752,9 +1758,27 @@ function overviewPortfolioItem(concept) {
   return (state.overviewPortfolioResponse?.items || []).find((item) => item.concept_id === concept) || null;
 }
 
+function overviewPortfolioKpiComparison(item) {
+  if (!item || !isComparisonDisplayMode()) return null;
+  if (item.reference_value === null || item.reference_value === undefined) return null;
+  if (item.delta === null || item.delta === undefined) return null;
+  return {
+    comparison_value: item.reference_value,
+    delta: item.delta,
+    pct_delta: item.pct_delta,
+    comparison_period_start: state.periodMode === "COMPARE" ? document.getElementById("period-b")?.value || "" : "",
+    comparison_included_periods: item.provenance?.available_month_set?.reference_periods || []
+  };
+}
+
 function overviewKpiHasBlockingLimitation(result) {
   if (!result?.limitations?.length) return false;
   return result.limitations.some((item) => String(item).includes("unsupported") || String(item).includes("period_only"));
+}
+
+function overviewKpiPeriodUnsupported(definition) {
+  return state.periodMode === "AVAILABLE_MONTH_SET"
+    && ["velocity", "distribution", "active_sku_count"].includes(definition.concept);
 }
 
 function overviewKpiValueText(result, entry, definition) {
@@ -1764,7 +1788,7 @@ function overviewKpiValueText(result, entry, definition) {
 
 function overviewKpiUnavailableText(definition, model) {
   if (definition.status === "BUSINESS_RULE_REQUIRED") return definition.unavailableText;
-  if (state.periodMode === "AVAILABLE_MONTH_SET" && ["velocity", "distribution", "active_sku_count"].includes(definition.concept)) {
+  if (overviewKpiPeriodUnsupported(definition)) {
     return "Не поддерживается для сопоставимых месяцев.";
   }
   if (selectedStoreIds().length && ["velocity", "distribution"].includes(definition.concept)) {
@@ -5301,12 +5325,35 @@ function comparisonMarkerPeriods() {
 
 function kpiContextText(comparison, entry) {
   if (isComparisonDisplayMode() && comparison) {
-    const deltaFormat = entry.format === "percent" ? "percentage_points" : entry.format;
-    return `${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`;
+    return kpiDeltaText(comparison, entry);
   }
   if (state.periodMode === "DATE_RANGE") return "За доступные периоды диапазона";
   if (state.periodMode === "AVAILABLE_MONTH_SET") return "Среднее за сопоставимые месяцы";
-  return "За выбранный период";
+  return "";
+}
+
+function kpiDeltaText(comparison, entry) {
+  const deltaFormat = deltaFormatFor(entry.format);
+  if (entry.format === "percent") return formatDeltaValue(comparison.delta, deltaFormat);
+  if (comparison.pct_delta === null || comparison.pct_delta === undefined || Number.isNaN(comparison.pct_delta)) {
+    return formatDeltaValue(comparison.delta, deltaFormat);
+  }
+  return formatDeltaValue(comparison.pct_delta, "percent");
+}
+
+function kpiReferenceText(comparison, entry) {
+  if (!comparison) return "";
+  const referenceValue = comparison.comparison_value === null || comparison.comparison_value === undefined
+    ? ""
+    : formatValue(comparison.comparison_value, entry.format);
+  const referencePeriod = comparison.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "";
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    const months = comparison.comparison_included_periods?.length
+      ? formatPeriodList(comparison.comparison_included_periods)
+      : referencePeriod;
+    return [referenceValue, months ? `сравн. ${months}` : ""].filter(Boolean).join(" · ");
+  }
+  return [referenceValue, referencePeriod ? `к ${referencePeriod}` : ""].filter(Boolean).join(" · ");
 }
 
 function compactMetricText(result, entry) {
