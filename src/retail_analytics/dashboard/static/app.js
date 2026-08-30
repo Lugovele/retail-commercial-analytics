@@ -88,7 +88,7 @@ const overviewKpiDefinitions = [
 ];
 const overviewKpiGroups = [
   { id: "result", label: "РЕЗУЛЬТАТ", visualTier: "primary" },
-  { id: "coverage", label: "ПОКРЫТИЕ · СКОРОСТЬ · АССОРТИМЕНТ", visualTier: "secondary" },
+  { id: "coverage", label: "ПРИСУТСТВИЕ", visualTier: "secondary" },
   { id: "price", label: "ЦЕНА", visualTier: "secondary" }
 ];
 const overviewQueryKpis = overviewKpiDefinitions
@@ -1692,29 +1692,23 @@ function renderKpiCard(definition) {
     const value = document.createElement("strong");
     value.textContent = "н/д";
     card.appendChild(value);
-    appendText(card, "span", overviewKpiUnavailableText(definition, model));
-    const unit = document.createElement("span");
-    unit.className = "kpi-unit";
-    unit.textContent = definition.unit;
-    card.appendChild(unit);
+    appendText(card, "span", conciseKpiUnavailableText(definition, model));
     return card;
   }
   const comparison = model.comparison;
   appendText(card, "small", definition.label);
+  const valueRow = document.createElement("div");
+  valueRow.className = "kpi-value-row";
   const valueWrap = document.createElement("strong");
-  valueWrap.className = "metric-current";
+  valueWrap.className = "metric-current kpi-current-value";
   valueWrap.appendChild(metricValueButton({
     concept,
-    text: overviewKpiValueText(result, entry, definition),
+    text: kpiValueWithUnit(overviewKpiValueText(result, entry, definition), definition),
     result,
     response: model.response,
     className: "metric-value-button--kpi"
   }));
-  card.appendChild(valueWrap);
-  const unit = document.createElement("span");
-  unit.className = "kpi-unit";
-  unit.textContent = definition.unit;
-  card.appendChild(unit);
+  valueRow.appendChild(valueWrap);
   if (isComparisonDisplayMode() && comparison) {
     const meta = document.createElement("span");
     meta.className = "kpi-meta kpi-meta--delta";
@@ -1725,8 +1719,11 @@ function renderKpiCard(definition) {
       result,
       response: model.response
     }));
-    card.appendChild(meta);
-    const reference = kpiReferenceText(comparison, entry);
+    valueRow.appendChild(meta);
+  }
+  card.appendChild(valueRow);
+  if (isComparisonDisplayMode() && comparison) {
+    const reference = kpiReferenceText(comparison, entry, definition);
     if (reference) {
       const referenceContext = document.createElement("span");
       referenceContext.className = "kpi-reference";
@@ -1741,7 +1738,7 @@ function renderKpiCard(definition) {
 
 function renderKpiMicrotrend(definition, model) {
   const points = kpiMicrotrendPoints(definition, model);
-  if (points.length < 2) return null;
+  if (points.length < 3) return null;
   return buildKpiSparkline(points, definition, model.entry);
 }
 
@@ -1773,24 +1770,41 @@ function recentChronologicalMetricPoints(rows, source) {
 }
 
 function buildKpiSparkline(points, definition, entry) {
-  const width = 108;
-  const height = 28;
-  const pad = 3;
+  const width = 190;
+  const height = 48;
+  const pad = { left: 4, right: 4, top: 6, bottom: 18 };
   const values = points.map((point) => point.value);
   const max = Math.max(...values);
   const min = Math.min(...values);
   const range = max - min || 1;
-  const x = (index) => pad + (index * (width - pad * 2)) / Math.max(points.length - 1, 1);
-  const y = (value) => pad + (max - value) * (height - pad * 2) / range;
+  const x = (index) => pad.left + (index * (width - pad.left - pad.right)) / Math.max(points.length - 1, 1);
+  const y = (value) => pad.top + (max - value) * (height - pad.top - pad.bottom) / range;
   const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(2)} ${y(point.value).toFixed(2)}`).join(" ");
   const wrap = document.createElement("span");
-  wrap.className = `kpi-microtrend kpi-microtrend--${deltaSemanticsFor(definition.concept).toLowerCase().replace("_", "-")}`;
+  wrap.className = "kpi-microtrend kpi-microtrend--neutral-history";
   wrap.dataset.microtrendSource = points[0]?.source || "";
   wrap.dataset.pointCount = String(points.length);
   wrap.dataset.periods = points.map((point) => point.period).join(",");
   wrap.setAttribute("aria-label", `${definition.label}: микродинамика по ${points.length} доступным периодам`);
   const svg = svgEl("svg", { class: "kpi-sparkline", viewBox: `0 0 ${width} ${height}`, role: "img" });
   svg.appendChild(svgEl("path", { class: "kpi-sparkline-line", d: path }));
+  points.forEach((point, index) => {
+    const hit = svgEl("circle", {
+      class: "kpi-sparkline-hitpoint",
+      cx: x(index),
+      cy: y(point.value),
+      r: 7,
+      tabindex: 0,
+      "data-period": point.period,
+      "data-value": String(point.value)
+    });
+    const tooltip = `${formatPeriod(point.period)} · ${kpiValueWithUnit(formatValue(point.value, entry?.format || "decimal"), definition)}`;
+    hit.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
+    hit.addEventListener("focus", (event) => showTooltip(event, tooltip));
+    hit.addEventListener("mouseleave", hideTooltip);
+    hit.addEventListener("blur", hideTooltip);
+    svg.appendChild(hit);
+  });
   const last = points[points.length - 1];
   svg.appendChild(svgEl("circle", {
     class: "kpi-sparkline-point",
@@ -1799,8 +1813,10 @@ function buildKpiSparkline(points, definition, entry) {
     r: 2.6
   }));
   const title = svgEl("title", {});
-  title.textContent = `${formatCompactPeriod(last.period)} · ${formatValue(last.value, entry?.format || "decimal")}`;
+  title.textContent = `${formatCompactPeriod(last.period)} · ${kpiValueWithUnit(formatValue(last.value, entry?.format || "decimal"), definition)}`;
   svg.appendChild(title);
+  svg.appendChild(svgText(x(0), height - 3, formatCompactPeriod(points[0].period), "start", "kpi-sparkline-period"));
+  svg.appendChild(svgText(x(points.length - 1), height - 3, formatCompactPeriod(last.period), "end", "kpi-sparkline-period"));
   wrap.appendChild(svg);
   return wrap;
 }
@@ -1869,6 +1885,21 @@ function overviewKpiPeriodUnsupported(definition) {
 function overviewKpiValueText(result, entry, definition) {
   if (definition.source === "portfolio") return formatValue(result.value, "integer");
   return formatValue(result.value, entry.format);
+}
+
+function kpiValueWithUnit(text, definition) {
+  const unit = definition?.unit || "";
+  if (!unit || text === "н/д" || text.includes(unit)) return text;
+  if (unit === "%" && text.includes("%")) return text;
+  if (unit === "₽" && (text.includes("₽") || text.includes("руб"))) return text;
+  return `${text} ${unit}`;
+}
+
+function conciseKpiUnavailableText(definition, model) {
+  const text = overviewKpiUnavailableText(definition, model);
+  if (definition.status === "BUSINESS_RULE_REQUIRED") return "Требуется бизнес-правило";
+  if (text.includes("Не поддерживается") || text.includes("недоступ")) return "Недоступно для этого среза";
+  return text;
 }
 
 function overviewKpiUnavailableText(definition, model) {
@@ -5524,11 +5555,11 @@ function kpiDeltaText(comparison, entry) {
   return formatDeltaValue(comparison.pct_delta, "percent");
 }
 
-function kpiReferenceText(comparison, entry) {
+function kpiReferenceText(comparison, entry, definition = null) {
   if (!comparison) return "";
   const referenceValue = comparison.comparison_value === null || comparison.comparison_value === undefined
     ? ""
-    : formatValue(comparison.comparison_value, entry.format);
+    : kpiValueWithUnit(formatValue(comparison.comparison_value, entry.format), definition);
   const referencePeriod = comparison.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "";
   if (state.periodMode === "AVAILABLE_MONTH_SET") {
     const months = comparison.comparison_included_periods?.length
