@@ -2011,11 +2011,6 @@ function renderChart() {
     footnote.textContent = limitationText(result);
     return;
   }
-  if (points.length === 1) {
-    replaceWithMessage(box, "empty-state", `Одна доступная точка: ${formatPeriod(points[0].period)} · ${formatValue(points[0].value, entry.format)}.`);
-    footnote.textContent = "Линия не строится без второй фактической точки.";
-    return;
-  }
   box.replaceChildren(buildOverviewSvgChart(points, entry));
   const missing = (coverage?.missing_periods || []).map(formatPeriod).join(", ");
   const limitation = limitationText(result);
@@ -2116,18 +2111,28 @@ function buildOverviewSvgChart(points, entry) {
       if (segment.length > 1) {
         const path = segment.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.monthIndex)} ${y(point.value)}`).join(" ");
         svg.appendChild(svgEl("path", {
-          class: `overview-chart-line overview-chart-line--series-${seriesIndex % 3}`,
+          class: `overview-chart-line ${chartYearClass(yearSeries.year)}`,
           d: path,
           "data-series-year": String(yearSeries.year)
         }));
       }
     });
+    chartGapBridgeSegments(yearSeries.points).forEach((segment) => {
+      const path = segment.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.monthIndex)} ${y(point.value)}`).join(" ");
+      svg.appendChild(svgEl("path", {
+        class: `overview-chart-gap-bridge ${chartYearClass(yearSeries.year)}`,
+        d: path,
+        "data-series-year": String(yearSeries.year),
+        "data-gap-start": segment[0].period,
+        "data-gap-end": segment[1].period
+      }));
+    });
     yearSeries.points.forEach((point) => {
       const circle = svgEl("circle", {
-        class: `overview-chart-point overview-chart-point--series-${seriesIndex % 3}`,
+        class: `overview-chart-point ${chartYearClass(yearSeries.year)}`,
         cx: x(point.monthIndex),
         cy: y(point.value),
-        r: isSelectedComparisonPeriod(point.period) ? 4.8 : 3.6,
+        r: 4.8,
         "data-period": point.period,
         "data-series-year": String(point.year),
         "data-value": String(point.value),
@@ -2140,17 +2145,30 @@ function buildOverviewSvgChart(points, entry) {
       circle.addEventListener("blur", hideTooltip);
       circle.addEventListener("click", () => openProvenance(entry.metric_concept));
       svg.appendChild(circle);
-      if (isSelectedComparisonPeriod(point.period)) {
-        svg.appendChild(svgEl("circle", {
-          class: "comparison-point-marker",
-          cx: x(point.monthIndex),
-          cy: y(point.value),
-          r: 7.2
-        }));
-        svg.appendChild(svgText(x(point.monthIndex), y(point.value) - 10, point.period === selectedDateFrom() ? "A" : "B", "middle", "marker-label"));
-      }
     });
-    svg.appendChild(svgText(width - pad.right - 58, pad.top + 14 + seriesIndex * 18, String(yearSeries.year), "start", `chart-legend chart-legend--series-${seriesIndex % 3}`));
+    svg.appendChild(svgText(width - pad.right - 58, pad.top + 14 + seriesIndex * 18, String(yearSeries.year), "start", `chart-legend ${chartYearClass(yearSeries.year)}`));
+  });
+
+  monthLabelsShort().forEach((month, monthIndex) => {
+    const group = svgEl("g", { class: "overview-chart-month-hover", "data-month-index": String(monthIndex) });
+    const xx = x(monthIndex);
+    const zoneWidth = (width - pad.left - pad.right) / 11;
+    group.appendChild(svgEl("rect", {
+      class: "overview-chart-month-hitbox",
+      x: xx - zoneWidth / 2,
+      y: pad.top,
+      width: zoneWidth,
+      height: height - pad.top - pad.bottom,
+      tabindex: 0,
+      "aria-label": `${month}: значения по годам`
+    }));
+    group.appendChild(svgEl("line", { class: "overview-chart-crosshair", x1: xx, y1: pad.top, x2: xx, y2: height - pad.bottom }));
+    const tooltip = overviewMonthTooltip(monthIndex, series, entry);
+    group.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
+    group.addEventListener("focusin", (event) => showTooltip(event, tooltip));
+    group.addEventListener("mouseleave", hideTooltip);
+    group.addEventListener("focusout", hideTooltip);
+    svg.appendChild(group);
   });
   return svg;
 }
@@ -2209,21 +2227,17 @@ function chartYearSeries(points) {
     if (!byYear.has(year)) byYear.set(year, []);
     byYear.get(year).push({ ...point, year, monthIndex });
   });
-  const currentYear = selectedDateFrom() ? new Date(`${selectedDateFrom()}T00:00:00`).getFullYear() : null;
-  const referenceYear = comparisonMarkerPeriods()[1]
-    ? new Date(`${comparisonMarkerPeriods()[1]}T00:00:00`).getFullYear()
-    : null;
-  const yearPriority = (year) => {
-    if (year === currentYear) return 0;
-    if (year === referenceYear) return 1;
-    return 2;
-  };
   return Array.from(byYear.entries())
-    .sort(([left], [right]) => yearPriority(left) - yearPriority(right) || right - left)
+    .sort(([left], [right]) => right - left)
     .map(([year, yearPoints]) => ({
       year,
       points: yearPoints.sort((left, right) => left.monthIndex - right.monthIndex)
     }));
+}
+
+function chartYearClass(year) {
+  const paletteIndex = Math.abs(Number(year)) % 5;
+  return `overview-chart-series-${paletteIndex}`;
 }
 
 function chartPathSegments(points) {
@@ -2239,6 +2253,27 @@ function chartPathSegments(points) {
   });
   if (current.length) segments.push(current);
   return segments;
+}
+
+function chartGapBridgeSegments(points) {
+  const bridges = [];
+  points.forEach((point, index) => {
+    const previous = points[index - 1];
+    if (previous && point.monthIndex > previous.monthIndex + 1) {
+      bridges.push([previous, point]);
+    }
+  });
+  return bridges;
+}
+
+function overviewMonthTooltip(monthIndex, series, entry) {
+  const month = monthLabelsShort()[monthIndex];
+  const rows = series.map((yearSeries) => {
+    const point = yearSeries.points.find((item) => item.monthIndex === monthIndex);
+    if (!point) return `${yearSeries.year}: нет данных`;
+    return `${formatPeriod(point.period)}: ${formatValue(point.value, entry.format)}`;
+  });
+  return [`${month} · ${entry.display_label}`, ...rows].join("\n");
 }
 
 function monthLabelsShort() {

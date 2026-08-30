@@ -2039,22 +2039,44 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
 
     assert "function chartYearSeries(points)" in script
     assert "function chartPathSegments(points)" in script
+    assert "function chartGapBridgeSegments(points)" in script
+    assert "function overviewMonthTooltip(monthIndex, series, entry)" in script
+    assert "function chartYearClass(year)" in script
     assert "function monthLabelsShort()" in script
     assert "box.replaceChildren(buildOverviewSvgChart(points, entry))" in script
     assert "box.replaceChildren(buildSvgChart(points, entry))" in script
     assert 'return ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"]' in script
     assert "monthIndex !== previous.monthIndex + 1" in script
-    assert "overview-chart-line--series-" in script
-    assert "chart-legend--series-" in script
-    assert "comparison-point-marker" in script
+    assert "point.monthIndex > previous.monthIndex + 1" in script
+    assert "overview-chart-series-${paletteIndex}" in script
+    assert "overview-chart-gap-bridge" in script
+    assert "overview-chart-month-hover" in script
+    assert "overview-chart-month-hitbox" in script
+    assert "overview-chart-crosshair" in script
+    assert "overviewMonthTooltip(monthIndex, series, entry)" in script
+    assert "нет данных" in script
     assert "month-grid-line" in css
     assert "#chart-box" in css
     assert "overview-chart-svg" in css
     assert "height: 304px" in css
-    assert "stroke-width: 1.8" in css
+    assert "stroke-dasharray: 5 6" in css
+    assert "opacity: 0.38" in css
+    assert ".overview-chart-point {" in css
+    assert "fill: var(--chart-primary)" in css
+    assert "cursor: crosshair" in css
+    assert "white-space: pre-line" in css
     assert "stroke-width: 3" in css
     overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
     assert "value || 0" not in overview_chart
+    assert "comparison-point-marker" not in overview_chart
+    assert "marker-label" not in overview_chart
+    assert "chartYearClass(yearSeries.year)" in overview_chart
+    assert "chartYearClass(seriesIndex)" not in overview_chart
+    assert "data-gap-start" in overview_chart
+    assert "data-gap-end" in overview_chart
+    assert '"data-period": point.period' in overview_chart
+    assert '"data-value": String(point.value)' in overview_chart
+    assert "r: 4.8" in overview_chart
 
 
 def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitations() -> None:
@@ -2082,8 +2104,8 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "Показатель не поддерживает динамику сопоставимых месяцев." in script
     assert "Показатель недоступен для динамики по выбранной ТТ." in script
     assert "График не строит неподтверждённые или неподдержанные ряды." in script
-    assert "Одна доступная точка:" in script
-    assert "Линия не строится без второй фактической точки." in script
+    assert "Одна доступная точка:" not in script
+    assert "Линия не строится без второй фактической точки." not in script
     assert "chartMetric === concept" in script
     assert "card.dataset.trendMetric = concept" in script
     assert "await selectOverviewTrendMetric(concept)" in script
@@ -2092,7 +2114,14 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert '"data-period": point.period' in script
     assert '"data-series-year": String(point.year)' in script
     assert '"data-value": String(point.value)' in script
-    assert "yearPriority(left) - yearPriority(right)" in script
+    chart_year_series = script.split("function chartYearSeries(points)", 1)[1].split("function chartYearClass", 1)[0]
+    assert "comparisonMarkerPeriods()" not in chart_year_series
+    assert "yearPriority" not in chart_year_series
+    assert ".sort(([left], [right]) => right - left)" in chart_year_series
+    chart_year_class = script.split("function chartYearClass(year)", 1)[1].split("function chartPathSegments", 1)[0]
+    assert "Math.abs(Number(year)) % 5" in chart_year_class
+    assert "seriesIndex" not in chart_year_class
+    assert "comparison_mode: \"NONE\"" in script.split("function buildChartQueryPayload", 1)[1].split("function buildOverviewPortfolioPayload", 1)[0]
     assert 'Динамика показателя' in html
     assert "is-chart-selected" in css
 
