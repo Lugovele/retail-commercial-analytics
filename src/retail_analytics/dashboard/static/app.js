@@ -1645,7 +1645,29 @@ function renderSalesDrivers() {
 
 function renderKpis() {
   const grid = document.getElementById("kpi-grid");
-  grid.replaceChildren(...overviewKpiGroups.map((group) => renderKpiGroup(group, renderKpiCard)));
+  const models = new Map(overviewKpiDefinitions.map((definition) => [definition.concept, overviewKpiModel(definition)]));
+  renderKpiPartialComparisonNotice(models);
+  grid.replaceChildren(...overviewKpiGroups.map((group) => renderKpiGroup(group, (definition) => renderKpiCard(definition, models.get(definition.concept)))));
+}
+
+function renderKpiPartialComparisonNotice(models) {
+  const grid = document.getElementById("kpi-grid");
+  let notice = document.getElementById("kpi-partial-comparison-notice");
+  const hasMissingReference = overviewKpiDefinitions.some((definition) => models.get(definition.concept)?.state === "CURRENT_ONLY_NO_REFERENCE");
+  if (!hasMissingReference) {
+    notice?.remove();
+    return;
+  }
+  if (!notice) {
+    notice = document.createElement("p");
+    notice.id = "kpi-partial-comparison-notice";
+    notice.className = "kpi-partial-comparison-notice";
+    grid.parentNode.insertBefore(notice, grid);
+  }
+  const period = kpiMissingReferencePeriodText();
+  notice.textContent = period
+    ? `Для части KPI сравнение недоступно: нет данных за ${period} по выбранному объекту.`
+    : "Для части KPI сравнение недоступно по выбранному объекту.";
 }
 
 function overviewKpiDefinitionsForGroup(groupId) {
@@ -1667,9 +1689,8 @@ function renderKpiGroup(group, cardRenderer) {
   return section;
 }
 
-function renderKpiCard(definition) {
+function renderKpiCard(definition, model = overviewKpiModel(definition)) {
   const concept = definition.concept;
-  const model = overviewKpiModel(definition);
   const result = model.result;
   const entry = model.entry;
   const card = document.createElement("article");
@@ -1677,6 +1698,7 @@ function renderKpiCard(definition) {
   card.dataset.kpiSlot = String(definition.slot);
   card.dataset.kpiGroup = definition.group;
   card.dataset.trendMetric = concept;
+  card.dataset.kpiState = model.state;
   if (state.chartMetric === concept) card.classList.add("is-chart-selected");
   card.addEventListener("click", async (event) => {
     if (event.target.closest("button, a, input, select, textarea")) return;
@@ -1714,17 +1736,26 @@ function renderKpiCard(definition) {
     className: "metric-value-button--kpi"
   }));
   left.appendChild(valueWrap);
-  if (isComparisonDisplayMode() && comparison) {
+  if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {
     const meta = document.createElement("span");
-    meta.className = "kpi-meta kpi-meta--delta";
+    meta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`;
     meta.appendChild(metricDeltaButton({
       concept,
       text: kpiDeltaText(comparison, entry),
       value: comparison.delta,
       result,
-      response: model.response
+      response: model.response,
+      className: kpiDirectionPresentationClass(comparison.delta)
     }));
     left.appendChild(meta);
+  }
+  if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {
+    const reference = renderKpiReferenceLine(definition, model);
+    if (reference) left.appendChild(reference);
+  } else if (model.state === "CURRENT_ONLY_NO_REFERENCE") {
+    appendText(left, "span", "Сравнение недоступно").className = "kpi-meta kpi-missing-reference";
+    const period = kpiMissingReferencePeriodText();
+    appendText(left, "span", period ? `Нет данных за ${period}` : "Нет данных за период сравнения").className = "kpi-meta kpi-missing-reference";
   }
   content.appendChild(left);
   const comparator = renderKpiComparator(definition, model);
@@ -1746,6 +1777,7 @@ function chronologicalMetricPoints(rows, source) {
 
 function renderKpiComparator(definition, model) {
   const comparison = model.comparison;
+  if (model.state !== "COMPLETE_COMPARE" && model.state !== "ZERO_CHANGE") return null;
   if (!isComparisonDisplayMode() || !comparison) return null;
   if (comparison.current_value === null || comparison.current_value === undefined) return null;
   if (comparison.comparison_value === null || comparison.comparison_value === undefined) return null;
@@ -1756,7 +1788,7 @@ function renderKpiComparator(definition, model) {
   if (!scale) return null;
   const semantics = deltaSemanticsFor(definition.concept);
   const comparator = document.createElement("div");
-  comparator.className = `kpi-comparator kpi-comparator--${semantics.toLowerCase().replace("_", "-")}`;
+  comparator.className = `kpi-comparator kpi-comparator--${semantics.toLowerCase().replace("_", "-")} ${kpiDirectionPresentationClass(comparison.delta)}`;
   if (scale.equal) comparator.classList.add("kpi-comparator--equal");
   comparator.dataset.currentValue = String(current);
   comparator.dataset.referenceValue = String(reference);
@@ -1794,7 +1826,20 @@ function kpiComparatorScale(current, reference) {
   const min = center - spread;
   const max = center + spread;
   const pct = (value) => Math.min(92, Math.max(8, ((value - min) / (max - min)) * 100));
-  return { currentPct: pct(normalizedCurrent), referencePct: pct(normalizedReference), equal: false };
+  return kpiComparatorWithMinimumSeparation(pct(normalizedCurrent), pct(normalizedReference));
+}
+
+function kpiComparatorWithMinimumSeparation(currentPct, referencePct) {
+  const minimumSeparation = 16;
+  const distance = Math.abs(currentPct - referencePct);
+  if (distance >= minimumSeparation) return { currentPct, referencePct, equal: false };
+  const midpoint = (currentPct + referencePct) / 2;
+  const direction = currentPct >= referencePct ? 1 : -1;
+  return {
+    currentPct: Math.min(92, Math.max(8, midpoint + direction * minimumSeparation / 2)),
+    referencePct: Math.min(92, Math.max(8, midpoint - direction * minimumSeparation / 2)),
+    equal: false
+  };
 }
 
 function kpiComparatorMarker(role, pct, value, period, definition, entry) {
@@ -1819,7 +1864,7 @@ function overviewKpiModel(definition) {
     const item = overviewPortfolioItem(definition.concept);
     const result = item ? portfolioResultForInspector(item) : null;
     const comparison = overviewPortfolioKpiComparison(item);
-    return {
+    const model = {
       result,
       entry: catalogEntry(definition.concept) || portfolioPresentationFallback[definition.concept] || { format: "integer" },
       comparison,
@@ -1827,6 +1872,8 @@ function overviewKpiModel(definition) {
       item,
       available: Boolean(item && isDisplayablePortfolioItem(item) && !overviewKpiPeriodUnsupported(definition))
     };
+    model.state = overviewKpiState(model);
+    return model;
   }
   if (definition.source !== "query") {
     return {
@@ -1834,18 +1881,105 @@ function overviewKpiModel(definition) {
       entry: portfolioPresentationFallback[definition.concept] || null,
       comparison: null,
       response: null,
-      available: false
+      available: false,
+      state: "METRIC_UNSUPPORTED"
     };
   }
   const result = summaryResultFor(definition.concept);
   const entry = catalogEntry(definition.concept);
-  return {
+  const model = {
     result,
     entry,
     comparison: comparisonFor(state.summaryResponse, result),
     response: state.summaryResponse,
     available: Boolean(result && entry && !overviewKpiHasBlockingLimitation(result))
   };
+  model.state = overviewKpiState(model);
+  return model;
+}
+
+function overviewKpiState(model) {
+  if (!model.available) return "METRIC_UNSUPPORTED";
+  if (!isComparisonDisplayMode()) return "CURRENT_ONLY";
+  const comparison = model.comparison;
+  if (!kpiHasValidReference(comparison)) return "CURRENT_ONLY_NO_REFERENCE";
+  return Number(comparison.delta) === 0 ? "ZERO_CHANGE" : "COMPLETE_COMPARE";
+}
+
+function kpiHasValidReference(comparison) {
+  return Boolean(
+    comparison
+    && comparison.current_value !== null
+    && comparison.current_value !== undefined
+    && comparison.comparison_value !== null
+    && comparison.comparison_value !== undefined
+    && comparison.delta !== null
+    && comparison.delta !== undefined
+    && Number.isFinite(Number(comparison.current_value))
+    && Number.isFinite(Number(comparison.comparison_value))
+    && Number.isFinite(Number(comparison.delta))
+  );
+}
+
+function renderKpiReferenceLine(definition, model) {
+  const comparison = model.comparison;
+  if (!kpiHasValidReference(comparison)) return null;
+  const period = kpiReferencePeriodText(comparison);
+  if (!period) return null;
+  const reference = document.createElement("span");
+  reference.className = "kpi-reference";
+  appendText(reference, "span", kpiValueWithUnit(formatValue(comparison.comparison_value, model.entry.format), definition)).className = "kpi-reference-value";
+  appendText(reference, "span", period).className = "kpi-reference-period";
+  return reference;
+}
+
+function kpiReferencePeriodText(comparison) {
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    return comparison.comparison_included_periods?.length
+      ? formatPeriodList(comparison.comparison_included_periods)
+      : formatCompactPeriod(comparison.comparison_period_start);
+  }
+  return comparison.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "";
+}
+
+function kpiReferencePeriodCandidate() {
+  const current = selectedDateFrom();
+  if (!current) return "";
+  if (state.periodMode === "COMPARE") {
+    const explicitReference = document.getElementById("period-b")?.value || "";
+    if (explicitReference) return explicitReference;
+  }
+  if (selectedComparisonMode() === "YOY") return offsetPeriodMonth(current, -12);
+  if (selectedComparisonMode() === "MOM") return offsetPeriodMonth(current, -1);
+  if (selectedComparisonMode() === "PREVIOUS_AVAILABLE") return previousAvailablePeriod(current);
+  return "";
+}
+
+function kpiMissingReferencePeriodText() {
+  if (state.periodMode === "AVAILABLE_MONTH_SET") return "сопоставимые месяцы";
+  const period = kpiReferencePeriodCandidate();
+  return period ? formatCompactPeriod(period) : "";
+}
+
+function previousAvailablePeriod(current) {
+  return (state.options?.periods || [])
+    .map((period) => period.value)
+    .filter((period) => period < current)
+    .at(-1) || "";
+}
+
+function offsetPeriodMonth(period, monthOffset) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(period);
+  if (!match) return "";
+  const monthIndex = (Number(match[1]) * 12) + Number(match[2]) - 1 + monthOffset;
+  const year = Math.floor(monthIndex / 12);
+  const month = (monthIndex % 12) + 1;
+  return `${year}-${String(month).padStart(2, "0")}-${match[3]}`;
+}
+
+function kpiDirectionPresentationClass(value) {
+  if (value === null || value === undefined || Number.isNaN(value) || Number(value) === 0) return "kpi-direction-zero";
+  return Number(value) > 0 ? "kpi-direction-up" : "kpi-direction-down";
 }
 
 function overviewPortfolioItem(concept) {
@@ -1861,7 +1995,7 @@ function overviewPortfolioKpiComparison(item) {
     comparison_value: item.reference_value,
     delta: item.delta,
     pct_delta: item.pct_delta,
-    comparison_period_start: state.periodMode === "COMPARE" ? document.getElementById("period-b")?.value || "" : "",
+    comparison_period_start: kpiReferencePeriodCandidate(),
     current_included_periods: item.provenance?.available_month_set?.current_periods || [],
     comparison_included_periods: item.provenance?.available_month_set?.reference_periods || []
   };

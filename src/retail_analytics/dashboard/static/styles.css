@@ -989,6 +989,9 @@ input {
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kpi-card strong {
@@ -1038,6 +1041,46 @@ input {
   font-weight: 400;
 }
 
+.kpi-reference {
+  display: flex;
+  min-width: 0;
+  margin-top: 4px;
+  gap: 8px;
+  align-items: baseline;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.kpi-reference-value,
+.kpi-reference-period {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kpi-missing-reference {
+  min-height: 0;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.kpi-partial-comparison-notice {
+  grid-column: 1 / -1;
+  margin: 0;
+  padding: 7px 10px;
+  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--brand-menu-blue) 8%, var(--bg-surface));
+  border: 1px solid color-mix(in srgb, var(--brand-menu-blue) 16%, var(--border-default));
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  line-height: 1.3;
+}
+
 .kpi-comparator {
   display: flex;
   align-items: center;
@@ -1059,7 +1102,7 @@ input {
   position: absolute;
   top: 0;
   height: 2px;
-  background: color-mix(in srgb, var(--status-neutral) 42%, var(--comparison-track));
+  background: color-mix(in srgb, currentColor 42%, var(--comparison-track));
   border-radius: 999px;
 }
 
@@ -1081,7 +1124,7 @@ input {
 }
 
 .kpi-comparator-marker--current {
-  color: var(--status-neutral);
+  color: currentColor;
   background: currentColor;
   box-shadow: 0 0 0 2px var(--bg-surface);
 }
@@ -1095,6 +1138,30 @@ input {
 }
 
 .kpi-comparator--neutral {
+  color: var(--status-neutral);
+}
+
+.kpi-direction-up {
+  color: var(--status-positive);
+}
+
+.kpi-direction-down {
+  color: var(--status-negative);
+}
+
+.kpi-direction-zero {
+  color: var(--delta-neutral);
+}
+
+.kpi-comparator.kpi-direction-up {
+  color: var(--status-positive);
+}
+
+.kpi-comparator.kpi-direction-down {
+  color: var(--status-negative);
+}
+
+.kpi-comparator.kpi-direction-zero {
   color: var(--status-neutral);
 }
 
@@ -1216,6 +1283,18 @@ input {
 .delta-neutral-up,
 .delta-neutral-down,
 .delta-neutral {
+  color: var(--delta-neutral);
+}
+
+.kpi-meta--delta .metric-delta-button.kpi-direction-up {
+  color: var(--status-positive);
+}
+
+.kpi-meta--delta .metric-delta-button.kpi-direction-down {
+  color: var(--status-negative);
+}
+
+.kpi-meta--delta .metric-delta-button.kpi-direction-zero {
   color: var(--delta-neutral);
 }
 
