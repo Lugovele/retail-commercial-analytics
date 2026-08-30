@@ -667,10 +667,23 @@ input {
   cursor: pointer;
 }
 
-.filter-option span {
+.filter-option-text {
+  display: grid;
+  min-width: 0;
+  gap: 1px;
+}
+
+.filter-option-primary,
+.filter-option-secondary {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.filter-option-secondary {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.2;
 }
 
 .filter-option:hover,

@@ -1319,7 +1319,12 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     assert "rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || \"\")" in script
     assert "function searchRank(item, query)" in script
     assert "label.startsWith(query)" in script
+    assert "item.search_aliases" in script
+    assert "item.display_name" in script
+    assert "item.secondary_label" in script
     assert "haystack.includes(query)" in script
+    assert 'primary.className = "filter-option-primary"' in script
+    assert 'secondary.className = "filter-option-secondary"' in script
     assert "Показано ${visibleValues.length} из ${totalCount}" in script
     assert '"store": {' not in script
     assert "Фильтр ТТ будет подключён отдельно" not in script
@@ -1484,6 +1489,7 @@ def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -
                 "manufacturer": "MANUFACTURER_ACTIVE",
                 "brand": "BRAND_ACTIVE",
                 "canonical_product_id": "SKU_ACTIVE",
+                "sku_name": "Readable Active SKU",
                 "canonical_store_id": "STORE_ACTIVE",
                 "source_store_id": "Store Active Label",
                 "private_label_flag": False,
@@ -1497,6 +1503,7 @@ def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -
                 "manufacturer": "MANUFACTURER_STALE",
                 "brand": "BRAND_STALE",
                 "canonical_product_id": "SKU_STALE",
+                "sku_name": "Readable Stale SKU",
                 "canonical_store_id": "STORE_STALE",
                 "source_store_id": "Store Stale Label",
                 "private_label_flag": False,
@@ -1510,6 +1517,7 @@ def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -
                 "manufacturer": "MANUFACTURER_OTHER_BUILD",
                 "brand": "BRAND_OTHER_BUILD",
                 "canonical_product_id": "SKU_OTHER_BUILD",
+                "sku_name": "Readable Other SKU",
                 "canonical_store_id": "STORE_OTHER_BUILD",
                 "source_store_id": "Store Other Approved Build",
                 "private_label_flag": False,
@@ -1531,8 +1539,86 @@ def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -
     assert [item["value"] for item in entities["manufacturer"]] == ["MANUFACTURER_ACTIVE"]
     assert [item["value"] for item in entities["brand"]] == ["BRAND_ACTIVE"]
     assert [item["value"] for item in entities["sku"]] == ["SKU_ACTIVE"]
+    assert [item["label"] for item in entities["sku"]] == ["Readable Active SKU"]
+    assert [item["display_name"] for item in entities["sku"]] == ["Readable Active SKU"]
+    assert "SKU_ACTIVE" in entities["sku"][0]["search_aliases"]
     assert [item["value"] for item in entities["store"]] == ["STORE_ACTIVE"]
     assert [item["label"] for item in entities["store"]] == ["Store Active Label"]
+
+
+def test_sku_filter_options_are_name_first_but_identity_stable(tmp_path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    source_like_path = tmp_path / "source_like_rows.parquet"
+    pl.DataFrame(
+        [
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "canonical_product_id": "SKU_A",
+                "sku_name": "Readable SKU",
+                "package": "PACK_A",
+                "volume_l": 0.5,
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "canonical_product_id": "SKU_B",
+                "sku_name": "Readable SKU",
+                "package": "PACK_B",
+                "volume_l": 1.0,
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "canonical_product_id": "SKU_MISSING",
+                "sku_name": "",
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+        ]
+    ).write_parquet(source_like_path)
+    runtime = replace(runtime, source_like_rows_path=source_like_path)
+
+    options = runtime.options_metadata(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+    )["entities"]["sku"]
+    by_value = {item["value"]: item for item in options}
+
+    assert set(by_value) == {"SKU_A", "SKU_B", "SKU_MISSING"}
+    assert by_value["SKU_A"]["display_name"] == "Readable SKU"
+    assert by_value["SKU_A"]["label"].startswith("Readable SKU")
+    assert by_value["SKU_A"]["value"] == "SKU_A"
+    assert by_value["SKU_B"]["value"] == "SKU_B"
+    assert by_value["SKU_A"]["label"] != by_value["SKU_B"]["label"]
+    assert by_value["SKU_A"]["secondary_label"] == "PACK_A"
+    assert by_value["SKU_B"]["secondary_label"] == "PACK_B"
+    assert "SKU_A" in by_value["SKU_A"]["search_aliases"]
+    assert by_value["SKU_MISSING"]["display_name"] == "SKU без названия"
+    assert by_value["SKU_MISSING"]["label"] == "SKU без названия · PLU SKU_MISSING"
+    assert by_value["SKU_MISSING"]["fallback_reason"] == "missing_sku_name"
 
 
 def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:

@@ -58,6 +58,7 @@ SOURCE_LIKE_ENTITY_COLUMNS = {
     "store": "canonical_store_id",
 }
 SOURCE_LIKE_LABEL_COLUMNS = {
+    "sku": ("sku_name", "canonical_product_id"),
     "store": ("store_display_label", "store_display_name", "store_name", "source_store_id", "canonical_store_id"),
 }
 ENTITY_PARENT_FILTERS = {
@@ -762,7 +763,11 @@ def _source_like_entity_options(
                 params.extend(parent_values)
         rows = duckdb.sql(
             f"""
-                SELECT {entity_column}, MIN({label_column}) AS display_label, COUNT(DISTINCT period) AS period_count
+                SELECT
+                    {entity_column},
+                    MIN(NULLIF(TRIM(CAST({label_column} AS VARCHAR)), '')) AS display_label,
+                    COUNT(DISTINCT period) AS period_count
+                    {_source_like_option_extra_selects(grain, available_columns)}
                 FROM read_parquet(?)
                 WHERE {" AND ".join(clauses)}
                 GROUP BY {entity_column}
@@ -770,14 +775,7 @@ def _source_like_entity_options(
             """,
             params=[_duckdb_path(source_like_rows_path), *params],
         ).fetchall()
-        entities[grain] = [
-            {
-                "value": str(entity_id),
-                "label": str(display_label or entity_id),
-                "period_count": int(period_count),
-            }
-            for entity_id, display_label, period_count in rows
-        ]
+        entities[grain] = _source_like_options_from_rows(grain, rows)
     return entities
 
 
@@ -786,6 +784,89 @@ def _source_like_label_column(grain: str, entity_column: str, available_columns:
         if candidate in available_columns:
             return candidate
     return entity_column
+
+
+def _source_like_option_extra_selects(grain: str, available_columns: set[str]) -> str:
+    if grain != "sku":
+        return ""
+    expressions: list[str] = []
+    for column, alias in (
+        ("package", "option_package"),
+        ("volume_l", "option_volume_l"),
+        ("brand", "option_brand"),
+        ("manufacturer", "option_manufacturer"),
+    ):
+        if column in available_columns:
+            expressions.append(f", MIN(NULLIF(TRIM(CAST({column} AS VARCHAR)), '')) AS {alias}")
+    return "\n                    ".join(expressions)
+
+
+def _source_like_options_from_rows(grain: str, rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+    if grain != "sku":
+        return [
+            {
+                "value": str(entity_id),
+                "label": str(display_label or entity_id),
+                "period_count": int(period_count),
+            }
+            for entity_id, display_label, period_count, *_ in rows
+        ]
+
+    base_labels = [_sku_display_name(display_label) for _, display_label, *_ in rows]
+    duplicate_labels = {
+        label
+        for label in base_labels
+        if base_labels.count(label) > 1 and label != "SKU без названия"
+    }
+    options: list[dict[str, Any]] = []
+    for row, base_label in zip(rows, base_labels, strict=True):
+        entity_id, display_label, period_count, *extras = row
+        value = str(entity_id)
+        secondary = _sku_option_secondary_label(
+            value,
+            extras,
+            needs_disambiguation=base_label in duplicate_labels or not display_label,
+            prefer_identity=not display_label,
+        )
+        label = f"{base_label} · {secondary}" if secondary and (base_label in duplicate_labels or not display_label) else base_label
+        search_aliases = [value, *[str(item) for item in extras if item not in (None, "")]]
+        option = {
+            "value": value,
+            "label": label,
+            "display_name": base_label,
+            "period_count": int(period_count),
+            "search_aliases": tuple(dict.fromkeys(alias for alias in search_aliases if alias)),
+        }
+        if secondary:
+            option["secondary_label"] = secondary
+        if not display_label:
+            option["fallback_reason"] = "missing_sku_name"
+        options.append(option)
+    return sorted(options, key=lambda item: (str(item["display_name"]).lower(), str(item["value"]).lower()))
+
+
+def _sku_display_name(display_label: object) -> str:
+    if display_label is None:
+        return "SKU без названия"
+    text = str(display_label).strip()
+    return text if text else "SKU без названия"
+
+
+def _sku_option_secondary_label(
+    entity_id: str,
+    extras: list[Any],
+    *,
+    needs_disambiguation: bool,
+    prefer_identity: bool = False,
+) -> str | None:
+    if not needs_disambiguation:
+        return None
+    if prefer_identity:
+        return f"PLU {entity_id}"
+    for value in extras:
+        if value not in (None, ""):
+            return str(value)
+    return f"PLU {entity_id}"
 
 
 def _product_filters_need_sku_resolution(product_filters: dict[str, tuple[str, ...]]) -> bool:

@@ -4621,11 +4621,14 @@ function rankedEntityOptions(values, rawQuery) {
 }
 
 function searchRank(item, query) {
-  const haystack = `${item.label} ${item.value}`.toLocaleLowerCase("ru-RU");
+  const aliases = Array.isArray(item.search_aliases) ? item.search_aliases.join(" ") : "";
+  const haystack = `${item.label} ${item.display_name || ""} ${item.secondary_label || ""} ${aliases} ${item.value}`.toLocaleLowerCase("ru-RU");
   const label = String(item.label || "").toLocaleLowerCase("ru-RU");
-  if (label === query || String(item.value || "").toLocaleLowerCase("ru-RU") === query) return 0;
+  const displayName = String(item.display_name || item.label || "").toLocaleLowerCase("ru-RU");
+  if (displayName === query || label === query || String(item.value || "").toLocaleLowerCase("ru-RU") === query) return 0;
   if (label.startsWith(query)) return 1;
-  if (label.split(/\s+/).some((word) => word.startsWith(query))) return 2;
+  if (displayName.startsWith(query)) return 1;
+  if (`${label} ${displayName}`.split(/\s+/).some((word) => word.startsWith(query))) return 2;
   if (haystack.includes(query)) return 3;
   return 4;
 }
@@ -4662,7 +4665,18 @@ function renderFilterOptions(id) {
       });
       checkbox.addEventListener("keydown", (event) => handleFilterOptionKeydown(event, id, index));
       const text = document.createElement("span");
-      text.textContent = item.label;
+      text.className = "filter-option-text";
+      const primary = document.createElement("span");
+      primary.className = "filter-option-primary";
+      primary.textContent = item.display_name || item.label;
+      text.appendChild(primary);
+      if (item.secondary_label) {
+        const secondary = document.createElement("small");
+        secondary.className = "filter-option-secondary";
+        secondary.textContent = item.secondary_label;
+        text.appendChild(secondary);
+      }
+      label.title = [item.display_name || item.label, item.secondary_label].filter(Boolean).join(" · ");
       label.append(checkbox, text);
       list.appendChild(label);
     });
