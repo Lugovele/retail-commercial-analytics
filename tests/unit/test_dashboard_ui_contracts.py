@@ -1678,11 +1678,20 @@ def test_overview_uses_ordered_business_kpi_surface() -> None:
     ]
     positions = [overview_surface.index(item) for item in expected_order]
     assert positions == sorted(positions)
-    assert "Оборот, шт." in overview_surface
-    assert "Оборот, ₽ с НДС" in overview_surface
-    assert "V\\u0050O на ТТ" in overview_surface
-    assert "Средняя цена за литр" in overview_surface
+    assert 'label: "Продажи", unit: "шт."' in overview_surface
+    assert 'label: "Оборот", unit: "₽"' in overview_surface
+    assert 'label: "Маржа", unit: "₽"' in overview_surface
+    assert 'label: "Маржинальность", unit: "%"' in overview_surface
+    assert 'label: "V\\u0050O", unit: "шт./ТТ"' in overview_surface
+    assert 'label: "Цена за литр"' in overview_surface
+    assert 'unit: "₽/л"' in overview_surface
     assert "Взвешенная дистрибуция" in overview_surface
+    assert "с НДС" not in overview_surface
+    assert "на ТТ" not in overview_surface
+    assert "₽/уп." not in overview_surface
+    assert "Оборот, шт." not in overview_surface
+    assert "Маржинальность, ₽" not in overview_surface
+    assert "Маржинальность, %" not in overview_surface
     assert "reserved: true" not in overview_surface
     assert ("reserved_" + "kpi_slot") not in overview_surface
     assert 'source: "reserved"' not in overview_surface
@@ -1710,6 +1719,33 @@ def test_overview_kpi_groups_preserve_business_reading_order() -> None:
     assert overview_surface.index('"weighted_shelf_price_vat"') < overview_surface.index('"weighted_input_price_vat"')
     assert "renderKpiGroup(group, renderKpiCard)" in script
     assert "card.dataset.kpiGroup = definition.group" in script
+
+
+def test_overview_kpi_microtrends_use_backend_points_without_placeholder_series() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
+    microtrend_helpers = script.split("function renderKpiMicrotrend", 1)[1].split("function overviewKpiModel", 1)[0]
+
+    assert "microtrend: true" in overview_surface
+    assert "backend-period-values" in microtrend_helpers
+    assert "backend-portfolio-rows" in microtrend_helpers
+    assert "chartResultFor(model.result?.metric_concept) || model.result" in microtrend_helpers
+    assert "trendResult?.period_values" in microtrend_helpers
+    assert "model.item?.rows" in microtrend_helpers
+    assert "source: \"business_rule_required\"" in overview_surface
+    assert 'definition.status === "BUSINESS_RULE_REQUIRED"' in microtrend_helpers
+    assert "Number.isFinite(point.value)" in microtrend_helpers
+    assert "points.length < 2" in microtrend_helpers
+    assert ".slice(-8)" in microtrend_helpers
+    assert "value || 0" not in microtrend_helpers
+    assert "fillMissing" not in microtrend_helpers
+    assert "interpolate" not in microtrend_helpers
+    assert "const microtrendConcepts = overviewKpiDefinitions" in script
+    assert "const metricConcepts = Array.from(new Set([state.chartMetric, ...microtrendConcepts]));" in script
 
 
 def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
@@ -1742,6 +1778,10 @@ def test_overview_kpi_cards_remove_generic_period_caption_and_show_dynamics() ->
 
     assert "За выбранный период" not in kpi_renderer
     assert "без сравнения" not in kpi_renderer.lower()
+    assert 'unit.className = "kpi-unit"' in kpi_renderer
+    assert kpi_renderer.index('card.classList.add("is-unavailable")') < kpi_renderer.index('unit.className = "kpi-unit"')
+    available_branch = kpi_renderer.split("card.appendChild(valueWrap)", 1)[1]
+    assert available_branch.index('unit.className = "kpi-unit"') < available_branch.index('meta.className = "kpi-meta kpi-meta--delta"')
     assert 'meta.className = "kpi-meta kpi-meta--delta"' in kpi_renderer
     assert "text: kpiDeltaText(comparison, entry)" in kpi_renderer
     assert 'referenceContext.className = "kpi-reference"' in kpi_renderer
@@ -1778,22 +1818,27 @@ def test_overview_portfolio_kpi_uses_backend_comparison_and_available_month_limi
 def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     css = html_or_script("styles.css")
 
-    assert "grid-template-columns: repeat(7, minmax(0, 1fr))" in css
+    assert 'grid-template-areas:\n    "result result"\n    "coverage price"' in css
+    assert "grid-template-columns: minmax(0, 4fr) minmax(250px, 3fr)" in css
     assert ".kpi-group--result" in css
     assert ".kpi-group--coverage" in css
     assert ".kpi-group--price" in css
     assert ".kpi-group-label" in css
+    assert "background: rgba(248, 250, 252, 0.78)" in css
+    assert "border: 1px solid rgba(219, 227, 238, 0.84)" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
-    assert "min-height: 86px" in css
-    assert "padding: 10px 11px 9px" in css
     assert "min-height: 92px" in css
+    assert "padding: 9px 10px 8px" in css
+    assert "min-height: 96px" in css
     assert "font-size: 21px" in css
-    assert "border: 1px solid var(--border-default)" in css
+    assert "border: 1px solid rgba(219, 227, 238, 0.66)" in css
     assert "font-size: 19px" in css
     assert ".kpi-unit" in css
     assert ".kpi-meta--delta" in css
     assert ".kpi-reference" in css
+    assert ".kpi-microtrend" in css
+    assert ".kpi-sparkline-line" in css
     assert "padding: 7px 10px" in css
     assert "border: 1px solid rgba(219, 227, 238, 0.78)" in css
     assert "min-height: 132px" not in css

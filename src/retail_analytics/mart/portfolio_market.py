@@ -771,6 +771,10 @@ class PortfolioMarketService:
             "historical_peak_active_sku_count": peak_count,
             "active_sku_change_pct": change,
         }
+        rows = tuple(
+            {"period_start": period, "value": count, "source": "backend_active_sku_count"}
+            for period, count in sorted(counts.items())
+        )
         limitations = () if counts else ("no_sku_units_metric_facts",)
         if concept_id == "active_sku_count" and reference_limitation:
             limitations = (*limitations, reference_limitation)
@@ -787,6 +791,7 @@ class PortfolioMarketService:
             reference_value=reference_count if concept_id == "active_sku_count" else None,
             delta=delta if concept_id == "active_sku_count" else None,
             pct_delta=pct_delta if concept_id == "active_sku_count" else None,
+            rows=rows if concept_id == "active_sku_count" else (),
             limitations=limitations,
             provenance=_projection_provenance(
                 request,

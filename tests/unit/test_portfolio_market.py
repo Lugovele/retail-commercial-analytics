@@ -873,6 +873,10 @@ def test_active_sku_yoy_exposes_backend_comparison_fields(tmp_path) -> None:
     assert item.reference_value == 2
     assert item.delta == -1
     assert item.pct_delta == pytest.approx(-0.5)
+    assert item.rows == (
+        {"period_start": date(2025, 1, 1), "value": 2, "source": "backend_active_sku_count"},
+        {"period_start": date(2026, 1, 1), "value": 1, "source": "backend_active_sku_count"},
+    )
     assert item.provenance["projection"]["reference_period"] == date(2025, 1, 1)
 
 

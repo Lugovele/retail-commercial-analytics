@@ -54,11 +54,11 @@ const state = {
 };
 
 const overviewKpiDefinitions = [
-  { slot: 1, group: "result", visualTier: "primary", concept: "units", label: "Оборот, шт.", unit: "шт.", source: "query" },
-  { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот, ₽ с НДС", unit: "₽", source: "query" },
-  { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржинальность, ₽", unit: "₽", source: "query" },
-  { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность, %", unit: "%", source: "query" },
-  { slot: 5, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
+  { slot: 1, group: "result", visualTier: "primary", concept: "units", label: "Продажи", unit: "шт.", source: "query", microtrend: true },
+  { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот", unit: "₽", source: "query", microtrend: true },
+  { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржа", unit: "₽", source: "query", microtrend: true },
+  { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность", unit: "%", source: "query", microtrend: true },
+  { slot: 5, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query", microtrend: true },
   {
     slot: 6,
     group: "coverage",
@@ -70,21 +70,21 @@ const overviewKpiDefinitions = [
     unavailableText: "Требуется правило веса и вселенной.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 7, group: "coverage", visualTier: "secondary", concept: "velocity", label: "V\u0050O на ТТ", unit: "шт./ТТ", source: "query" },
-  { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio" },
+  { slot: 7, group: "coverage", visualTier: "secondary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query", microtrend: true },
+  { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio", microtrend: true },
   {
     slot: 9,
     group: "price",
     visualTier: "secondary",
     concept: "average_price_per_liter",
-    label: "Средняя цена за литр",
+    label: "Цена за литр",
     unit: "₽/л",
     source: "business_rule_required",
     unavailableText: "Требуется утверждённая формула.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Средняя цена на полке, с НДС", unit: "₽/уп.", source: "query" },
-  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Средняя цена входа, с НДС", unit: "₽/уп.", source: "query" }
+  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Средняя цена на полке", unit: "₽", source: "query", microtrend: true },
+  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Средняя цена входа", unit: "₽", source: "query", microtrend: true }
 ];
 const overviewKpiGroups = [
   { id: "result", label: "РЕЗУЛЬТАТ", visualTier: "primary" },
@@ -1371,8 +1371,12 @@ function buildChartQueryPayload() {
   const periods = state.options.periods.map((period) => period.value);
   const dateFrom = state.periodMode === "DATE_RANGE" ? selectedDateFrom() : periods[0] || selectedDateFrom();
   const dateTo = state.periodMode === "DATE_RANGE" ? selectedDateTo() : periods[periods.length - 1] || selectedDateTo();
+  const microtrendConcepts = overviewKpiDefinitions
+    .filter((definition) => definition.source === "query" && definition.microtrend)
+    .map((definition) => definition.concept);
+  const metricConcepts = Array.from(new Set([state.chartMetric, ...microtrendConcepts]));
   return {
-    ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), [state.chartMetric]),
+    ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), metricConcepts),
     date_from: dateFrom,
     date_to: dateTo,
     period_mode: "DATE_RANGE",
@@ -1681,6 +1685,10 @@ function renderKpiCard(definition) {
     value.textContent = "н/д";
     card.appendChild(value);
     appendText(card, "span", overviewKpiUnavailableText(definition, model));
+    const unit = document.createElement("span");
+    unit.className = "kpi-unit";
+    unit.textContent = definition.unit;
+    card.appendChild(unit);
     return card;
   }
   const comparison = model.comparison;
@@ -1695,6 +1703,10 @@ function renderKpiCard(definition) {
     className: "metric-value-button--kpi"
   }));
   card.appendChild(valueWrap);
+  const unit = document.createElement("span");
+  unit.className = "kpi-unit";
+  unit.textContent = definition.unit;
+  card.appendChild(unit);
   if (isComparisonDisplayMode() && comparison) {
     const meta = document.createElement("span");
     meta.className = "kpi-meta kpi-meta--delta";
@@ -1714,11 +1726,75 @@ function renderKpiCard(definition) {
       card.appendChild(referenceContext);
     }
   }
-  const unit = document.createElement("span");
-  unit.className = "kpi-unit";
-  unit.textContent = definition.unit;
-  card.appendChild(unit);
+  const microtrend = renderKpiMicrotrend(definition, model);
+  if (microtrend) card.appendChild(microtrend);
   return card;
+}
+
+function renderKpiMicrotrend(definition, model) {
+  const points = kpiMicrotrendPoints(definition, model);
+  if (points.length < 2) return null;
+  return buildKpiSparkline(points, definition, model.entry);
+}
+
+function kpiMicrotrendPoints(definition, model) {
+  if (!definition.microtrend || !model.available || definition.status === "BUSINESS_RULE_REQUIRED") return [];
+  if (definition.source === "portfolio") return portfolioKpiMicrotrendPoints(model);
+  return queryKpiMicrotrendPoints(model);
+}
+
+function queryKpiMicrotrendPoints(model) {
+  const trendResult = chartResultFor(model.result?.metric_concept) || model.result;
+  return recentChronologicalMetricPoints(trendResult?.period_values || [], "backend-period-values");
+}
+
+function portfolioKpiMicrotrendPoints(model) {
+  return recentChronologicalMetricPoints(model.item?.rows || [], "backend-portfolio-rows");
+}
+
+function recentChronologicalMetricPoints(rows, source) {
+  return (rows || [])
+    .map((row) => ({
+      period: row.period_start || row.period,
+      value: Number(row.value),
+      source
+    }))
+    .filter((point) => point.period && Number.isFinite(point.value))
+    .sort((left, right) => String(left.period).localeCompare(String(right.period)))
+    .slice(-8);
+}
+
+function buildKpiSparkline(points, definition, entry) {
+  const width = 108;
+  const height = 28;
+  const pad = 3;
+  const values = points.map((point) => point.value);
+  const max = Math.max(...values);
+  const min = Math.min(...values);
+  const range = max - min || 1;
+  const x = (index) => pad + (index * (width - pad * 2)) / Math.max(points.length - 1, 1);
+  const y = (value) => pad + (max - value) * (height - pad * 2) / range;
+  const path = points.map((point, index) => `${index === 0 ? "M" : "L"} ${x(index).toFixed(2)} ${y(point.value).toFixed(2)}`).join(" ");
+  const wrap = document.createElement("span");
+  wrap.className = `kpi-microtrend kpi-microtrend--${deltaSemanticsFor(definition.concept).toLowerCase().replace("_", "-")}`;
+  wrap.dataset.microtrendSource = points[0]?.source || "";
+  wrap.dataset.pointCount = String(points.length);
+  wrap.dataset.periods = points.map((point) => point.period).join(",");
+  wrap.setAttribute("aria-label", `${definition.label}: микродинамика по ${points.length} доступным периодам`);
+  const svg = svgEl("svg", { class: "kpi-sparkline", viewBox: `0 0 ${width} ${height}`, role: "img" });
+  svg.appendChild(svgEl("path", { class: "kpi-sparkline-line", d: path }));
+  const last = points[points.length - 1];
+  svg.appendChild(svgEl("circle", {
+    class: "kpi-sparkline-point",
+    cx: x(points.length - 1),
+    cy: y(last.value),
+    r: 2.6
+  }));
+  const title = svgEl("title", {});
+  title.textContent = `${formatCompactPeriod(last.period)} · ${formatValue(last.value, entry?.format || "decimal")}`;
+  svg.appendChild(title);
+  wrap.appendChild(svg);
+  return wrap;
 }
 
 function overviewKpiModel(definition) {
@@ -1731,6 +1807,7 @@ function overviewKpiModel(definition) {
       entry: catalogEntry(definition.concept) || portfolioPresentationFallback[definition.concept] || { format: "integer" },
       comparison,
       response: state.overviewPortfolioResponse,
+      item,
       available: Boolean(item && isDisplayablePortfolioItem(item) && !overviewKpiPeriodUnsupported(definition))
     };
   }

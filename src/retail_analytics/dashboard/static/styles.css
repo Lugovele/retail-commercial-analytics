@@ -858,27 +858,37 @@ input {
 .kpi-grid {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 12px 10px;
+  grid-template-columns: minmax(0, 4fr) minmax(250px, 3fr);
+  grid-template-areas:
+    "result result"
+    "coverage price";
+  gap: 12px;
   align-items: start;
 }
 
 .kpi-group {
   display: grid;
   min-width: 0;
-  gap: 6px;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(248, 250, 252, 0.78);
+  border: 1px solid rgba(219, 227, 238, 0.84);
+  border-radius: var(--radius-md);
 }
 
 .kpi-group--result {
-  grid-column: 1 / -1;
+  grid-area: result;
+  padding: 11px;
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(194, 206, 224, 0.9);
 }
 
 .kpi-group--coverage {
-  grid-column: span 4;
+  grid-area: coverage;
 }
 
 .kpi-group--price {
-  grid-column: span 3;
+  grid-area: price;
 }
 
 .kpi-group-label {
@@ -933,17 +943,19 @@ input {
 }
 
 .kpi-card {
+  display: grid;
+  grid-template-rows: auto auto auto auto auto;
   min-width: 0;
-  min-height: 86px;
-  padding: 10px 11px 9px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  min-height: 92px;
+  padding: 9px 10px 8px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(219, 227, 238, 0.66);
+  border-radius: var(--radius-sm);
 }
 
 .kpi-card small {
   display: block;
-  min-height: 30px;
+  min-height: 18px;
   margin-bottom: 5px;
   color: var(--text-secondary);
   font-size: 11px;
@@ -960,8 +972,9 @@ input {
 }
 
 .kpi-card--primary {
-  min-height: 92px;
+  min-height: 96px;
   padding: 11px 12px 10px;
+  background: rgba(255, 255, 255, 0.84);
 }
 
 .kpi-card--primary strong {
@@ -969,7 +982,7 @@ input {
 }
 
 .kpi-card--secondary {
-  min-height: 80px;
+  min-height: 88px;
 }
 
 .kpi-meta {
@@ -991,6 +1004,43 @@ input {
   color: var(--text-muted);
   font-size: 10px;
   line-height: 1.2;
+}
+
+.kpi-microtrend {
+  display: block;
+  width: 100%;
+  max-width: 116px;
+  height: 30px;
+  margin-top: 3px;
+  justify-self: end;
+  color: var(--text-muted);
+}
+
+.kpi-sparkline {
+  display: block;
+  width: 100%;
+  height: 30px;
+  overflow: visible;
+}
+
+.kpi-sparkline-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.kpi-sparkline-point {
+  fill: currentColor;
+}
+
+.kpi-microtrend--outcome-directional {
+  color: var(--accent-primary);
+}
+
+.kpi-microtrend--neutral-directional {
+  color: var(--text-muted);
 }
 
 .kpi-unit {
@@ -2407,6 +2457,10 @@ th:first-child {
 
   .kpi-grid {
     grid-template-columns: 1fr;
+    grid-template-areas:
+      "result"
+      "coverage"
+      "price";
   }
 
   .kpi-group--result,
