@@ -1715,7 +1715,7 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
     value.className = "metric-current kpi-current-value";
     value.textContent = "н/д";
     left.appendChild(value);
-    appendText(left, "span", conciseKpiUnavailableText(definition, model));
+    appendText(left, "span", conciseKpiUnavailableText(definition, model)).className = "kpi-unavailable-reason";
     content.appendChild(left);
     card.appendChild(content);
     return card;
@@ -1758,8 +1758,6 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
     appendText(left, "span", period ? `Нет данных за ${period}` : "Нет данных за период сравнения").className = "kpi-meta kpi-missing-reference";
   }
   content.appendChild(left);
-  const comparator = renderKpiComparator(definition, model);
-  if (comparator) content.appendChild(comparator);
   card.appendChild(content);
   return card;
 }
@@ -1773,90 +1771,6 @@ function chronologicalMetricPoints(rows, source) {
     }))
     .filter((point) => point.period && Number.isFinite(point.value))
     .sort((left, right) => String(left.period).localeCompare(String(right.period)));
-}
-
-function renderKpiComparator(definition, model) {
-  const comparison = model.comparison;
-  if (model.state !== "COMPLETE_COMPARE" && model.state !== "ZERO_CHANGE") return null;
-  if (!isComparisonDisplayMode() || !comparison) return null;
-  if (comparison.current_value === null || comparison.current_value === undefined) return null;
-  if (comparison.comparison_value === null || comparison.comparison_value === undefined) return null;
-  const current = Number(comparison.current_value);
-  const reference = Number(comparison.comparison_value);
-  if (!Number.isFinite(current) || !Number.isFinite(reference)) return null;
-  const scale = kpiComparatorScale(current, reference);
-  if (!scale) return null;
-  const semantics = deltaSemanticsFor(definition.concept);
-  const comparator = document.createElement("div");
-  comparator.className = `kpi-comparator kpi-comparator--${semantics.toLowerCase().replace("_", "-")} ${kpiDirectionPresentationClass(comparison.delta)}`;
-  if (scale.equal) comparator.classList.add("kpi-comparator--equal");
-  comparator.dataset.currentValue = String(current);
-  comparator.dataset.referenceValue = String(reference);
-  comparator.dataset.normalization = "local-symmetric-current-reference";
-  comparator.setAttribute("aria-label", `${definition.label}: ${formatValue(current, model.entry.format)} к ${formatValue(reference, model.entry.format)}`);
-
-  const track = document.createElement("span");
-  track.className = "kpi-comparator-track";
-  const connector = document.createElement("span");
-  connector.className = "kpi-comparator-connector";
-  connector.style.left = `${Math.min(scale.currentPct, scale.referencePct)}%`;
-  connector.style.width = `${Math.abs(scale.currentPct - scale.referencePct)}%`;
-  track.appendChild(connector);
-  const currentMarker = kpiComparatorMarker("current", scale.currentPct, current, comparison.current_period_start || selectedDateFrom(), definition, model.entry);
-  const referenceMarker = kpiComparatorMarker("reference", scale.referencePct, reference, comparison.comparison_period_start, definition, model.entry);
-  track.appendChild(referenceMarker);
-  track.appendChild(currentMarker);
-  comparator.appendChild(track);
-  return comparator;
-}
-
-function kpiComparatorScale(current, reference) {
-  if (current === reference) return { currentPct: 50, referencePct: 50, equal: true };
-  const magnitude = Math.max(Math.abs(current), Math.abs(reference), 1);
-  const normalizedCurrent = current / magnitude;
-  const normalizedReference = reference / magnitude;
-  const center = (normalizedCurrent + normalizedReference) / 2;
-  const spread = Math.max(
-    Math.abs(normalizedCurrent - normalizedReference),
-    Math.abs(center) * 0.08,
-    Math.abs(normalizedCurrent) * 0.04,
-    Math.abs(normalizedReference) * 0.04,
-    Number.EPSILON
-  );
-  const min = center - spread;
-  const max = center + spread;
-  const pct = (value) => Math.min(92, Math.max(8, ((value - min) / (max - min)) * 100));
-  return kpiComparatorWithMinimumSeparation(pct(normalizedCurrent), pct(normalizedReference));
-}
-
-function kpiComparatorWithMinimumSeparation(currentPct, referencePct) {
-  const minimumSeparation = 16;
-  const distance = Math.abs(currentPct - referencePct);
-  if (distance >= minimumSeparation) return { currentPct, referencePct, equal: false };
-  const midpoint = (currentPct + referencePct) / 2;
-  const direction = currentPct >= referencePct ? 1 : -1;
-  return {
-    currentPct: Math.min(92, Math.max(8, midpoint + direction * minimumSeparation / 2)),
-    referencePct: Math.min(92, Math.max(8, midpoint - direction * minimumSeparation / 2)),
-    equal: false
-  };
-}
-
-function kpiComparatorMarker(role, pct, value, period, definition, entry) {
-  const marker = document.createElement("button");
-  marker.type = "button";
-  marker.className = `kpi-comparator-marker kpi-comparator-marker--${role}`;
-  marker.style.left = `${pct}%`;
-  marker.dataset.role = role;
-  marker.dataset.value = String(value);
-  if (period) marker.dataset.period = period;
-  const tooltip = `${period ? formatPeriod(period) : ""}${period ? " · " : ""}${kpiValueWithUnit(formatValue(value, entry.format), definition)}`;
-  marker.setAttribute("aria-label", tooltip);
-  marker.addEventListener("mousemove", (event) => showTooltip(event, tooltip));
-  marker.addEventListener("focus", (event) => showTooltip(event, tooltip));
-  marker.addEventListener("mouseleave", hideTooltip);
-  marker.addEventListener("blur", hideTooltip);
-  return marker;
 }
 
 function overviewKpiModel(definition) {
@@ -2018,6 +1932,7 @@ function overviewKpiValueText(result, entry, definition) {
 
 function kpiValueWithUnit(text, definition) {
   const unit = definition?.unit || "";
+  if (definition?.concept === "active_sku_count") return text;
   if (!unit || text === "н/д" || text.includes(unit)) return text;
   if (unit === "%" && text.includes("%")) return text;
   if (unit === "₽" && (text.includes("₽") || text.includes("руб"))) return text;

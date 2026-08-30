@@ -1810,7 +1810,7 @@ def test_overview_kpi_groups_preserve_business_reading_order() -> None:
     assert "card.dataset.kpiGroup = definition.group" in script
 
 
-def test_overview_kpi_cards_use_generic_comparison_visual_without_sparklines() -> None:
+def test_overview_kpi_cards_use_compact_matrix_without_comparator_or_sparklines() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")
         .joinpath("app.js")
@@ -1818,81 +1818,47 @@ def test_overview_kpi_cards_use_generic_comparison_visual_without_sparklines() -
     )
     overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
     kpi_renderer = script.split("function renderKpiCard", 1)[1].split("function overviewKpiModel", 1)[0]
-    comparator_helpers = script.split("function renderKpiComparator", 1)[1].split("function overviewKpiModel", 1)[0]
 
     assert "microtrend" not in overview_surface
     assert "function renderKpiMicrotrend" not in script
     assert "function kpiMicrotrendPoints" not in script
     assert "kpi-sparkline" not in script
     assert "kpi-microtrend" not in script
+    assert "function renderKpiComparator" not in script
+    assert "function kpiComparatorScale" not in script
+    assert "function kpiComparatorMarker" not in script
+    assert "kpi-comparator" not in script
     assert "kpi-card-content" in kpi_renderer
     assert "kpi-card-main" in kpi_renderer
     assert 'value.className = "metric-current kpi-current-value"' in kpi_renderer
-    assert "renderKpiComparator(definition, model)" in kpi_renderer
+    assert "content.appendChild(left)" in kpi_renderer
     assert "card.dataset.kpiState = model.state" in kpi_renderer
-    assert "kpi-comparator" in comparator_helpers
-    assert "kpi-comparator-track" in comparator_helpers
-    assert "kpi-comparator-connector" in comparator_helpers
-    assert "kpi-comparator-marker--${role}" in comparator_helpers
-    assert "comparison.current_value" in comparator_helpers
-    assert "comparison.comparison_value" in comparator_helpers
-    assert "local-symmetric-current-reference" in comparator_helpers
-    assert "kpiComparatorScale(current, reference)" in comparator_helpers
-    assert "kpiComparatorWithMinimumSeparation" in comparator_helpers
-    assert "Number.isFinite(current)" in comparator_helpers
-    assert "Number.isFinite(reference)" in comparator_helpers
-    assert "formatPeriod(period)" in comparator_helpers
-    assert "kpiValueWithUnit(formatValue(value, entry.format), definition)" in comparator_helpers
+    assert 'if (definition?.concept === "active_sku_count") return text;' in script
     assert "source: \"business_rule_required\"" in overview_surface
     assert "const selectedDefinition = overviewTrendDefinition(state.chartMetric);" in script
     assert "const metricConcepts = selectedDefinition?.source === \"query\" ? [state.chartMetric] : [];" in script
 
 
-def test_overview_kpi_comparator_has_marker_semantics_and_safe_normalization() -> None:
+def test_overview_kpi_matrix_removes_comparator_visual_while_preserving_direction_colors() -> None:
     script = html_or_script("app.js")
     styles = html_or_script("styles.css")
-    comparator_helpers = script.split("function renderKpiComparator", 1)[1].split("function overviewKpiModel", 1)[0]
 
-    assert "if (!isComparisonDisplayMode() || !comparison) return null;" in comparator_helpers
-    assert "comparison.current_value === null || comparison.current_value === undefined" in comparator_helpers
-    assert "comparison.comparison_value === null || comparison.comparison_value === undefined" in comparator_helpers
-    assert "if (!Number.isFinite(current) || !Number.isFinite(reference)) return null;" in comparator_helpers
-    assert 'if (scale.equal) comparator.classList.add("kpi-comparator--equal");' in comparator_helpers
-    assert "deltaSemanticClass(definition.concept" not in comparator_helpers
-    assert "kpiDirectionPresentationClass(comparison.delta)" in comparator_helpers
-    assert "current === reference" in comparator_helpers
-    assert "const magnitude = Math.max(Math.abs(current), Math.abs(reference), 1);" in comparator_helpers
-    assert "const normalizedCurrent = current / magnitude;" in comparator_helpers
-    assert "Math.abs(normalizedCurrent - normalizedReference)" in comparator_helpers
-    assert "Number.EPSILON" in comparator_helpers
-    assert "minimumSeparation = 16" in comparator_helpers
-    assert "Math.min(92, Math.max(8" in comparator_helpers
-    assert "marker.dataset.role = role" in comparator_helpers
-    assert "marker.dataset.value = String(value)" in comparator_helpers
-    assert "marker.dataset.period = period" in comparator_helpers
-    assert "kpi-comparator-marker--${role}" in comparator_helpers
-    assert "сейчас" not in comparator_helpers.lower()
-    assert "было" not in comparator_helpers.lower()
-    assert ">current<" not in comparator_helpers.lower()
-    assert ">reference<" not in comparator_helpers.lower()
+    assert "function renderKpiComparator" not in script
+    assert "function kpiComparatorScale" not in script
+    assert "function kpiComparatorWithMinimumSeparation" not in script
+    assert "function kpiComparatorMarker" not in script
+    assert "local-symmetric-current-reference" not in script
+    assert ".kpi-comparator" not in styles
+    assert ".kpi-comparator-track" not in styles
+    assert ".kpi-comparator-marker" not in styles
+    assert "deltaSemanticClass(definition.concept" not in script
+    assert "kpiDirectionPresentationClass(comparison.delta)" in script
     assert "--status-positive" in styles
     assert "--status-negative" in styles
     assert "--status-neutral" in styles
-    assert "--reference-marker" in styles
-    assert "--comparison-track" in styles
-    assert ".kpi-comparator-marker--reference" in styles
-    assert "background: var(--bg-surface)" in styles
-    assert ".kpi-comparator-marker--current" in styles
-    assert "background: currentColor" in styles
-    assert ".kpi-comparator.kpi-direction-up" in styles
-    assert ".kpi-comparator.kpi-direction-down" in styles
-    assert ".kpi-comparator.kpi-direction-zero" in styles
-    assert ".kpi-comparator--equal .kpi-comparator-marker--reference" in styles
-    assert ".kpi-comparator--equal .kpi-comparator-marker--current" in styles
-    assert ".kpi-comparator.delta-neutral-up" not in styles
-    assert ".kpi-comparator.delta-neutral-down" not in styles
-    assert "fillMissing" not in comparator_helpers
-    assert "interpolate" not in comparator_helpers
+    assert ".kpi-direction-up" in styles
+    assert ".kpi-direction-down" in styles
+    assert ".kpi-direction-zero" in styles
 
 
 def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
@@ -1941,7 +1907,8 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "Сравнение недоступно" in kpi_renderer
     assert "Нет данных за" in kpi_renderer
     assert "kpiMissingReferencePeriodText()" in kpi_renderer
-    assert "renderKpiComparator(definition, model)" in kpi_renderer
+    assert "renderKpiComparator(definition, model)" not in kpi_renderer
+    assert "function renderKpiComparator" not in script
     assert "meta.textContent = kpiContextText(comparison, entry)" not in kpi_renderer
     assert "comparison.comparison_value" not in kpi_helpers
     assert 'return "";' in kpi_helpers
@@ -1967,8 +1934,6 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "comparison.current_value !== null" in state_helpers
     assert "comparison.comparison_value !== null" in state_helpers
     assert "comparison.delta !== null" in state_helpers
-    comparator_helpers = script.split("function renderKpiComparator", 1)[1].split("function kpiComparatorScale", 1)[0]
-    assert 'if (model.state !== "COMPLETE_COMPARE" && model.state !== "ZERO_CHANGE") return null;' in comparator_helpers
     assert "const explicitReference = document.getElementById(\"period-b\")?.value || \"\";" in reference_helpers
     assert "if (explicitReference) return explicitReference;" in reference_helpers
     assert 'if (selectedComparisonMode() === "YOY") return offsetPeriodMonth(current, -12);' in reference_helpers
@@ -2031,32 +1996,36 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "border: 1px solid rgba(219, 227, 238, 0.84)" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
-    assert "min-height: 104px" in css
-    assert "padding: 9px 10px 8px" in css
-    assert "min-height: 110px" in css
-    assert "font-size: 21px" in css
-    assert "border: 1px solid rgba(219, 227, 238, 0.66)" in css
+    assert "min-height: 104px" not in css
+    assert "padding: 9px 10px 8px" not in css
+    assert "min-height: 110px" not in css
+    assert "padding: 4px 6px" in css
+    assert "padding: 5px 7px" in css
     assert "font-size: 19px" in css
+    assert "border: 1px solid rgba(219, 227, 238, 0.66)" in css
+    assert "font-size: 18px" in css
     assert ".kpi-unit" not in css
     assert ".kpi-card-content" in css
     assert ".kpi-card-main" in css
+    assert "align-items: flex-start" in css.split(".kpi-card-content", 1)[1].split(".kpi-card small", 1)[0]
+    assert "gap: 2px" in css.split(".kpi-card-main", 1)[1].split(".kpi-current-value", 1)[0]
     assert ".kpi-meta--delta" in css
     assert ".kpi-card--primary .kpi-meta--delta" in css
     assert ".kpi-reference" in css
-    assert "gap: 8px" in css
+    assert "gap: 5px" in css
     assert ".kpi-reference-value" in css
     assert ".kpi-reference-period" in css
     assert ".kpi-missing-reference" in css
     assert ".kpi-partial-comparison-notice" in css
-    assert ".kpi-comparator" in css
-    assert ".kpi-comparator-track" in css
-    assert ".kpi-comparator-marker--reference" in css
-    assert ".kpi-comparator-marker--current" in css
+    assert ".kpi-comparator" not in css
+    assert ".kpi-comparator-track" not in css
+    assert ".kpi-comparator-marker--reference" not in css
+    assert ".kpi-comparator-marker--current" not in css
     assert ".kpi-microtrend" not in css
     assert ".kpi-sparkline-period" not in css
     assert ".kpi-sparkline-hitpoint" not in css
     assert ".kpi-sparkline-line" not in css
-    assert "font-weight: 700" not in css.split(".kpi-card strong", 1)[1].split(".kpi-comparator", 1)[0]
+    assert "font-weight: 700" not in css.split(".kpi-card strong", 1)[1].split(".kpi-card.is-unavailable", 1)[0]
     assert ".kpi-meta--delta .metric-delta-button {\n  font-weight: 400;" in css
     assert "white-space: nowrap" in css.split(".kpi-card small", 1)[1].split(".kpi-card strong", 1)[0]
     assert "padding: 7px 10px" in css
