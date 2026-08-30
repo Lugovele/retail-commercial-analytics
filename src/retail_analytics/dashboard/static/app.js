@@ -1744,20 +1744,38 @@ function renderKpiMicrotrend(definition, model) {
 
 function kpiMicrotrendPoints(definition, model) {
   if (!definition.microtrend || !model.available || definition.status === "BUSINESS_RULE_REQUIRED") return [];
-  if (definition.source === "portfolio") return portfolioKpiMicrotrendPoints(model);
-  return queryKpiMicrotrendPoints(model);
+  const scope = kpiMicrotrendPeriodScope(model);
+  if (scope.mode === "single") return [];
+  if (definition.source === "portfolio") return portfolioKpiMicrotrendPoints(model, scope);
+  return queryKpiMicrotrendPoints(definition, model, scope);
 }
 
-function queryKpiMicrotrendPoints(model) {
-  const trendResult = chartResultFor(model.result?.metric_concept) || model.result;
-  return recentChronologicalMetricPoints(trendResult?.period_values || [], "backend-period-values");
+function queryKpiMicrotrendPoints(definition, model, scope) {
+  const trendResult = chartResultFor(definition.concept) || model.result;
+  return scopedChronologicalMetricPoints(trendResult?.period_values || [], "backend-period-values", scope);
 }
 
-function portfolioKpiMicrotrendPoints(model) {
-  return recentChronologicalMetricPoints(model.item?.rows || [], "backend-portfolio-rows");
+function portfolioKpiMicrotrendPoints(model, scope) {
+  return scopedChronologicalMetricPoints(model.item?.rows || [], "backend-portfolio-rows", scope);
 }
 
-function recentChronologicalMetricPoints(rows, source) {
+function kpiMicrotrendPeriodScope(model) {
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    const periods = model.comparison?.current_included_periods || model.item?.provenance?.available_month_set?.current_periods || [];
+    return { mode: "set", periods: new Set(periods.map(String)) };
+  }
+  const start = selectedDateFrom();
+  const end = selectedDateTo();
+  if (!start || !end || start === end) return { mode: "single", start, end };
+  return { mode: "range", start, end };
+}
+
+function scopedChronologicalMetricPoints(rows, source, scope) {
+  return chronologicalMetricPoints(rows, source)
+    .filter((point) => kpiMicrotrendPeriodInScope(point.period, scope));
+}
+
+function chronologicalMetricPoints(rows, source) {
   return (rows || [])
     .map((row) => ({
       period: row.period_start || row.period,
@@ -1765,14 +1783,19 @@ function recentChronologicalMetricPoints(rows, source) {
       source
     }))
     .filter((point) => point.period && Number.isFinite(point.value))
-    .sort((left, right) => String(left.period).localeCompare(String(right.period)))
-    .slice(-8);
+    .sort((left, right) => String(left.period).localeCompare(String(right.period)));
+}
+
+function kpiMicrotrendPeriodInScope(period, scope) {
+  if (scope.mode === "set") return scope.periods.has(String(period));
+  if (scope.mode === "range") return String(period) >= scope.start && String(period) <= scope.end;
+  return false;
 }
 
 function buildKpiSparkline(points, definition, entry) {
   const width = 190;
-  const height = 48;
-  const pad = { left: 4, right: 4, top: 6, bottom: 18 };
+  const height = 34;
+  const pad = { left: 4, right: 4, top: 5, bottom: 5 };
   const values = points.map((point) => point.value);
   const max = Math.max(...values);
   const min = Math.min(...values);
@@ -1815,8 +1838,6 @@ function buildKpiSparkline(points, definition, entry) {
   const title = svgEl("title", {});
   title.textContent = `${formatCompactPeriod(last.period)} · ${kpiValueWithUnit(formatValue(last.value, entry?.format || "decimal"), definition)}`;
   svg.appendChild(title);
-  svg.appendChild(svgText(x(0), height - 3, formatCompactPeriod(points[0].period), "start", "kpi-sparkline-period"));
-  svg.appendChild(svgText(x(points.length - 1), height - 3, formatCompactPeriod(last.period), "end", "kpi-sparkline-period"));
   wrap.appendChild(svg);
   return wrap;
 }
@@ -1868,6 +1889,7 @@ function overviewPortfolioKpiComparison(item) {
     delta: item.delta,
     pct_delta: item.pct_delta,
     comparison_period_start: state.periodMode === "COMPARE" ? document.getElementById("period-b")?.value || "" : "",
+    current_included_periods: item.provenance?.available_month_set?.current_periods || [],
     comparison_included_periods: item.provenance?.available_month_set?.reference_periods || []
   };
 }
@@ -2019,7 +2041,7 @@ function overviewTrendPoints(definition, model) {
   const rows = definition.source === "portfolio"
     ? model.item?.rows || []
     : model.result?.period_values || [];
-  return recentChronologicalMetricPoints(rows, "backend-trend-series")
+  return chronologicalMetricPoints(rows, "backend-trend-series")
     .map((point) => ({ period: point.period, value: point.value }));
 }
 
@@ -5571,17 +5593,14 @@ function kpiDeltaText(comparison, entry) {
 
 function kpiReferenceText(comparison, entry, definition = null) {
   if (!comparison) return "";
-  const referenceValue = comparison.comparison_value === null || comparison.comparison_value === undefined
-    ? ""
-    : kpiValueWithUnit(formatValue(comparison.comparison_value, entry.format), definition);
   const referencePeriod = comparison.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "";
   if (state.periodMode === "AVAILABLE_MONTH_SET") {
     const months = comparison.comparison_included_periods?.length
       ? formatPeriodList(comparison.comparison_included_periods)
       : referencePeriod;
-    return [referenceValue, months ? `сравн. ${months}` : ""].filter(Boolean).join(" · ");
+    return months ? `сравн. ${months}` : "";
   }
-  return [referenceValue, referencePeriod ? `к ${referencePeriod}` : ""].filter(Boolean).join(" · ");
+  return referencePeriod ? `к ${referencePeriod}` : "";
 }
 
 function compactMetricText(result, entry) {

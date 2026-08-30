@@ -1821,19 +1821,27 @@ def test_overview_kpi_microtrends_use_backend_points_without_placeholder_series(
     assert "microtrend: true" in overview_surface
     assert "backend-period-values" in microtrend_helpers
     assert "backend-portfolio-rows" in microtrend_helpers
-    assert "chartResultFor(model.result?.metric_concept) || model.result" in microtrend_helpers
+    assert "chartResultFor(definition.concept) || model.result" in microtrend_helpers
+    assert "queryKpiMicrotrendPoints(definition, model, scope)" in microtrend_helpers
+    assert "portfolioKpiMicrotrendPoints(model, scope)" in microtrend_helpers
     assert "trendResult?.period_values" in microtrend_helpers
     assert "model.item?.rows" in microtrend_helpers
     assert "source: \"business_rule_required\"" in overview_surface
     assert 'definition.status === "BUSINESS_RULE_REQUIRED"' in microtrend_helpers
     assert "Number.isFinite(point.value)" in microtrend_helpers
     assert "points.length < 3" in microtrend_helpers
-    assert ".slice(-8)" in microtrend_helpers
-    assert "kpi-sparkline-period" in microtrend_helpers
+    assert "kpiMicrotrendPeriodScope(model)" in microtrend_helpers
+    assert 'scope.mode === "single"' in microtrend_helpers
+    assert "kpiMicrotrendPeriodInScope(point.period, scope)" in microtrend_helpers
+    assert "String(period) >= scope.start && String(period) <= scope.end" in microtrend_helpers
+    assert ".slice(-8)" not in microtrend_helpers
+    assert "kpi-sparkline-period" not in microtrend_helpers
     assert "kpi-sparkline-hitpoint" in microtrend_helpers
     assert "kpi-sparkline-point" in microtrend_helpers
     assert "kpi-microtrend--neutral-history" in microtrend_helpers
     assert "kpiValueWithUnit(formatValue(point.value" in microtrend_helpers
+    assert '"data-period": point.period' in microtrend_helpers
+    assert '"data-value": String(point.value)' in microtrend_helpers
     assert "value || 0" not in microtrend_helpers
     assert "fillMissing" not in microtrend_helpers
     assert "interpolate" not in microtrend_helpers
@@ -1841,6 +1849,27 @@ def test_overview_kpi_microtrends_use_backend_points_without_placeholder_series(
     assert "const selectedDefinition = overviewTrendDefinition(state.chartMetric);" in script
     assert 'const selectedMetricConcepts = selectedDefinition?.source === "query" ? [state.chartMetric] : [];' in script
     assert "const metricConcepts = Array.from(new Set([...selectedMetricConcepts, ...microtrendConcepts]));" in script
+
+
+def test_overview_kpi_microtrends_are_bound_to_selected_period_scope() -> None:
+    script = html_or_script("app.js")
+    microtrend_helpers = script.split("function renderKpiMicrotrend", 1)[1].split("function overviewKpiModel", 1)[0]
+
+    assert 'if (scope.mode === "single") return [];' in microtrend_helpers
+    assert 'if (points.length < 3) return null;' in microtrend_helpers
+    assert 'return { mode: "range", start, end };' in microtrend_helpers
+    assert 'return { mode: "set", periods: new Set(periods.map(String)) };' in microtrend_helpers
+    assert "model.comparison?.current_included_periods" in microtrend_helpers
+    assert "point.period && Number.isFinite(point.value)" in microtrend_helpers
+    assert "kpiMicrotrendPeriodInScope(point.period, scope)" in microtrend_helpers
+    assert "String(period) >= scope.start && String(period) <= scope.end" in microtrend_helpers
+    assert "scope.periods.has(String(period))" in microtrend_helpers
+    assert "comparison_period_start" not in microtrend_helpers
+    assert "comparison_included_periods" not in microtrend_helpers
+    assert "svgText(" not in microtrend_helpers
+    assert "kpi-sparkline-period" not in microtrend_helpers
+    assert "fillMissing" not in microtrend_helpers
+    assert "interpolate" not in microtrend_helpers
 
 
 def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
@@ -1881,10 +1910,10 @@ def test_overview_kpi_cards_remove_generic_period_caption_and_show_dynamics() ->
     assert "text: kpiDeltaText(comparison, entry)" in kpi_renderer
     assert 'referenceContext.className = "kpi-reference"' in kpi_renderer
     assert "meta.textContent = kpiContextText(comparison, entry)" not in kpi_renderer
+    assert "comparison.comparison_value" not in kpi_helpers
     assert 'return "";' in kpi_helpers
     assert 'if (entry.format === "percent") return formatDeltaValue(comparison.delta, deltaFormat);' in kpi_helpers
     assert 'return formatDeltaValue(comparison.pct_delta, "percent");' in kpi_helpers
-    assert "comparison.comparison_value" in kpi_helpers
     assert "comparison.comparison_period_start" in kpi_helpers
     assert "function kpiValueWithUnit" in script
     assert "function conciseKpiUnavailableText" in script
@@ -1926,18 +1955,20 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "border: 1px solid rgba(219, 227, 238, 0.84)" in css
     assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
-    assert "min-height: 118px" in css
+    assert "min-height: 104px" in css
     assert "padding: 9px 10px 8px" in css
-    assert "min-height: 124px" in css
+    assert "min-height: 110px" in css
     assert "font-size: 21px" in css
     assert "border: 1px solid rgba(219, 227, 238, 0.66)" in css
     assert "font-size: 19px" in css
     assert ".kpi-unit" not in css
     assert ".kpi-value-row" in css
     assert ".kpi-meta--delta" in css
+    assert ".kpi-card--primary .kpi-meta--delta" in css
     assert ".kpi-reference" in css
     assert ".kpi-microtrend" in css
-    assert ".kpi-sparkline-period" in css
+    assert "height: 34px" in css
+    assert ".kpi-sparkline-period" not in css
     assert ".kpi-sparkline-hitpoint" in css
     assert ".kpi-sparkline-line" in css
     assert "padding: 7px 10px" in css
@@ -1984,6 +2015,9 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "function overviewTrendUnsupportedText" in script
     assert "function overviewTrendPoints" in script
     assert "function overviewTrendContextText" in script
+    assert "function chronologicalMetricPoints" in script
+    assert "chronologicalMetricPoints(rows, \"backend-trend-series\")" in script
+    assert "recentChronologicalMetricPoints" not in script
     assert 'document.getElementById("chart-context").textContent = overviewTrendContextText(definition);' in script
     assert "backend-trend-series" in script
     assert "линии выровнены по месяцу" in script
@@ -2225,6 +2259,7 @@ def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
     assert "--delta-neutral-down" in styles
     assert "--delta-rank-improved" in styles
     assert "--delta-rank-declined" in styles
+    assert ".delta-neutral-up,\n.delta-neutral-down,\n.delta-neutral {\n  color: var(--delta-neutral);" in styles
 
 
 def test_excel_visual_grammar_tokens_and_portfolio_components_are_semantic() -> None:
