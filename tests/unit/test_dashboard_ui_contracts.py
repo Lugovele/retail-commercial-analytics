@@ -1607,8 +1607,9 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "state.chartResponse = chartResponse;" in script
     assert "period_mode: \"DATE_RANGE\"" in script
     assert "comparison_mode: \"NONE\"" in script
-    assert "const chartResult = chartResultFor(state.chartMetric);" in script
-    assert "const coverage = chartResult ? state.chartResponse : state.summaryResponse;" in script
+    assert "const definition = overviewTrendDefinition(state.chartMetric);" in script
+    assert "const model = definition ? overviewTrendModel(definition) : null;" in script
+    assert "const coverage = model?.response || state.chartResponse || state.summaryResponse;" in script
     assert "state.tablePageSize: 50" not in script
     assert "tablePageSize: 40" in script
     assert "overviewPreviewRowLimit: 8" in script
@@ -1745,7 +1746,9 @@ def test_overview_kpi_microtrends_use_backend_points_without_placeholder_series(
     assert "fillMissing" not in microtrend_helpers
     assert "interpolate" not in microtrend_helpers
     assert "const microtrendConcepts = overviewKpiDefinitions" in script
-    assert "const metricConcepts = Array.from(new Set([state.chartMetric, ...microtrendConcepts]));" in script
+    assert "const selectedDefinition = overviewTrendDefinition(state.chartMetric);" in script
+    assert 'const selectedMetricConcepts = selectedDefinition?.source === "query" ? [state.chartMetric] : [];' in script
+    assert "const metricConcepts = Array.from(new Set([...selectedMetricConcepts, ...microtrendConcepts]));" in script
 
 
 def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
@@ -1866,6 +1869,43 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "stroke-width: 3" in css
     overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
     assert "value || 0" not in overview_chart
+
+
+def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitations() -> None:
+    script = html_or_script("app.js")
+    html = html_or_script("index.html")
+    css = html_or_script("styles.css")
+
+    assert 'chartMetric: "units"' in script
+    assert "const chartMetrics = overviewKpiDefinitions.map((definition) => definition.concept);" in script
+    assert "renderChartMetricOptions()" in script
+    assert "overviewKpiDefinitions.filter((definition) => definition.source !== \"reserved\")" in script
+    assert "требуется правило" in script
+    assert "function overviewTrendDefinition" in script
+    assert "function overviewTrendModel" in script
+    assert "function overviewTrendUnsupportedText" in script
+    assert "function overviewTrendPoints" in script
+    assert "function overviewTrendContextText" in script
+    assert 'document.getElementById("chart-context").textContent = overviewTrendContextText(definition);' in script
+    assert "backend-trend-series" in script
+    assert "линии выровнены по месяцу" in script
+    assert "сопоставимые доступные месяцы" in script
+    assert "Показатель не поддерживает динамику сопоставимых месяцев." in script
+    assert "Показатель недоступен для динамики по выбранной ТТ." in script
+    assert "График не строит неподтверждённые или неподдержанные ряды." in script
+    assert "Одна доступная точка:" in script
+    assert "Линия не строится без второй фактической точки." in script
+    assert "chartMetric === concept" in script
+    assert "card.dataset.trendMetric = concept" in script
+    assert "await selectOverviewTrendMetric(concept)" in script
+    assert "if (event.target.closest(\"button, a, input, select, textarea\")) return;" in script
+    assert 'state.activeProvenanceConcept = concept;' in script
+    assert '"data-period": point.period' in script
+    assert '"data-series-year": String(point.year)' in script
+    assert '"data-value": String(point.value)' in script
+    assert "yearPriority(left) - yearPriority(right)" in script
+    assert 'Динамика показателя' in html
+    assert "is-chart-selected" in css
 
 
 def test_overview_decision_layout_uses_contribution_and_driver_guardrails() -> None:

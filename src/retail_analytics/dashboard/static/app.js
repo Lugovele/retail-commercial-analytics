@@ -37,7 +37,7 @@ const state = {
   openFilterId: null,
   scopeEditView: null,
   suppressScrollspyUntil: 0,
-  chartMetric: "revenue",
+  chartMetric: "units",
   salesDriverMetric: "revenue",
   storesMetric: "revenue",
   storesGroupMode: "store",
@@ -96,7 +96,7 @@ const overviewQueryKpis = overviewKpiDefinitions
   .map((item) => item.concept);
 const storeFormatDistributionConcept = "numeric_distribution_store_format";
 const additiveContributionMetrics = ["revenue_vat", "revenue", "units", "retailer_margin_abs"];
-const chartMetrics = ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "weighted_shelf_price_vat"];
+const chartMetrics = overviewKpiDefinitions.map((definition) => definition.concept);
 const secondaryContextByGrain = {
   network: ["selling_store_count", "weighted_shelf_price_vat", "sku_count"],
   category: ["selling_store_count", "weighted_shelf_price_vat", "velocity"],
@@ -1374,7 +1374,9 @@ function buildChartQueryPayload() {
   const microtrendConcepts = overviewKpiDefinitions
     .filter((definition) => definition.source === "query" && definition.microtrend)
     .map((definition) => definition.concept);
-  const metricConcepts = Array.from(new Set([state.chartMetric, ...microtrendConcepts]));
+  const selectedDefinition = overviewTrendDefinition(state.chartMetric);
+  const selectedMetricConcepts = selectedDefinition?.source === "query" ? [state.chartMetric] : [];
+  const metricConcepts = Array.from(new Set([...selectedMetricConcepts, ...microtrendConcepts]));
   return {
     ...buildQueryPayload(state.currentGrain, entityIdsForSummary(), metricConcepts),
     date_from: dateFrom,
@@ -1678,6 +1680,12 @@ function renderKpiCard(definition) {
   card.className = `kpi-card kpi-card--${definition.visualTier} kpi-card--${deltaSemanticsFor(concept).toLowerCase().replace("_", "-")}`;
   card.dataset.kpiSlot = String(definition.slot);
   card.dataset.kpiGroup = definition.group;
+  card.dataset.trendMetric = concept;
+  if (state.chartMetric === concept) card.classList.add("is-chart-selected");
+  card.addEventListener("click", async (event) => {
+    if (event.target.closest("button, a, input, select, textarea")) return;
+    await selectOverviewTrendMetric(concept);
+  });
   if (!model.available) {
     card.classList.add("is-unavailable");
     appendText(card, "small", definition.label);
@@ -1903,23 +1911,34 @@ function renderKpiSecondaryContext() {
 }
 
 function renderChart() {
-  const chartResult = chartResultFor(state.chartMetric);
-  const result = chartResult || summaryResultFor(state.chartMetric);
-  const coverage = chartResult ? state.chartResponse : state.summaryResponse;
-  const entry = catalogEntry(state.chartMetric);
+  const definition = overviewTrendDefinition(state.chartMetric);
+  const model = definition ? overviewTrendModel(definition) : null;
+  const result = model?.result || null;
+  const coverage = model?.response || state.chartResponse || state.summaryResponse;
+  const entry = model?.entry || catalogEntry(state.chartMetric);
   const box = document.getElementById("chart-box");
   const footnote = document.getElementById("chart-footnote");
-  if (!result || !entry) {
+  if (!definition || !entry) {
     replaceWithMessage(box, "empty-state", "Показатель недоступен для выбранного среза.");
     footnote.textContent = "";
     return;
   }
-  const points = result.period_values
-    .map((item) => ({ period: item.period_start, value: item.value }))
-    .filter((item) => item.value !== null && item.value !== undefined);
+  document.getElementById("chart-context").textContent = overviewTrendContextText(definition);
+  const unsupported = overviewTrendUnsupportedText(definition, model);
+  if (unsupported) {
+    replaceWithMessage(box, "empty-state", unsupported);
+    footnote.textContent = "График не строит неподтверждённые или неподдержанные ряды.";
+    return;
+  }
+  const points = overviewTrendPoints(definition, model);
   if (!points.length) {
-    replaceWithMessage(box, "empty-state", "За выбранный период данных нет.");
+    replaceWithMessage(box, "empty-state", "Недостаточно данных для динамики.");
     footnote.textContent = limitationText(result);
+    return;
+  }
+  if (points.length === 1) {
+    replaceWithMessage(box, "empty-state", `Одна доступная точка: ${formatPeriod(points[0].period)} · ${formatValue(points[0].value, entry.format)}.`);
+    footnote.textContent = "Линия не строится без второй фактической точки.";
     return;
   }
   box.replaceChildren(buildOverviewSvgChart(points, entry));
@@ -1929,6 +1948,63 @@ function renderChart() {
     missing ? `Пропущены периоды: ${missing}` : "Все запрошенные периоды с данными показаны.",
     limitation
   ].filter(Boolean).join(" ");
+}
+
+function overviewTrendDefinition(concept = state.chartMetric) {
+  return overviewKpiDefinitions.find((definition) => definition.concept === concept) || null;
+}
+
+function overviewTrendModel(definition) {
+  if (definition.source === "portfolio") return overviewKpiModel(definition);
+  if (definition.source === "query") {
+    const chartResult = chartResultFor(definition.concept);
+    const result = chartResult || summaryResultFor(definition.concept);
+    return {
+      result,
+      entry: catalogEntry(definition.concept),
+      response: chartResult ? state.chartResponse : state.summaryResponse,
+      available: Boolean(result && catalogEntry(definition.concept) && !overviewKpiHasBlockingLimitation(result))
+    };
+  }
+  return {
+    result: null,
+    entry: portfolioPresentationFallback[definition.concept] || { format: "decimal" },
+    response: null,
+    available: false
+  };
+}
+
+function overviewTrendUnsupportedText(definition, model) {
+  if (definition.status === "BUSINESS_RULE_REQUIRED") return overviewKpiUnavailableText(definition, model || {});
+  if (overviewKpiPeriodUnsupported(definition)) return "Показатель не поддерживает динамику сопоставимых месяцев.";
+  if (selectedStoreIds().length && ["velocity", "distribution"].includes(definition.concept)) {
+    return "Показатель недоступен для динамики по выбранной ТТ.";
+  }
+  if (!model?.available) return overviewKpiUnavailableText(definition, model || {});
+  return "";
+}
+
+function overviewTrendPoints(definition, model) {
+  const rows = definition.source === "portfolio"
+    ? model.item?.rows || []
+    : model.result?.period_values || [];
+  return recentChronologicalMetricPoints(rows, "backend-trend-series")
+    .map((point) => ({ period: point.period, value: point.value }));
+}
+
+function overviewTrendContextText(definition) {
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    return `${definition.label} · сопоставимые доступные месяцы: ${availableMonthSummaryText(state.summaryResponse)}`;
+  }
+  if (state.periodMode === "COMPARE") {
+    const comparison = state.summaryResponse?.comparisons?.[0];
+    const reference = comparison?.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "нет референса";
+    return `${definition.label} · ${formatCompactPeriod(selectedDateFrom())} к ${reference}; линии выровнены по месяцу.`;
+  }
+  if (state.periodMode === "DATE_RANGE") {
+    return `${definition.label} · фактические доступные периоды диапазона без заполнения пропусков.`;
+  }
+  return `${definition.label} · фактические доступные периоды без заполнения пропусков.`;
 }
 
 function buildOverviewSvgChart(points, entry) {
@@ -1964,7 +2040,11 @@ function buildOverviewSvgChart(points, entry) {
     chartPathSegments(yearSeries.points).forEach((segment) => {
       if (segment.length > 1) {
         const path = segment.map((point, index) => `${index === 0 ? "M" : "L"} ${x(point.monthIndex)} ${y(point.value)}`).join(" ");
-        svg.appendChild(svgEl("path", { class: `overview-chart-line overview-chart-line--series-${seriesIndex % 3}`, d: path }));
+        svg.appendChild(svgEl("path", {
+          class: `overview-chart-line overview-chart-line--series-${seriesIndex % 3}`,
+          d: path,
+          "data-series-year": String(yearSeries.year)
+        }));
       }
     });
     yearSeries.points.forEach((point) => {
@@ -1973,6 +2053,9 @@ function buildOverviewSvgChart(points, entry) {
         cx: x(point.monthIndex),
         cy: y(point.value),
         r: isSelectedComparisonPeriod(point.period) ? 4.8 : 3.6,
+        "data-period": point.period,
+        "data-series-year": String(point.year),
+        "data-value": String(point.value),
         tabindex: 0
       });
       const tooltip = `${formatPeriod(point.period)} · ${entry.display_label}: ${formatValue(point.value, entry.format)}`;
@@ -2051,8 +2134,17 @@ function chartYearSeries(points) {
     if (!byYear.has(year)) byYear.set(year, []);
     byYear.get(year).push({ ...point, year, monthIndex });
   });
+  const currentYear = selectedDateFrom() ? new Date(`${selectedDateFrom()}T00:00:00`).getFullYear() : null;
+  const referenceYear = comparisonMarkerPeriods()[1]
+    ? new Date(`${comparisonMarkerPeriods()[1]}T00:00:00`).getFullYear()
+    : null;
+  const yearPriority = (year) => {
+    if (year === currentYear) return 0;
+    if (year === referenceYear) return 1;
+    return 2;
+  };
   return Array.from(byYear.entries())
-    .sort(([left], [right]) => left - right)
+    .sort(([left], [right]) => yearPriority(left) - yearPriority(right) || right - left)
     .map(([year, yearPoints]) => ({
       year,
       points: yearPoints.sort((left, right) => left.monthIndex - right.monthIndex)
@@ -4276,10 +4368,24 @@ function breadcrumbLabel(grain, value) {
 
 function renderChartMetricOptions() {
   const select = document.getElementById("chart-metric");
-  const metrics = chartMetrics.filter((concept) => catalogEntry(concept));
-  select.replaceChildren(...metrics.map((concept) => option(concept, displayLabel(concept))));
-  if (!metrics.includes(state.chartMetric)) state.chartMetric = metrics[0] || "revenue";
+  const metrics = overviewKpiDefinitions.filter((definition) => definition.source !== "reserved");
+  select.replaceChildren(...metrics.map((definition) => {
+    const label = definition.status === "BUSINESS_RULE_REQUIRED"
+      ? `${definition.label} · требуется правило`
+      : definition.label;
+    return option(definition.concept, label);
+  }));
+  if (!metrics.some((definition) => definition.concept === state.chartMetric)) state.chartMetric = "units";
   select.value = state.chartMetric;
+}
+
+async function selectOverviewTrendMetric(concept) {
+  if (!overviewTrendDefinition(concept) || state.chartMetric === concept) return;
+  state.chartMetric = concept;
+  state.activeProvenanceConcept = concept;
+  renderKpis();
+  renderChartMetricOptions();
+  await runOverviewQuery();
 }
 
 function renderSkeletons() {
