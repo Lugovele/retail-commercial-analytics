@@ -858,8 +858,52 @@ input {
 .kpi-grid {
   display: grid;
   min-width: 0;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 12px 10px;
+  align-items: start;
+}
+
+.kpi-group {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+}
+
+.kpi-group--result {
+  grid-column: 1 / -1;
+}
+
+.kpi-group--coverage {
+  grid-column: span 4;
+}
+
+.kpi-group--price {
+  grid-column: span 3;
+}
+
+.kpi-group-label {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.kpi-group-cards {
+  display: grid;
+  min-width: 0;
   gap: 8px;
+}
+
+.kpi-group--result .kpi-group-cards,
+.kpi-group--coverage .kpi-group-cards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.kpi-group--price .kpi-group-cards {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .kpi-secondary {
@@ -913,6 +957,19 @@ input {
   font-size: 19px;
   font-variant-numeric: tabular-nums;
   line-height: 1.1;
+}
+
+.kpi-card--primary {
+  min-height: 92px;
+  padding: 11px 12px 10px;
+}
+
+.kpi-card--primary strong {
+  font-size: 21px;
+}
+
+.kpi-card--secondary {
+  min-height: 80px;
 }
 
 .kpi-meta {
@@ -2314,6 +2371,7 @@ th:first-child {
 
   .period-fields,
   .diagnosis-grid,
+  .kpi-group--coverage .kpi-group-cards,
   .ranked-bar-row,
   .portfolio-decision-row,
   .portfolio-mix-row,
@@ -2332,6 +2390,16 @@ th:first-child {
 
   .quality-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kpi-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .kpi-group--result,
+  .kpi-group--coverage,
+  .kpi-group--price {
+    grid-column: 1 / -1;
   }
 }
 
@@ -2354,9 +2422,6 @@ th:first-child {
     overflow-y: auto;
   }
 
-  .kpi-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 @media (max-width: 768px) {
@@ -2365,6 +2430,9 @@ th:first-child {
   }
 
   .kpi-grid,
+  .kpi-group--result .kpi-group-cards,
+  .kpi-group--coverage .kpi-group-cards,
+  .kpi-group--price .kpi-group-cards,
   .kpi-secondary,
   .store-kpi-strip,
   .portfolio-strip,

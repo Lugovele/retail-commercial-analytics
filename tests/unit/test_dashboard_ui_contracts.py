@@ -1666,17 +1666,15 @@ def test_overview_uses_ordered_business_kpi_surface() -> None:
     expected_order = [
         '"units"',
         '"revenue_vat"',
-        '"retailer_margin_pct"',
         '"retailer_margin_abs"',
-        '"velocity"',
-        '"average_price_per_liter"',
+        '"retailer_margin_pct"',
         '"distribution"',
         '"weighted_distribution"',
+        '"velocity"',
+        '"active_sku_count"',
+        '"average_price_per_liter"',
         '"weighted_shelf_price_vat"',
         '"weighted_input_price_vat"',
-        '"active_sku_count"',
-        '"reserved_kpi_slot_12"',
-        '"reserved_kpi_slot_13"',
     ]
     positions = [overview_surface.index(item) for item in expected_order]
     assert positions == sorted(positions)
@@ -1685,8 +1683,33 @@ def test_overview_uses_ordered_business_kpi_surface() -> None:
     assert "V\\u0050O на ТТ" in overview_surface
     assert "Средняя цена за литр" in overview_surface
     assert "Взвешенная дистрибуция" in overview_surface
-    assert "reserved: true" in overview_surface
+    assert "reserved: true" not in overview_surface
+    assert ("reserved_" + "kpi_slot") not in overview_surface
+    assert 'source: "reserved"' not in overview_surface
     assert "primaryKpis" not in script
+
+
+def test_overview_kpi_groups_preserve_business_reading_order() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
+    overview_groups = script.split("const overviewKpiGroups = ", 1)[1].split("];", 1)[0]
+    assert overview_surface.count("slot:") == 11
+    assert 'id: "result", label: "РЕЗУЛЬТАТ", visualTier: "primary"' in overview_groups
+    assert 'id: "coverage", label: "ПОКРЫТИЕ · СКОРОСТЬ · АССОРТИМЕНТ", visualTier: "secondary"' in overview_groups
+    assert 'id: "price", label: "ЦЕНА", visualTier: "secondary"' in overview_groups
+    assert overview_surface.index('"retailer_margin_abs"') < overview_surface.index('"retailer_margin_pct"')
+    assert overview_surface.index('"distribution"') < overview_surface.index('"weighted_distribution"')
+    assert overview_surface.index('"weighted_distribution"') < overview_surface.index('"velocity"')
+    assert overview_surface.index('"velocity"') < overview_surface.index('"active_sku_count"')
+    assert overview_surface.index('"average_price_per_liter"') < overview_surface.index('"weighted_shelf_price_vat"')
+    assert overview_surface.index('"weighted_shelf_price_vat"') < overview_surface.index('"weighted_input_price_vat"')
+    assert "renderKpiGroup(group, renderKpiCard)" in script
+    assert "card.dataset.kpiGroup = definition.group" in script
 
 
 def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
@@ -1711,9 +1734,17 @@ def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> Non
 def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     css = html_or_script("styles.css")
 
-    assert "grid-template-columns: repeat(auto-fit, minmax(150px, 1fr))" in css
+    assert "grid-template-columns: repeat(7, minmax(0, 1fr))" in css
+    assert ".kpi-group--result" in css
+    assert ".kpi-group--coverage" in css
+    assert ".kpi-group--price" in css
+    assert ".kpi-group-label" in css
+    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "min-height: 86px" in css
     assert "padding: 10px 11px 9px" in css
+    assert "min-height: 92px" in css
+    assert "font-size: 21px" in css
     assert "border: 1px solid var(--border-default)" in css
     assert "font-size: 19px" in css
     assert ".kpi-unit" in css

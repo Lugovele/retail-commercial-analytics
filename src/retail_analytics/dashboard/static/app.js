@@ -54,37 +54,42 @@ const state = {
 };
 
 const overviewKpiDefinitions = [
-  { slot: 1, concept: "units", label: "Оборот, шт.", unit: "шт.", source: "query", reserved: false },
-  { slot: 2, concept: "revenue_vat", label: "Оборот, ₽ с НДС", unit: "₽", source: "query", reserved: false },
-  { slot: 3, concept: "retailer_margin_pct", label: "Маржинальность, %", unit: "%", source: "query", reserved: false },
-  { slot: 4, concept: "retailer_margin_abs", label: "Маржинальность, ₽", unit: "₽", source: "query", reserved: false },
-  { slot: 5, concept: "velocity", label: "V\u0050O на ТТ", unit: "шт./ТТ", source: "query", reserved: false },
+  { slot: 1, group: "result", visualTier: "primary", concept: "units", label: "Оборот, шт.", unit: "шт.", source: "query" },
+  { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот, ₽ с НДС", unit: "₽", source: "query" },
+  { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржинальность, ₽", unit: "₽", source: "query" },
+  { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность, %", unit: "%", source: "query" },
+  { slot: 5, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
   {
     slot: 6,
-    concept: "average_price_per_liter",
-    label: "Средняя цена за литр",
-    unit: "₽/л",
-    source: "business_rule_required",
-    reserved: false,
-    unavailableText: "Требуется утверждённая формула.",
-    status: "BUSINESS_RULE_REQUIRED"
-  },
-  { slot: 7, concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query", reserved: false },
-  {
-    slot: 8,
+    group: "coverage",
+    visualTier: "secondary",
     concept: "weighted_distribution",
     label: "Взвешенная дистрибуция",
     unit: "%",
     source: "business_rule_required",
-    reserved: false,
     unavailableText: "Требуется правило веса и вселенной.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 9, concept: "weighted_shelf_price_vat", label: "Средняя цена на полке, с НДС", unit: "₽/уп.", source: "query", reserved: false },
-  { slot: 10, concept: "weighted_input_price_vat", label: "Средняя цена входа, с НДС", unit: "₽/уп.", source: "query", reserved: false },
-  { slot: 11, concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio", reserved: false },
-  { slot: 12, concept: "reserved_kpi_slot_12", label: "", source: "reserved", reserved: true },
-  { slot: 13, concept: "reserved_kpi_slot_13", label: "", source: "reserved", reserved: true }
+  { slot: 7, group: "coverage", visualTier: "secondary", concept: "velocity", label: "V\u0050O на ТТ", unit: "шт./ТТ", source: "query" },
+  { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio" },
+  {
+    slot: 9,
+    group: "price",
+    visualTier: "secondary",
+    concept: "average_price_per_liter",
+    label: "Средняя цена за литр",
+    unit: "₽/л",
+    source: "business_rule_required",
+    unavailableText: "Требуется утверждённая формула.",
+    status: "BUSINESS_RULE_REQUIRED"
+  },
+  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Средняя цена на полке, с НДС", unit: "₽/уп.", source: "query" },
+  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Средняя цена входа, с НДС", unit: "₽/уп.", source: "query" }
+];
+const overviewKpiGroups = [
+  { id: "result", label: "РЕЗУЛЬТАТ", visualTier: "primary" },
+  { id: "coverage", label: "ПОКРЫТИЕ · СКОРОСТЬ · АССОРТИМЕНТ", visualTier: "secondary" },
+  { id: "price", label: "ЦЕНА", visualTier: "secondary" }
 ];
 const overviewQueryKpis = overviewKpiDefinitions
   .filter((item) => item.source === "query")
@@ -1638,56 +1643,77 @@ function renderSalesDrivers() {
 
 function renderKpis() {
   const grid = document.getElementById("kpi-grid");
-  const activeDefinitions = overviewKpiDefinitions.filter((definition) => !definition.reserved);
-  grid.replaceChildren(...activeDefinitions.map((definition) => {
-    const concept = definition.concept;
-    const model = overviewKpiModel(definition);
-    const result = model.result;
-    const entry = model.entry;
-    const card = document.createElement("article");
-    card.className = `kpi-card kpi-card--${deltaSemanticsFor(concept).toLowerCase().replace("_", "-")}`;
-    card.dataset.kpiSlot = String(definition.slot);
-    if (!model.available) {
-      card.classList.add("is-unavailable");
-      appendText(card, "small", definition.label);
-      const value = document.createElement("strong");
-      value.textContent = "н/д";
-      card.appendChild(value);
-      appendText(card, "span", overviewKpiUnavailableText(definition, model));
-      return card;
-    }
-    const comparison = model.comparison;
+  grid.replaceChildren(...overviewKpiGroups.map((group) => renderKpiGroup(group, renderKpiCard)));
+}
+
+function overviewKpiDefinitionsForGroup(groupId) {
+  return overviewKpiDefinitions.filter((definition) => definition.group === groupId);
+}
+
+function renderKpiGroup(group, cardRenderer) {
+  const section = document.createElement("section");
+  section.className = `kpi-group kpi-group--${group.id} kpi-group--${group.visualTier}`;
+  section.dataset.kpiGroup = group.id;
+  const label = document.createElement("h3");
+  label.className = "kpi-group-label";
+  label.textContent = group.label;
+  section.appendChild(label);
+  const cards = document.createElement("div");
+  cards.className = "kpi-group-cards";
+  cards.replaceChildren(...overviewKpiDefinitionsForGroup(group.id).map(cardRenderer));
+  section.appendChild(cards);
+  return section;
+}
+
+function renderKpiCard(definition) {
+  const concept = definition.concept;
+  const model = overviewKpiModel(definition);
+  const result = model.result;
+  const entry = model.entry;
+  const card = document.createElement("article");
+  card.className = `kpi-card kpi-card--${definition.visualTier} kpi-card--${deltaSemanticsFor(concept).toLowerCase().replace("_", "-")}`;
+  card.dataset.kpiSlot = String(definition.slot);
+  card.dataset.kpiGroup = definition.group;
+  if (!model.available) {
+    card.classList.add("is-unavailable");
     appendText(card, "small", definition.label);
-    const valueWrap = document.createElement("strong");
-    valueWrap.className = "metric-current";
-    valueWrap.appendChild(metricValueButton({
-      concept,
-      text: overviewKpiValueText(result, entry, definition),
-      result,
-      response: model.response,
-      className: "metric-value-button--kpi"
-    }));
-    card.appendChild(valueWrap);
-    const meta = document.createElement("span");
-    meta.className = "kpi-meta";
-    if (isComparisonDisplayMode() && comparison) {
-      meta.appendChild(metricDeltaButton({
-        concept,
-        text: kpiContextText(comparison, entry),
-        value: comparison.delta,
-        result,
-        response: model.response
-      }));
-    } else {
-      meta.textContent = kpiContextText(comparison, entry);
-    }
-    card.appendChild(meta);
-    const unit = document.createElement("span");
-    unit.className = "kpi-unit";
-    unit.textContent = definition.unit;
-    card.appendChild(unit);
+    const value = document.createElement("strong");
+    value.textContent = "н/д";
+    card.appendChild(value);
+    appendText(card, "span", overviewKpiUnavailableText(definition, model));
     return card;
+  }
+  const comparison = model.comparison;
+  appendText(card, "small", definition.label);
+  const valueWrap = document.createElement("strong");
+  valueWrap.className = "metric-current";
+  valueWrap.appendChild(metricValueButton({
+    concept,
+    text: overviewKpiValueText(result, entry, definition),
+    result,
+    response: model.response,
+    className: "metric-value-button--kpi"
   }));
+  card.appendChild(valueWrap);
+  const meta = document.createElement("span");
+  meta.className = "kpi-meta";
+  if (isComparisonDisplayMode() && comparison) {
+    meta.appendChild(metricDeltaButton({
+      concept,
+      text: kpiContextText(comparison, entry),
+      value: comparison.delta,
+      result,
+      response: model.response
+    }));
+  } else {
+    meta.textContent = kpiContextText(comparison, entry);
+  }
+  card.appendChild(meta);
+  const unit = document.createElement("span");
+  unit.className = "kpi-unit";
+  unit.textContent = definition.unit;
+  card.appendChild(unit);
+  return card;
 }
 
 function overviewKpiModel(definition) {
@@ -4156,11 +4182,11 @@ function renderChartMetricOptions() {
 }
 
 function renderSkeletons() {
-  document.getElementById("kpi-grid").replaceChildren(...overviewKpiDefinitions.filter((definition) => !definition.reserved).map(() => {
+  document.getElementById("kpi-grid").replaceChildren(...overviewKpiGroups.map((group) => renderKpiGroup(group, () => {
     const card = document.createElement("article");
     card.className = "kpi-card is-loading";
     return card;
-  }));
+  })));
   document.getElementById("kpi-secondary").replaceChildren();
   replaceWithMessage(document.getElementById("chart-box"), "loading-state", "Загрузка динамики...");
 }
