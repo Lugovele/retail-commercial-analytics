@@ -1437,6 +1437,7 @@ def test_filter_toolbar_visual_noise_contract_uses_quiet_value_states() -> None:
 
 def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> None:
     css = html_or_script("styles.css")
+    script = html_or_script("app.js")
 
     toolbar_body = css.split(".scope-toolbar {", 1)[1].split(".control,", 1)[0]
     assert "display: flex;" in toolbar_body
@@ -1446,6 +1447,32 @@ def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> 
     assert "var(--scope-control-bg)" in css
     assert "var(--scope-control-border)" in css
     assert "box-shadow" not in control_body
+    assert 'const cell = document.querySelector(`.multi-filter[data-filter="${id}"]`);' in script
+    assert 'cell?.addEventListener("click", (event) => {' in script
+    assert 'event.target.closest(".filter-popover, .filter-inline-clear, select, input, .filter-trigger")' in script
+    assert "openFilterPopover(id);" in script
+    assert 'if (!["Enter", " "].includes(event.key)) return;' in script
+    assert "event.stopPropagation();" in script
+    assert "cell?.classList.toggle(\"has-selection\", selected.length > 0);" in script
+
+    filter_cell_body = css.split(".filter-grid > .scope-field {", 1)[1].split(".filter-grid > .scope-field:hover", 1)[0]
+    assert "overflow: hidden;" not in filter_cell_body
+    assert "white-space: nowrap;" in filter_cell_body
+    assert ".filter-grid > .scope-field.has-selection" in css
+    trigger_body = css.split(".filter-trigger {", 1)[1].split(".filter-trigger span", 1)[0]
+    assert "flex: 1 1 auto;" in trigger_body
+    assert "min-width: 0;" in trigger_body
+    summary_body = css.split(".filter-trigger span {", 1)[1].split(".filter-trigger.has-selection", 1)[0]
+    assert "display: block;" in summary_body
+    assert "min-width: 0;" in summary_body
+    assert "max-width: 100%;" in summary_body
+    assert "overflow: hidden;" in summary_body
+    assert "text-overflow: ellipsis;" in summary_body
+    clear_body = css.split(".filter-inline-clear {", 1)[1].split(".filter-inline-clear:hover", 1)[0]
+    assert "position: absolute" not in clear_body
+    assert "flex: 0 0 auto;" in clear_body
+    assert "margin-left: 4px;" in clear_body
+    assert 'aria-label="Очистить бренд"' in html_or_script("index.html")
 
 
 def test_browser_filter_state_is_staged_multi_value_and_applied_once() -> None:
@@ -2107,10 +2134,10 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "нет данных" in script
     assert "alignOverviewChartShell()" in script
     assert "function alignOverviewChartShell()" in script
-    assert "document.querySelector('#chart-box .june-axis')" in script
+    assert 'document.querySelector(\'#chart-box .month-grid-line[data-month-index="5"]\')' in script
     assert "shell.dataset.juneAlignmentDelta" in script
     assert "month-grid-line" in css
-    assert ".month-grid-line.june-axis" in css
+    assert "june-axis" not in css
     assert "#chart-box" in css
     assert "overview-chart-svg" in css
     assert "min-height: 320px" in css.split(".chart-svg", 1)[1].split(".overview-main .chart-svg", 1)[0]
@@ -2139,7 +2166,7 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "chartYearClass(yearSeries.year)" in overview_chart
     assert "chartYearClass(seriesIndex)" not in overview_chart
     assert '"data-month-index": String(monthIndex)' in overview_chart
-    assert 'index === 5 ? " june-axis" : ""' in overview_chart
+    assert "june-axis" not in overview_chart
     assert "data-gap-start" in overview_chart
     assert "data-gap-end" in overview_chart
     assert '"data-period": point.period' in overview_chart

@@ -1034,9 +1034,23 @@ function bindDynamicControls() {
   });
 
   multiFilterIds.forEach((id) => {
-    document.getElementById(`${id}-filter-trigger`)?.addEventListener("click", (event) => {
+    const trigger = document.getElementById(`${id}-filter-trigger`);
+    const cell = document.querySelector(`.multi-filter[data-filter="${id}"]`);
+    trigger?.addEventListener("click", (event) => {
       event.stopPropagation();
-      toggleFilterPopover(id);
+      openFilterPopover(id);
+    });
+    trigger?.addEventListener("keydown", (event) => {
+      if (!["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openFilterPopover(id);
+    });
+    cell?.addEventListener("click", (event) => {
+      if (event.target.closest(".filter-popover, .filter-inline-clear, select, input, .filter-trigger")) return;
+      event.stopPropagation();
+      trigger?.focus({ preventScroll: true });
+      openFilterPopover(id);
     });
     document.getElementById(`${id}-filter-popover`)?.addEventListener("click", (event) => event.stopPropagation());
     document.getElementById(`${id}-search`)?.addEventListener("input", (event) => {
@@ -2199,7 +2213,7 @@ function buildOverviewSvgChart(points, entry) {
 
   monthLabelsShort().forEach((month, index) => {
     const xx = x(index);
-    svg.appendChild(svgEl("line", { class: `month-grid-line${index === 5 ? " june-axis" : ""}`, x1: xx, y1: pad.top, x2: xx, y2: height - pad.bottom, "data-month-index": String(index) }));
+    svg.appendChild(svgEl("line", { class: "month-grid-line", x1: xx, y1: pad.top, x2: xx, y2: height - pad.bottom, "data-month-index": String(index) }));
     svg.appendChild(svgText(xx, height - 15, month, "middle", "axis-label month-label"));
   });
 
@@ -2280,7 +2294,7 @@ function alignOverviewChartShell() {
   window.requestAnimationFrame(() => {
     const shell = document.querySelector(".overview-layout .chart-panel");
     const divider = document.querySelector('.kpi-group--price');
-    const juneAxis = document.querySelector('#chart-box .june-axis');
+    const juneAxis = document.querySelector('#chart-box .month-grid-line[data-month-index="5"]');
     if (!shell || !divider || !juneAxis) return;
     shell.style.transform = "";
     const dividerX = divider.getBoundingClientRect().left;
@@ -5029,10 +5043,12 @@ function syncHiddenFilterSelect(id) {
 function updateFilterTriggerSummary(id) {
   const summary = document.getElementById(`${id}-filter-summary`);
   const trigger = document.getElementById(`${id}-filter-trigger`);
+  const cell = document.querySelector(`.multi-filter[data-filter="${id}"]`);
   if (!summary || !trigger) return;
   const selected = selectedValuesForFilter(id);
   document.querySelector(`[data-inline-clear-filter="${id}"]`)?.classList.toggle("is-hidden", selected.length === 0);
   trigger.classList.toggle("has-selection", selected.length > 0);
+  cell?.classList.toggle("has-selection", selected.length > 0);
   summary.classList.toggle("is-default", selected.length === 0);
   summary.classList.toggle("is-active-value", selected.length > 0);
   if (!selected.length) {
