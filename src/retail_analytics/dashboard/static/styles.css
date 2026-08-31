@@ -2011,11 +2011,14 @@ th:first-child {
 }
 
 .diagnostics-outcome {
+  position: relative;
+  z-index: 25;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 18px;
   padding: 0 14px;
+  overflow: visible;
 }
 
 .diagnostics-outcome-left {
@@ -2035,6 +2038,7 @@ th:first-child {
 
 .diagnostics-kpi-picker {
   position: relative;
+  z-index: 35;
   flex: 0 0 auto;
 }
 
@@ -2067,9 +2071,9 @@ th:first-child {
   position: absolute;
   top: 37px;
   left: 0;
-  z-index: 30;
+  z-index: 40;
   width: 230px;
-  max-height: 330px;
+  max-height: min(420px, calc(100vh - 188px));
   padding: 4px;
   overflow: auto;
   background: var(--bg-surface);

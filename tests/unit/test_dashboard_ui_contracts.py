@@ -821,6 +821,26 @@ def test_diagnostics_screen_implements_reference_workspace_without_fake_shell() 
     assert "contribution_to_delta" not in sales_panel
 
 
+def test_diagnostics_kpi_selector_menu_is_overlay_not_clipped() -> None:
+    css = html_or_script("styles.css")
+
+    outcome = css.split(".diagnostics-outcome {", 1)[1].split("}", 1)[0]
+    picker = css.split(".diagnostics-kpi-picker {", 1)[1].split("}", 1)[0]
+    menu = css.split(".diagnostics-kpi-menu {", 1)[1].split("}", 1)[0]
+    grid = css.split(".diagnostics-grid {", 1)[1].split("}", 1)[0]
+
+    assert "position: relative;" in outcome
+    assert "overflow: visible;" in outcome
+    assert "z-index: 25;" in outcome
+    assert "position: relative;" in picker
+    assert "z-index: 35;" in picker
+    assert "position: absolute;" in menu
+    assert "z-index: 40;" in menu
+    assert "max-height: min(420px, calc(100vh - 188px));" in menu
+    assert "overflow: auto;" in menu
+    assert "z-index" not in grid
+
+
 def test_diagnostics_uses_backend_query_and_shared_selected_kpi_state() -> None:
     script = html_or_script("app.js")
 
