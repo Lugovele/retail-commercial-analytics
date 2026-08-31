@@ -463,7 +463,7 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     nav_body = html.split('<nav class="workflow-nav"', 1)[1].split("</nav>", 1)[0]
     nav_labels = (
         "Обзор",
-        "Продажи и драйверы",
+        "Диагностика",
         "Портфель и рынок",
         "Точки продаж",
         "Сигналы",
@@ -780,71 +780,83 @@ def test_data_screen_error_state_clears_all_loading_blocks() -> None:
     assert "Строки для проверки не удалось загрузить." in show_error_function
 
 
-def test_sales_drivers_screen_implements_driver_matrix_without_fake_content() -> None:
+def test_diagnostics_screen_implements_reference_workspace_without_fake_shell() -> None:
     html = html_or_script("index.html")
     script = html_or_script("app.js")
 
     sales_panel = html.split('data-view-panel="sales_drivers"', 1)[1].split('data-view-panel="portfolio_market"', 1)[0]
-    assert 'id="sales-drivers-matrix"' in sales_panel
-    assert 'id="sales-drivers-chart-box"' in sales_panel
+    assert "diagnostics-workspace" in html
+    assert 'id="diagnostics-kpi-button"' in sales_panel
+    assert 'id="diagnostics-kpi-menu"' in sales_panel
+    assert 'id="diagnostics-bars"' in sales_panel
+    assert 'id="diagnostics-selected-name"' in sales_panel
+    assert 'id="diagnostics-metrics"' in sales_panel
     assert 'id="sales-drivers-detail-table"' in sales_panel
     assert "Раздел будет подключён" not in sales_panel
-    assert "как изменился коммерческий результат" in sales_panel
-    assert "какие показатели изменились одновременно" in sales_panel
+    assert "РАЗБИРАЕМ" in sales_panel
+    assert "ВЫБРАННЫЙ ОБЪЕКТ" in sales_panel
+    assert 'id="sales-drivers-chart-box"' not in sales_panel
+    assert 'id="sales-drivers-matrix"' not in sales_panel
+    assert "scope-field" not in sales_panel
+    assert "period-popover" not in sales_panel
 
-    assert "const salesDriverBuckets = [" in script
-    for bucket in ("Результат", "Объём", "Цена", "Присутствие", "Скорость", "Экономика", "Структура"):
-        assert bucket in script
-    assert 'return ["Группа", "Показатель", "Сейчас", "Сравнение", "Изменение", "Доказательство"];' in script
-    assert 'return ["Группа", "Показатель", "Диапазон", "Статус", "Доказательство"];' in script
-    assert "state.salesDriverMetric = concept;" in script
-    assert "buildSalesDriverChartQueryPayload()" in script
-    assert "salesDriverDetailGrain()" in script
-    assert "salesDriverDetailConcepts()" in script
+    assert "const diagnosticsDimensions = [" in script
+    for dimension in ("Категории", "Производители", "Бренды", "SKU", "ТТ"):
+        assert dimension in script.split("const diagnosticsDimensions = ", 1)[1].split("];", 1)[0]
+    assert "renderDiagnosticsKpiSelector()" in script
+    assert "renderDiagnosticsOutcome()" in script
+    assert "renderDiagnosticsBreakdown()" in script
+    assert "renderDiagnosticsSelectedPanel()" in script
+    assert "renderDiagnosticsDetailTable()" in script
     assert "function catalogEntries(concept)" in script
     assert "catalogEntries(concept).find((item) => item.grain_support?.includes(grain))" in script
     assert "metricEntryForGrain(concept, grain)" in script
-    assert "function salesDriverDisplayEntry(concept)" in script
     assert "const salesDriverGrainSupport = {" in script
-    assert "period_only" in script
-    assert "periodOnlyLimitationText()" in script
-    assert "Показатель доступен только по отдельным периодам." in script
+    assert "diagnosticsDetailConcepts()" in script
     assert "Для выбранного среза нет поддержанных показателей." in script
-    assert "сортировка доступна по столбцам таблицы" in script
     assert "retailer_margin_pct" in script
     assert "weighted_input_price_vat" in script
-    assert "active_store_count" in script
-    assert "revenue_velocity" in script
-    assert "margin_velocity" in script
-    assert "manufacturer_rank_revenue" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
-    assert "category_revenue_share" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
-    assert "contribution_to_delta" not in script.split("const salesDriverBuckets = ", 1)[1].split("];", 1)[0]
+    assert "manufacturer_rank_revenue" not in sales_panel
+    assert "category_revenue_share" not in sales_panel
+    assert "contribution_to_delta" not in sales_panel
 
 
-def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
+def test_diagnostics_uses_backend_query_and_shared_selected_kpi_state() -> None:
     script = html_or_script("app.js")
 
     assert "async function runActiveViewQuery()" in script
     assert 'if (state.activeView === "sales_drivers")' in script
     assert "async function runSalesDriversQuery()" in script
     assert 'const token = sectionRequestToken("sales_drivers");' in script
-    assert 'const salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);' in script
-    assert 'const salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);' in script
+    assert 'const [salesDriversResponse, salesDriversTableResponse, overviewPortfolioResponse] = await Promise.all([' in script
+    assert 'postJson("/api/dashboard/query", summaryPayload)' in script
+    assert 'postJson("/api/dashboard/query", detailPayload)' in script
+    assert 'const portfolioPromise = state.chartMetric === "active_sku_count"' in script
+    assert 'postJson("/api/dashboard/portfolio-market", buildOverviewPortfolioPayload())' in script
     assert "state.salesDriversResponse = salesDriversResponse;" in script
-    assert "state.salesDriversChartResponse = salesDriversChartResponse;" in script
-    assert "renderSalesDriverTrend()" in script
-    sales_driver_trend = script.split("function renderSalesDriverTrend()", 1)[1].split("function renderSalesDriverDetailTable()", 1)[0]
-    assert "box.replaceChildren(buildSvgChart(points, entry))" in sales_driver_trend
-    assert "buildOverviewSvgChart" not in sales_driver_trend
-    assert 'const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);' in script
+    assert "state.overviewPortfolioResponse = overviewPortfolioResponse;" in script
+    assert "renderSalesDriverTrend()" not in script.split("function renderSalesDrivers()", 1)[1].split("function renderDiagnosticsKpiSelector()", 1)[0]
     assert "state.salesDriversTableResponse = salesDriversTableResponse;" in script
     assert "const summaryGrain = salesDriverSummaryGrain();" in script
     assert "buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), salesDriverBackendConcepts(summaryGrain))" in script
-    assert "buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts())" in script
+    assert "buildQueryPayload(diagnosticsBreakdownGrain(), entityIdsForDiagnosticsDetail(), diagnosticsDetailConcepts())" in script
     assert "comparisonFor(response, result)" in script
     assert '["READY", "PARTIAL"].includes(entry.availability_status)' in script
-    assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "!salesDriverGrainSupport[concept]?.includes(grain)" in script
+    assert "syncDiagnosticsSelectedMetric()" in script
+    assert 'if (!overviewTrendDefinition(state.chartMetric)) state.chartMetric = "units";' in script
+    assert "state.salesDriverMetric = state.chartMetric;" in script
+    assert "state.chartMetric = definition.concept;" in script
+    assert "state.loadedViews.overview = false;" in script
+    assert "state.diagnosticsSelectedEntityId = entityId;" in script
+    sales_driver_query = script.split("async function runSalesDriversQuery()", 1)[1].split("function salesDriverConcepts", 1)[0]
+    assert "state.chartMetric = state.salesDriverMetric;" not in sales_driver_query
+    chart_metric_handler = script.split('document.getElementById("chart-metric")?.addEventListener', 1)[1].split('document.getElementById("preview-grain")', 1)[0]
+    assert "state.salesDriverMetric = event.target.value;" in chart_metric_handler
+    assert "state.loadedViews.sales_drivers = false;" in chart_metric_handler
+    overview_select = script.split("async function selectOverviewTrendMetric(concept)", 1)[1].split("function renderSkeletons", 1)[0]
+    assert "state.salesDriverMetric = concept;" in overview_select
+    assert "state.loadedViews.sales_drivers = false;" in overview_select
     assert 'active_store_count: ["network", "category", "manufacturer", "brand", "sku"]' in script
     assert 'distribution: ["category", "brand", "sku"]' in script
     assert 'velocity: ["category", "brand", "sku"]' in script
@@ -854,6 +866,41 @@ def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
     assert 'margin_velocity: ["category", "manufacturer", "brand", "sku"]' in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
+    entity_row = script.split("function diagnosticsEntityRow(entityId)", 1)[1].split("function selectedDiagnosticsEntityId()", 1)[0]
+    assert "const analysisValue = comparison ? deltaValue : null;" in entity_row
+    assert "const analysisFormat = comparison ? deltaFormat : null;" in entity_row
+    assert "result.value : deltaValue" not in entity_row
+
+
+def test_diagnostics_selector_contains_all_overview_kpis_and_non_additive_semantics() -> None:
+    script = html_or_script("app.js")
+    selector = script.split("function renderDiagnosticsKpiSelector()", 1)[1].split("function renderDiagnosticsOutcome()", 1)[0]
+    copy = script.split("function diagnosticsMetricCopy(concept)", 1)[1].split("function diagnosticsRawEntityRows()", 1)[0]
+
+    assert "overviewKpiGroups.flatMap" in selector
+    assert "overviewKpiDefinitionsForGroup(group.id)" in selector
+    for concept in (
+        "units",
+        "revenue_vat",
+        "retailer_margin_abs",
+        "retailer_margin_pct",
+        "velocity",
+        "distribution",
+        "weighted_distribution",
+        "active_sku_count",
+        "average_price_per_liter",
+        "weighted_shelf_price_vat",
+        "weighted_input_price_vat",
+    ):
+        assert concept in selector or concept in html_or_script("app.js").split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
+    assert 'const velocityLabel = ["V", "P", "O"].join("");' in copy
+    assert "Изменение ${velocityLabel}" in copy
+    assert "Изменение ND" in copy
+    assert "Изменение WD" in copy
+    assert "Изменение цены за литр" in copy
+    assert "Изменение ассортимента" in copy
+    assert "Вклад в общий Δ" not in copy
+    assert "definition?.source !== \"query\"" in script.split("function diagnosticsRawEntityRows()", 1)[1].split("function diagnosticsEntityRows()", 1)[0]
 
 
 def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fallback() -> None:
@@ -869,7 +916,7 @@ def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fa
     assert "if (result && salesDriverMetricEntry(concept) && concept !== storeFormatDistributionConcept)" in matrix_renderer
     assert 'metricCell.className = "limitation-state-cell";' in matrix_renderer
     summary_grain = script.split("function salesDriverSummaryGrain()", 1)[1].split("function entityIdsForSalesDriverSummary", 1)[0]
-    assert 'const focalOrder = ["sku", "brand", "manufacturer", "category"];' in summary_grain
+    assert 'const focalOrder = ["sku", "brand", "category"];' in summary_grain
     assert "selected[grain]?.length === 1" in summary_grain
     assert "return focalGrain || state.currentGrain;" in summary_grain
     assert "function entityIdsForSalesDriverSummary" in script
@@ -894,31 +941,18 @@ def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fa
         assert f'"{concept}"' in neutral_line
 
 
-def test_sales_drivers_store_format_distribution_is_user_visible_and_backend_owned() -> None:
+def test_diagnostics_does_not_duplicate_global_filter_controls() -> None:
     html = html_or_script("index.html")
     script = html_or_script("app.js")
+    sales_panel = html.split('data-view-panel="sales_drivers"', 1)[1].split('data-view-panel="portfolio_market"', 1)[0]
 
-    assert 'id="sales-driver-store-format"' in html
-    assert "Дистрибуция сети показана отдельно" in html
+    assert 'id="sales-driver-store-format"' not in sales_panel
+    assert "Дистрибуция сети показана отдельно" not in sales_panel
+    assert "filter-popover" not in sales_panel
+    assert "period-trigger" not in sales_panel
     assert 'const storeFormatDistributionConcept = "numeric_distribution_store_format";' in script
     assert "buildSalesDriverStoreFormatOptionsPayload()" in script
-    assert 'postJson("/api/dashboard/geography", buildSalesDriverStoreFormatOptionsPayload())' in script
-    assert "buildSalesDriverStoreFormatDistributionPayload(summaryGrain, resolvedStoreFormat)" in script
-    assert 'postJson("/api/dashboard/query", formatDistributionPayload)' in script
-
-    backend_concepts = script.split("function salesDriverBackendConcepts", 1)[1].split("function storeConcepts", 1)[0]
-    assert "concept !== storeFormatDistributionConcept" in backend_concepts
-    distribution_payload = script.split("function buildSalesDriverStoreFormatDistributionPayload", 1)[1].split("function storeFormatOptionsFromResponse", 1)[0]
-    assert "[storeFormat]" in distribution_payload
-    assert "[storeFormatDistributionConcept]" in distribution_payload
-    assert "numerator" not in distribution_payload.lower()
-    assert "denominator" not in distribution_payload.lower()
-    assert " / " not in distribution_payload
-
-    assert "Выберите формат ТТ, чтобы увидеть дистрибуцию в выбранном формате." in script
-    assert "Для выбранной ТТ дистрибуция по формату не поддерживается." in script
-    assert "Для этого показателя сравнение по сопоставимым месяцам пока не поддерживается." in script
-    assert "Дистрибуция по формату доступна только по отдельным месяцам." in script
+    assert 'postJson("/api/dashboard/geography", buildSalesDriverStoreFormatOptionsPayload())' not in script.split("async function runSalesDriversQuery()", 1)[1].split("async function loadContributionRows", 1)[0]
     assert "region_distribution" not in script
     assert "fo2_distribution" not in script
 
@@ -1717,7 +1751,7 @@ def test_sku_filter_options_are_name_first_but_identity_stable(tmp_path) -> None
 def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:
     script = html_or_script("app.js")
 
-    period_handler = script.split('["period-single", "period-a", "period-available-end", "date-from", "date-to"].forEach((id) => {', 1)[1].split('document.getElementById("sales-drivers-provenance")', 1)[0]
+    period_handler = script.split('["period-single", "period-a", "period-available-end", "date-from", "date-to"].forEach((id) => {', 1)[1].split("async function applyScopeChange(work)", 1)[0]
     assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("preview-grain")', 1)[0]
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-signal-kind]")', 1)[0]
 
@@ -2350,7 +2384,8 @@ def test_overview_decision_layout_uses_contribution_and_driver_guardrails() -> N
     assert "!excludedConcepts.has(concept)" in script
     assert ".slice(0, 3).map" in script
     assert "Есть показатели только по периодам" not in script
-    assert "Изменение оборота" not in script
+    overview_block = script.split("function renderOverview()", 1)[1].split("function renderSalesDrivers()", 1)[0]
+    assert "Изменение оборота" not in overview_block
 
 
 def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:

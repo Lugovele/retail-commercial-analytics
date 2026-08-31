@@ -18,7 +18,7 @@
       </header>
       <nav class="workflow-nav" aria-label="Разделы аналитического отчёта">
         <a class="nav-item is-active" href="#overview" data-view="overview" aria-current="page">Обзор</a>
-        <a class="nav-item" href="#sales-drivers" data-view="sales_drivers">Продажи и драйверы</a>
+        <a class="nav-item" href="#sales-drivers" data-view="sales_drivers">Диагностика</a>
         <a class="nav-item" href="#portfolio-market" data-view="portfolio_market">Портфель и рынок</a>
         <a class="nav-item" href="#stores" data-view="stores">Точки продаж</a>
         <a class="nav-item" href="#signals" data-view="signals">Сигналы</a>
@@ -314,53 +314,60 @@
           </section>
         </section>
 
-        <section class="dashboard-view sales-drivers-layout report-section" id="sales-drivers" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
-          <div class="screen-heading">
-            <p class="eyebrow">диагностика продаж</p>
-            <h2 id="sales-drivers-title">Продажи и драйверы</h2>
-            <p>Показывает, как изменился коммерческий результат и какие показатели изменились одновременно.</p>
-          </div>
-          <section class="surface driver-matrix-panel" aria-label="Матрица показателей продаж">
-            <div class="panel-heading">
-              <div>
-                <h2>Картина по драйверам</h2>
-                <p id="sales-drivers-context">Сравнение доступных показателей для выбранного среза.</p>
+        <section class="dashboard-view sales-drivers-layout diagnostics-workspace report-section" id="sales-drivers" data-view-panel="sales_drivers" aria-labelledby="sales-drivers-title">
+          <h2 class="visually-hidden" id="sales-drivers-title">Диагностика</h2>
+          <section class="diagnostics-outcome" aria-label="Выбранный показатель">
+            <div class="diagnostics-outcome-left">
+              <span class="diagnostics-caption">РАЗБИРАЕМ</span>
+              <div class="diagnostics-kpi-picker">
+                <button type="button" class="diagnostics-kpi-button" id="diagnostics-kpi-button" aria-haspopup="listbox" aria-expanded="false" aria-controls="diagnostics-kpi-menu">
+                  <span id="diagnostics-kpi-name">Продажи</span>
+                  <span aria-hidden="true">▼</span>
+                </button>
+                <div class="diagnostics-kpi-menu is-hidden" id="diagnostics-kpi-menu" role="listbox" aria-label="Показатель диагностики"></div>
               </div>
+              <div class="diagnostics-outcome-summary" id="diagnostics-outcome-summary"></div>
             </div>
-            <div class="local-control-row" id="sales-drivers-format-control">
-              <label for="sales-driver-store-format">Формат для дистрибуции</label>
-              <select id="sales-driver-store-format" aria-label="Формат ТТ для дистрибуции">
-                <option value="">Сеть</option>
-              </select>
-              <span id="sales-driver-store-format-context">Дистрибуция сети показана отдельно от дистрибуции в формате ТТ.</span>
-            </div>
-            <div class="table-wrap driver-table-wrap">
-              <table id="sales-drivers-matrix"></table>
-            </div>
+            <div class="diagnostics-outcome-mode" id="diagnostics-outcome-mode"></div>
           </section>
 
-          <section class="surface chart-panel" aria-label="Динамика выбранного показателя">
-            <div class="panel-heading">
-              <div>
-                <h2 id="sales-drivers-trend-title">Динамика показателя</h2>
-                <p id="sales-drivers-trend-context">Выберите строку в матрице, чтобы сменить показатель.</p>
+          <section class="diagnostics-grid">
+            <section class="diagnostics-panel diagnostics-breakdown" aria-label="Аналитический разбор">
+              <div class="diagnostics-panel-head">
+                <div class="diagnostics-heading">
+                  <h3 id="diagnostics-analysis-title">Изменение показателя</h3>
+                  <p id="sales-drivers-context">Какие объекты изменили выбранный показатель в текущем срезе.</p>
+                </div>
+                <div class="diagnostics-tabs" id="diagnostics-dimension-tabs" role="tablist" aria-label="Уровень детализации"></div>
               </div>
-              <button type="button" class="text-button subtle-action" id="sales-drivers-provenance">Проверить показатель</button>
-            </div>
-            <div class="chart-box" id="sales-drivers-chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
-            <div class="chart-footnote" id="sales-drivers-chart-footnote"></div>
+              <div class="diagnostics-bars" id="diagnostics-bars"></div>
+            </section>
+
+            <aside class="diagnostics-panel diagnostics-selected" aria-label="Выбранный объект">
+              <div class="diagnostics-selected-head">
+                <span>ВЫБРАННЫЙ ОБЪЕКТ</span>
+                <div>
+                  <strong id="diagnostics-selected-name">н/д</strong>
+                  <em id="diagnostics-selected-impact">н/д</em>
+                </div>
+              </div>
+              <div class="diagnostics-metrics" id="diagnostics-metrics"></div>
+              <p class="diagnostics-note" id="diagnosticNote">Сопутствующая динамика выбранного объекта — не доказательство причинности.</p>
+            </aside>
           </section>
 
-          <section class="surface table-panel" aria-label="Детализация продаж">
-            <div class="panel-heading">
-              <div>
-                <h2 id="sales-drivers-table-title">Детализация</h2>
-                <p id="sales-drivers-table-context">Первые объекты следующего уровня для текущего среза.</p>
+          <section class="diagnostics-details" aria-label="Детализация">
+            <div class="diagnostics-details-head">
+              <div class="diagnostics-details-title">
+                <strong id="sales-drivers-table-title">Детализация</strong>
+                <span id="sales-drivers-table-context">Объекты текущего уровня для выбранного среза.</span>
               </div>
+              <input class="diagnostics-search" id="diagnostics-search" type="search" placeholder="Поиск..." autocomplete="off" />
             </div>
-            <div class="table-wrap">
+            <div class="diagnostics-table-wrap">
               <table id="sales-drivers-detail-table"></table>
             </div>
+            <div class="diagnostics-table-footer" id="diagnostics-table-footer"></div>
           </section>
         </section>
 

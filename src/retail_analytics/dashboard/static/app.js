@@ -40,6 +40,9 @@ const state = {
   suppressScrollspyUntil: 0,
   chartMetric: "units",
   salesDriverMetric: "revenue",
+  diagnosticsDimension: "",
+  diagnosticsSelectedEntityId: "",
+  diagnosticsSearchQuery: "",
   storesMetric: "revenue",
   storesGroupMode: "store",
   salesDriverStoreFormat: "",
@@ -162,8 +165,17 @@ const salesDriverBuckets = [
   { title: "Экономика", concepts: ["retailer_margin_abs", "retailer_margin_pct"] },
   { title: "Структура", concepts: ["sku_count", "brand_count", "category_count"] }
 ];
+const diagnosticsDimensions = [
+  { grain: "category", label: "Категории" },
+  { grain: "manufacturer", label: "Производители" },
+  { grain: "brand", label: "Бренды" },
+  { grain: "sku", label: "SKU" },
+  { grain: "store", label: "ТТ" }
+];
+const diagnosticsContextMetrics = ["units", "revenue_vat", "average_price_per_liter", "velocity", "distribution", "weighted_distribution"];
 const salesDriverGrainSupport = {
   revenue: ["network", "category", "manufacturer", "brand", "sku", "store"],
+  revenue_vat: ["network", "category", "manufacturer", "brand", "sku", "store"],
   units: ["network", "category", "manufacturer", "brand", "sku", "store"],
   retailer_margin_abs: ["network", "category", "manufacturer", "brand", "sku", "store"],
   retailer_margin_pct: ["network", "category", "manufacturer", "brand", "sku", "store"],
@@ -622,6 +634,33 @@ function bindStaticControls() {
     });
   });
   bindPeriodPopover();
+  bindDiagnosticsControls();
+}
+
+function bindDiagnosticsControls() {
+  const button = document.getElementById("diagnostics-kpi-button");
+  const menu = document.getElementById("diagnostics-kpi-menu");
+  button?.addEventListener("click", (event) => {
+    event.stopPropagation();
+    const isOpen = menu && !menu.classList.contains("is-hidden");
+    menu?.classList.toggle("is-hidden", isOpen);
+    button.setAttribute("aria-expanded", isOpen ? "false" : "true");
+  });
+  menu?.addEventListener("click", (event) => event.stopPropagation());
+  document.addEventListener("click", () => closeDiagnosticsKpiMenu());
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeDiagnosticsKpiMenu();
+  });
+  document.getElementById("diagnostics-search")?.addEventListener("input", (event) => {
+    state.diagnosticsSearchQuery = event.target.value || "";
+    renderDiagnosticsDetailTable();
+    renderDiagnosticsBreakdown();
+  });
+}
+
+function closeDiagnosticsKpiMenu() {
+  document.getElementById("diagnostics-kpi-menu")?.classList.add("is-hidden");
+  document.getElementById("diagnostics-kpi-button")?.setAttribute("aria-expanded", "false");
 }
 
 function bindPeriodPopover() {
@@ -1016,7 +1055,9 @@ function bindDynamicControls() {
   });
   document.getElementById("chart-metric")?.addEventListener("change", async (event) => {
     state.chartMetric = event.target.value;
+    state.salesDriverMetric = event.target.value;
     state.activeProvenanceConcept = event.target.value;
+    state.loadedViews.sales_drivers = false;
     await runOverviewQuery();
   });
   document.getElementById("preview-grain").addEventListener("change", async (event) => {
@@ -1253,6 +1294,8 @@ async function runSalesDriversQuery() {
   setLoading(true, "Запрос к витрине");
   renderSalesDriverSkeletons();
   try {
+    syncDiagnosticsSelectedMetric();
+    ensureDiagnosticsDimension();
     const summaryGrain = salesDriverSummaryGrain();
     const concepts = salesDriverConcepts(summaryGrain);
     if (!concepts.length) {
@@ -1261,30 +1304,21 @@ async function runSalesDriversQuery() {
       setLoading(false, "Данные обновлены");
       return;
     }
-    const trendConcepts = salesDriverBackendConcepts(summaryGrain);
-    if (!trendConcepts.includes(state.salesDriverMetric)) state.salesDriverMetric = trendConcepts[0] || concepts[0];
     const summaryPayload = buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), salesDriverBackendConcepts(summaryGrain));
-    const chartPayload = buildSalesDriverChartQueryPayload();
-    const detailPayload = buildQueryPayload(salesDriverDetailGrain(), entityIdsForSalesDriverDetail(), salesDriverDetailConcepts());
-    const formatOptionsResponse = await postJson("/api/dashboard/geography", buildSalesDriverStoreFormatOptionsPayload());
-    const formatOptions = storeFormatOptionsFromResponse(formatOptionsResponse);
-    const resolvedStoreFormat = state.salesDriverStoreFormat && formatOptions.some((item) => item.value === state.salesDriverStoreFormat)
-      ? state.salesDriverStoreFormat
-      : "";
-    const formatDistributionPayload = buildSalesDriverStoreFormatDistributionPayload(summaryGrain, resolvedStoreFormat);
-    const formatDistributionPromise = formatDistributionPayload
-      ? postJson("/api/dashboard/query", formatDistributionPayload)
-      : Promise.resolve(null);
-    const salesDriversResponse = await postJson("/api/dashboard/query", summaryPayload);
-    const salesDriversChartResponse = await postJson("/api/dashboard/query", chartPayload);
-    const salesDriversTableResponse = await postJson("/api/dashboard/query", detailPayload);
-    const salesDriversFormatDistributionResponse = await formatDistributionPromise;
+    const detailPayload = buildQueryPayload(diagnosticsBreakdownGrain(), entityIdsForDiagnosticsDetail(), diagnosticsDetailConcepts());
+    const portfolioPromise = state.chartMetric === "active_sku_count"
+      ? postJson("/api/dashboard/portfolio-market", buildOverviewPortfolioPayload())
+      : Promise.resolve(state.overviewPortfolioResponse);
+    const [salesDriversResponse, salesDriversTableResponse, overviewPortfolioResponse] = await Promise.all([
+      postJson("/api/dashboard/query", summaryPayload),
+      postJson("/api/dashboard/query", detailPayload),
+      portfolioPromise
+    ]);
     if (!isCurrentSectionRequest(token)) return;
-    state.salesDriverStoreFormatOptions = formatOptions;
-    state.salesDriverStoreFormat = resolvedStoreFormat;
     state.salesDriversResponse = salesDriversResponse;
-    state.salesDriversFormatDistributionResponse = salesDriversFormatDistributionResponse;
-    state.salesDriversChartResponse = salesDriversChartResponse;
+    state.overviewPortfolioResponse = overviewPortfolioResponse;
+    state.salesDriversFormatDistributionResponse = null;
+    state.salesDriversChartResponse = null;
     state.salesDriversTableResponse = salesDriversTableResponse;
     renderSalesDrivers();
     state.loadedViews.sales_drivers = true;
@@ -1666,7 +1700,7 @@ function overviewConcepts() {
 }
 
 function salesDriverConcepts(grain = salesDriverSummaryGrain()) {
-  return [...new Set(salesDriverBuckets.flatMap((group) => group.concepts))]
+  return [...new Set([...overviewQueryKpis, ...diagnosticsContextMetrics])]
     .filter((concept) => salesDriverMetricEntry(concept, grain));
 }
 
@@ -1684,8 +1718,12 @@ function tableConcepts() {
 }
 
 function salesDriverDetailConcepts() {
-  const grain = salesDriverDetailGrain();
-  return (previewColumns[grain] || ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"])
+  return diagnosticsDetailConcepts();
+}
+
+function diagnosticsDetailConcepts() {
+  const grain = diagnosticsBreakdownGrain();
+  return [...new Set([state.chartMetric, ...diagnosticsContextMetrics, ...(previewColumns[grain] || [])])]
     .filter((concept) => metricEntryForGrain(concept, grain));
 }
 
@@ -1703,10 +1741,460 @@ function renderOverview() {
 function renderSalesDrivers() {
   renderContextStripForResponse(state.salesDriversResponse);
   renderBreadcrumb();
-  renderSalesDriverStoreFormatControl();
-  renderSalesDriverMatrix();
-  renderSalesDriverTrend();
-  renderSalesDriverDetailTable();
+  syncDiagnosticsSelectedMetric();
+  ensureDiagnosticsDimension();
+  renderDiagnosticsKpiSelector();
+  renderDiagnosticsOutcome();
+  renderDiagnosticsDimensionTabs();
+  renderDiagnosticsBreakdown();
+  renderDiagnosticsSelectedPanel();
+  renderDiagnosticsDetailTable();
+}
+
+function renderDiagnosticsKpiSelector() {
+  const buttonName = document.getElementById("diagnostics-kpi-name");
+  const menu = document.getElementById("diagnostics-kpi-menu");
+  const selected = diagnosticsSelectedDefinition();
+  if (buttonName) buttonName.textContent = selected?.label || "Продажи";
+  if (!menu) return;
+  menu.replaceChildren(...overviewKpiGroups.flatMap((group) => {
+    const groupLabel = document.createElement("div");
+    groupLabel.className = "diagnostics-menu-group";
+    groupLabel.textContent = group.label;
+    const options = overviewKpiDefinitionsForGroup(group.id).map((definition) => {
+      const optionButton = document.createElement("button");
+      optionButton.type = "button";
+      optionButton.className = `diagnostics-kpi-option${definition.concept === state.chartMetric ? " is-active" : ""}`;
+      optionButton.setAttribute("role", "option");
+      optionButton.dataset.diagnosticsKpi = definition.concept;
+      optionButton.setAttribute("aria-selected", definition.concept === state.chartMetric ? "true" : "false");
+      optionButton.textContent = definition.label;
+      optionButton.addEventListener("click", async () => {
+        state.chartMetric = definition.concept;
+        state.salesDriverMetric = definition.concept;
+        state.activeProvenanceConcept = definition.concept;
+        state.diagnosticsSelectedEntityId = "";
+        state.loadedViews.overview = false;
+        closeDiagnosticsKpiMenu();
+        await runSalesDriversQuery();
+      });
+      return optionButton;
+    });
+    return [groupLabel, ...options];
+  }));
+}
+
+function renderDiagnosticsOutcome() {
+  const summary = document.getElementById("diagnostics-outcome-summary");
+  const mode = document.getElementById("diagnostics-outcome-mode");
+  const definition = diagnosticsSelectedDefinition();
+  const model = diagnosticsSummaryModel(definition);
+  const copy = diagnosticsMetricCopy(definition?.concept);
+  if (mode) mode.textContent = copy.mode;
+  document.getElementById("diagnostics-analysis-title").textContent = copy.title;
+  document.getElementById("sales-drivers-context").textContent = copy.help;
+  document.getElementById("diagnosticNote").textContent = copy.note;
+  if (!summary || !definition) return;
+  summary.replaceChildren();
+  const value = document.createElement("span");
+  value.className = "diagnostics-outcome-value";
+  if (model.result) {
+    value.appendChild(metricValueButton({
+      concept: definition.concept,
+      text: model.currentText,
+      result: model.result,
+      response: model.response,
+      className: "diagnostics-outcome-value-button"
+    }));
+  } else {
+    value.textContent = model.currentText;
+  }
+  summary.appendChild(value);
+  if (model.deltaText) {
+    const delta = document.createElement("span");
+    delta.className = "diagnostics-outcome-delta";
+    if (model.result) {
+      delta.appendChild(metricDeltaButton({
+        concept: definition.concept,
+        text: model.deltaText,
+        value: model.deltaValue,
+        format: model.deltaFormat,
+        result: model.result,
+        response: model.response
+      }));
+    } else {
+      delta.textContent = model.deltaText;
+    }
+    summary.appendChild(delta);
+  }
+  if (model.referenceText) appendText(summary, "span", model.referenceText).className = "diagnostics-outcome-reference";
+}
+
+function renderDiagnosticsDimensionTabs() {
+  const tabs = document.getElementById("diagnostics-dimension-tabs");
+  if (!tabs) return;
+  tabs.replaceChildren(...diagnosticsDimensions.map((item) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `diagnostics-tab${item.grain === diagnosticsBreakdownGrain() ? " is-active" : ""}`;
+    button.role = "tab";
+    button.dataset.diagnosticsDimension = item.grain;
+    button.setAttribute("aria-selected", item.grain === diagnosticsBreakdownGrain() ? "true" : "false");
+    button.textContent = item.label;
+    button.addEventListener("click", async () => {
+      if (state.diagnosticsDimension === item.grain) return;
+      state.diagnosticsDimension = item.grain;
+      state.diagnosticsSelectedEntityId = "";
+      await runSalesDriversQuery();
+    });
+    return button;
+  }));
+}
+
+function renderDiagnosticsBreakdown() {
+  const target = document.getElementById("diagnostics-bars");
+  if (!target) return;
+  const rows = diagnosticsEntityRows();
+  const copy = diagnosticsMetricCopy(state.chartMetric);
+  if (!rows.length) {
+    replaceWithMessage(target, "empty-state compact", "Для выбранного показателя нет строк детализации в текущем срезе.");
+    return;
+  }
+  const analyticRows = rows.filter((row) => Number.isFinite(Number(row.analysisValue)));
+  if (!analyticRows.length) {
+    replaceWithMessage(target, "empty-state compact", "Для выбранного показателя нет строк детализации в текущем срезе.");
+    return;
+  }
+  const maxAbs = Math.max(...analyticRows.map((row) => Math.abs(row.analysisValue)), 1);
+  const negative = analyticRows.filter((row) => row.analysisValue < 0).slice(0, 5);
+  const positive = analyticRows.filter((row) => row.analysisValue >= 0).slice(0, 5);
+  target.replaceChildren(
+    renderDiagnosticsSide("negative", copy.negative, copy.caption, negative, maxAbs),
+    renderDiagnosticsZeroAxis(),
+    renderDiagnosticsSide("positive", copy.positive, copy.caption, positive, maxAbs)
+  );
+}
+
+function renderDiagnosticsSide(kind, title, caption, rows, maxAbs) {
+  const side = document.createElement("div");
+  side.className = "diagnostics-side";
+  const header = document.createElement("div");
+  header.className = "diagnostics-side-title";
+  if (kind === "positive") {
+    appendText(header, "span", caption);
+    appendText(header, "strong", title);
+  } else {
+    appendText(header, "strong", title);
+    appendText(header, "span", caption);
+  }
+  const list = document.createElement("div");
+  list.className = "diagnostics-driver-list";
+  if (!rows.length) {
+    const empty = document.createElement("div");
+    empty.className = "diagnostics-empty-side";
+    empty.textContent = "нет данных";
+    list.appendChild(empty);
+  }
+  rows.forEach((row) => list.appendChild(renderDiagnosticsDriver(row, kind, maxAbs)));
+  side.append(header, list);
+  return side;
+}
+
+function renderDiagnosticsZeroAxis() {
+  const axis = document.createElement("div");
+  axis.className = "diagnostics-zero-axis";
+  appendText(axis, "span", "0").className = "diagnostics-zero-label";
+  return axis;
+}
+
+function renderDiagnosticsDriver(row, kind, maxAbs) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = `diagnostics-driver diagnostics-driver--${kind}${row.entityId === selectedDiagnosticsEntityId() ? " is-selected" : ""}`;
+  button.dataset.entityId = row.entityId;
+  const width = Math.max(6, Math.min(100, Math.round(Math.abs(row.analysisValue || 0) / maxAbs * 100)));
+  const name = document.createElement("span");
+  name.className = "diagnostics-driver-name";
+  name.textContent = row.label;
+  const track = document.createElement("span");
+  track.className = "diagnostics-track";
+  const bar = document.createElement("span");
+  bar.className = `diagnostics-bar diagnostics-bar--${kind}`;
+  bar.style.width = `${width}%`;
+  track.appendChild(bar);
+  const value = document.createElement("span");
+  value.className = `diagnostics-driver-value ${deltaSemanticClass(state.chartMetric, row.analysisValue, row.analysisFormat)}`;
+  value.textContent = row.analysisText;
+  if (kind === "positive") button.append(value, track, name);
+  else button.append(name, track, value);
+  button.addEventListener("click", () => selectDiagnosticsEntity(row.entityId));
+  return button;
+}
+
+function renderDiagnosticsSelectedPanel() {
+  const row = selectedDiagnosticsRow();
+  document.getElementById("diagnostics-selected-name").textContent = row?.label || "н/д";
+  const impact = document.getElementById("diagnostics-selected-impact");
+  if (impact) {
+    impact.textContent = row?.analysisText || "н/д";
+    impact.className = Number.isFinite(Number(row?.analysisValue))
+      ? deltaSemanticClass(state.chartMetric, row.analysisValue, row.analysisFormat)
+      : "delta-neutral";
+  }
+  const list = document.getElementById("diagnostics-metrics");
+  if (!list) return;
+  const rows = diagnosticsContextMetrics.map((concept) => diagnosticsSelectedMetricRow(concept, row)).filter(Boolean);
+  if (!rows.length) {
+    replaceWithMessage(list, "empty-state compact", "По выбранному объекту нет доступных контекстных показателей.");
+    return;
+  }
+  list.replaceChildren(...rows);
+}
+
+function renderDiagnosticsDetailTable() {
+  const table = document.getElementById("sales-drivers-detail-table");
+  if (!table) return;
+  const rows = diagnosticsEntityRows();
+  const grain = diagnosticsBreakdownGrain();
+  const copy = diagnosticsMetricCopy(state.chartMetric);
+  document.getElementById("sales-drivers-table-title").textContent = "Детализация";
+  document.getElementById("sales-drivers-table-context").textContent =
+    `${grainLabels[grain]} · ${copy.column} · выбранный показатель`;
+  if (!rows.length) {
+    renderMessageRow(table, "Для выбранного показателя нет строк детализации в текущем срезе.");
+    document.getElementById("diagnostics-table-footer").textContent = "Показано 0 из 0";
+    return;
+  }
+  const headers = [grainLabels[grain], "Текущий период", "Период сравнения", "Δ", copy.column, "Цена/л", "ND"];
+  const thead = document.createElement("thead");
+  const headRow = document.createElement("tr");
+  headers.forEach((header) => {
+    const th = document.createElement("th");
+    th.scope = "col";
+    th.textContent = header;
+    headRow.appendChild(th);
+  });
+  thead.appendChild(headRow);
+  const tbody = document.createElement("tbody");
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    tr.className = row.entityId === selectedDiagnosticsEntityId() ? "is-selected" : "";
+    tr.dataset.entityId = row.entityId;
+    tr.addEventListener("click", () => selectDiagnosticsEntity(row.entityId));
+    [
+      row.label,
+      row.currentText,
+      row.referenceText,
+      { text: row.deltaText, className: deltaSemanticClass(state.chartMetric, row.deltaValue, row.deltaFormat) },
+      { text: row.analysisText, className: deltaSemanticClass(state.chartMetric, row.analysisValue, row.analysisFormat) },
+      diagnosticsRowConceptText(row.entityId, "average_price_per_liter"),
+      diagnosticsRowConceptText(row.entityId, "distribution")
+    ].forEach((cell, index) => {
+      const td = document.createElement("td");
+      if (index === 0) td.className = "diagnostics-entity-cell";
+      if (cell && typeof cell === "object") {
+        td.textContent = cell.text;
+        td.className = [td.className, cell.className].filter(Boolean).join(" ");
+      } else {
+        td.textContent = cell;
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.replaceChildren(thead, tbody);
+  document.getElementById("diagnostics-table-footer").textContent =
+    `Показано ${rows.length} из ${diagnosticsRawEntityRows().length}`;
+}
+
+function diagnosticsSelectedDefinition() {
+  return overviewTrendDefinition(state.chartMetric) || overviewTrendDefinition("units");
+}
+
+function diagnosticsSummaryModel(definition) {
+  if (!definition) return { currentText: "н/д" };
+  if (definition.source === "portfolio") {
+    const item = overviewPortfolioItem(definition.concept);
+    return {
+      result: item ? portfolioResultForInspector(item) : null,
+      response: state.overviewPortfolioResponse,
+      currentText: item && isDisplayablePortfolioItem(item) ? formatPortfolioItemValue(item) : "н/д",
+      deltaText: isComparisonDisplayMode() && item?.delta !== null && item?.delta !== undefined
+        ? formatDeltaValue(item.delta, item.unit === "percentage_points" ? "percentage_points" : item.unit || "decimal")
+        : "",
+      deltaValue: item?.delta,
+      deltaFormat: item?.unit === "percentage_points" ? "percentage_points" : item?.unit || "decimal",
+      referenceText: item?.reference_value !== null && item?.reference_value !== undefined ? `к ${formatValue(item.reference_value, item.unit || "decimal")}` : ""
+    };
+  }
+  const result = salesDriverResultFor(definition.concept);
+  const entry = catalogEntry(definition.concept);
+  const comparison = comparisonFor(state.salesDriversResponse, result);
+  return {
+    result,
+    response: state.salesDriversResponse,
+    currentText: result && entry ? formatValue(result.value, entry.format) : "н/д",
+    deltaText: comparison && entry ? formatDeltaValue(kpiDeltaPresentationValue(comparison, entry), kpiDeltaPresentationFormat(comparison, entry)) : "",
+    deltaValue: comparison && entry ? kpiDeltaPresentationValue(comparison, entry) : null,
+    deltaFormat: comparison && entry ? kpiDeltaPresentationFormat(comparison, entry) : null,
+    referenceText: comparison && entry ? `${formatValue(comparison.comparison_value, entry.format)} · ${kpiReferenceText(comparison, entry)}` : ""
+  };
+}
+
+function diagnosticsMetricCopy(concept) {
+  const label = diagnosticsSelectedDefinition()?.label || displayLabel(concept);
+  const lower = String(label || "").toLocaleLowerCase("ru-RU");
+  const velocityLabel = ["V", "P", "O"].join("");
+  const copies = {
+    units: ["Изменение продаж", "где продажи снизились и где выросли", "Диагностика изменения продаж", "Снижались", "Росли", "Δ шт.", "Изменение продаж"],
+    revenue_vat: ["Изменение оборота", "где оборот снизился и где вырос", "Диагностика изменения оборота", "Снижался", "Рос", "Δ ₽", "Изменение оборота"],
+    retailer_margin_abs: ["Изменение маржи", "где маржа снизилась и где выросла", "Диагностика изменения маржи", "Снижалась", "Росла", "Δ ₽", "Изменение маржи"],
+    velocity: [`Изменение ${velocityLabel}`, "где скорость продаж снизилась и где выросла", `Диагностика изменения ${velocityLabel}`, "Снизился", "Вырос", `Δ ${velocityLabel}`, `Изменение ${velocityLabel}`],
+    distribution: ["Изменение ND", "где изменилась нумерическая дистрибуция", "Диагностика изменения ND", "Снизилась", "Выросла", "Δ п.п.", "Изменение ND"],
+    weighted_distribution: ["Изменение WD", "где изменилась взвешенная дистрибуция", "Диагностика изменения WD", "Снизилась", "Выросла", "Δ п.п.", "Изменение WD"],
+    active_sku_count: ["Изменение ассортимента", "где активный ассортимент сократился и где расширился", "Изменение активного ассортимента", "Сокращение", "Расширение", "Δ SKU", "Изменение SKU"],
+    average_price_per_liter: ["Изменение цены за литр", "где цена за литр снизилась и где выросла", "Диагностика изменения цены за литр", "Снизилась", "Выросла", "Δ ₽/л", "Изменение цены/л"],
+    weighted_shelf_price_vat: ["Изменение полочной цены", "где полочная цена снизилась и где выросла", "Диагностика изменения полочной цены", "Снизилась", "Выросла", "Δ ₽", "Изменение цены"],
+    weighted_input_price_vat: ["Изменение входной цены", "где входная цена снизилась и где выросла", "Диагностика изменения входной цены", "Снизилась", "Выросла", "Δ ₽", "Изменение цены"],
+    retailer_margin_pct: ["Изменение маржинальности", "где маржинальность снизилась и где выросла", "Диагностика изменения маржинальности", "Снизилась", "Выросла", "Δ п.п.", "Изменение маржинальности"]
+  };
+  const fallback = [`Изменение ${lower}`, `где изменился показатель «${label}»`, `Диагностика изменения ${lower}`, "Снижалось", "Росло", "Δ", `Изменение ${label}`];
+  const [title, help, mode, negative, positive, caption, column] = copies[concept] || fallback;
+  return {
+    title,
+    help,
+    mode,
+    negative,
+    positive,
+    caption,
+    column,
+    note: "Сопутствующая динамика выбранного объекта — не доказательство причинности."
+  };
+}
+
+function diagnosticsRawEntityRows() {
+  const definition = diagnosticsSelectedDefinition();
+  if (definition?.source !== "query") return [];
+  const response = state.salesDriversTableResponse;
+  if (!response?.metric_results?.length) return [];
+  const entityIds = [...new Set(response.metric_results.map((result) => result.entity_id).filter(Boolean))];
+  return entityIds.map((entityId) => diagnosticsEntityRow(entityId)).filter(Boolean);
+}
+
+function diagnosticsEntityRows() {
+  const query = state.diagnosticsSearchQuery.trim().toLocaleLowerCase("ru-RU");
+  return diagnosticsRawEntityRows()
+    .filter((row) => !query || row.label.toLocaleLowerCase("ru-RU").includes(query))
+    .sort((left, right) => Math.abs(right.analysisValue || 0) - Math.abs(left.analysisValue || 0));
+}
+
+function diagnosticsEntityRow(entityId) {
+  const definition = diagnosticsSelectedDefinition();
+  const result = definition?.source === "query" ? salesDriverTableResultFor(definition.concept, entityId) : null;
+  const entry = definition?.source === "query" ? catalogEntry(definition.concept) : null;
+  const fallbackResult = state.salesDriversTableResponse?.metric_results.find((item) => item.entity_id === entityId);
+  const fallbackEntry = catalogEntry(fallbackResult?.metric_concept);
+  if (!fallbackResult || !fallbackEntry) return null;
+  if (!result || !entry) {
+    return {
+      entityId,
+      label: entityDisplayLabel(diagnosticsBreakdownGrain(), entityId) || entityId,
+      result: null,
+      entry: null,
+      currentText: "н/д",
+      referenceText: "н/д",
+      deltaText: "н/д",
+      deltaValue: null,
+      deltaFormat: null,
+      analysisText: "н/д",
+      analysisValue: null,
+      analysisFormat: null
+    };
+  }
+  const comparison = result ? comparisonFor(state.salesDriversTableResponse, result) : null;
+  const deltaFormat = entry ? kpiDeltaPresentationFormat(comparison || {}, entry) : null;
+  const deltaValue = comparison && entry ? kpiDeltaPresentationValue(comparison, entry) : null;
+  const analysisFormat = comparison ? deltaFormat : null;
+  const analysisValue = comparison ? deltaValue : null;
+  return {
+    entityId,
+    label: entityDisplayLabel(diagnosticsBreakdownGrain(), entityId) || entityId,
+    result,
+    entry,
+    currentText: result && entry ? formatValue(result.value, entry.format) : "н/д",
+    referenceText: comparison && entry ? formatValue(comparison.comparison_value, entry.format) : "н/д",
+    deltaText: comparison && entry ? formatDeltaValue(deltaValue, deltaFormat) : "н/д",
+    deltaValue,
+    deltaFormat,
+    analysisText: analysisValue === null || analysisValue === undefined ? "н/д" : formatDeltaValue(analysisValue, analysisFormat),
+    analysisValue,
+    analysisFormat
+  };
+}
+
+function selectedDiagnosticsEntityId() {
+  const rows = diagnosticsEntityRows();
+  if (!rows.length) return "";
+  if (!rows.some((row) => row.entityId === state.diagnosticsSelectedEntityId)) {
+    state.diagnosticsSelectedEntityId = rows[0].entityId;
+  }
+  return state.diagnosticsSelectedEntityId;
+}
+
+function selectedDiagnosticsRow() {
+  const selectedId = selectedDiagnosticsEntityId();
+  return diagnosticsEntityRows().find((row) => row.entityId === selectedId) || null;
+}
+
+function selectDiagnosticsEntity(entityId) {
+  state.diagnosticsSelectedEntityId = entityId;
+  renderDiagnosticsBreakdown();
+  renderDiagnosticsSelectedPanel();
+  renderDiagnosticsDetailTable();
+}
+
+function diagnosticsSelectedMetricRow(concept, selectedRow) {
+  if (!selectedRow) return null;
+  const result = salesDriverTableResultFor(concept, selectedRow.entityId);
+  const entry = catalogEntry(concept);
+  if (!result || !entry) {
+    return diagnosticsMetricUnavailableRow(concept);
+  }
+  const comparison = comparisonFor(state.salesDriversTableResponse, result);
+  const row = document.createElement("div");
+  row.className = "diagnostics-metric";
+  appendText(row, "span", displayLabel(concept)).className = "diagnostics-metric-name";
+  const numbers = document.createElement("div");
+  numbers.className = "diagnostics-metric-numbers";
+  const current = document.createElement("strong");
+  current.appendChild(metricValueButton({ concept, text: formatValue(result.value, entry.format), result, response: state.salesDriversTableResponse }));
+  numbers.appendChild(current);
+  const delta = document.createElement("span");
+  delta.className = "diagnostics-metric-delta";
+  if (comparison) {
+    const format = kpiDeltaPresentationFormat(comparison, entry);
+    const value = kpiDeltaPresentationValue(comparison, entry);
+    delta.appendChild(metricDeltaButton({ concept, text: formatDeltaValue(value, format), value, format, result, response: state.salesDriversTableResponse }));
+  } else {
+    delta.textContent = "н/д";
+  }
+  numbers.appendChild(delta);
+  row.appendChild(numbers);
+  return row;
+}
+
+function diagnosticsMetricUnavailableRow(concept) {
+  const row = document.createElement("div");
+  row.className = "diagnostics-metric is-unavailable";
+  appendText(row, "span", displayLabel(concept)).className = "diagnostics-metric-name";
+  appendText(row, "strong", "н/д").className = "diagnostics-metric-unavailable";
+  return row;
+}
+
+function diagnosticsRowConceptText(entityId, concept) {
+  const result = salesDriverTableResultFor(concept, entityId);
+  const entry = catalogEntry(concept);
+  return result && entry ? formatValue(result.value, entry.format) : "н/д";
 }
 
 function renderKpis() {
@@ -2748,16 +3236,19 @@ function renderSalesDriverDetailTable() {
 }
 
 function renderSalesDriverSkeletons() {
-  const matrix = document.getElementById("sales-drivers-matrix");
   const detail = document.getElementById("sales-drivers-detail-table");
-  if (matrix) renderMessageRow(matrix, "Загрузка показателей...");
-  replaceWithMessage(document.getElementById("sales-drivers-chart-box"), "loading-state", "Загрузка динамики...");
+  syncDiagnosticsSelectedMetric();
+  renderDiagnosticsKpiSelector();
+  replaceWithMessage(document.getElementById("diagnostics-outcome-summary"), "loading-state compact", "Загрузка показателя...");
+  replaceWithMessage(document.getElementById("diagnostics-bars"), "loading-state compact", "Загрузка разбора...");
+  replaceWithMessage(document.getElementById("diagnostics-metrics"), "loading-state compact", "Загрузка объекта...");
   if (detail) renderMessageRow(detail, "Загрузка детализации...");
 }
 
 function renderSalesDriversUnavailable(message) {
-  renderMessageRow(document.getElementById("sales-drivers-matrix"), message);
-  replaceWithMessage(document.getElementById("sales-drivers-chart-box"), "empty-state", message);
+  replaceWithMessage(document.getElementById("diagnostics-outcome-summary"), "empty-state compact", message);
+  replaceWithMessage(document.getElementById("diagnostics-bars"), "empty-state compact", message);
+  replaceWithMessage(document.getElementById("diagnostics-metrics"), "empty-state compact", message);
   renderMessageRow(document.getElementById("sales-drivers-detail-table"), message);
 }
 
@@ -4685,9 +5176,15 @@ function renderChartMetricOptions() {
 }
 
 async function selectOverviewTrendMetric(concept) {
-  if (!overviewTrendDefinition(concept) || state.chartMetric === concept) return;
+  if (!overviewTrendDefinition(concept)) return;
+  if (state.chartMetric === concept) {
+    state.salesDriverMetric = concept;
+    return;
+  }
   state.chartMetric = concept;
+  state.salesDriverMetric = concept;
   state.activeProvenanceConcept = concept;
+  state.loadedViews.sales_drivers = false;
   renderKpis();
   renderChartMetricOptions();
   await runOverviewQuery();
@@ -5355,7 +5852,7 @@ function hasNonDrilldownFilters() {
 
 function salesDriverSummaryGrain() {
   const selected = selectedFilterValues();
-  const focalOrder = ["sku", "brand", "manufacturer", "category"];
+  const focalOrder = ["sku", "brand", "category"];
   const focalGrain = focalOrder.find((grain) => selected[grain]?.length === 1);
   return focalGrain || state.currentGrain;
 }
@@ -5369,7 +5866,26 @@ function entityIdsForSalesDriverSummary(grain = salesDriverSummaryGrain()) {
 }
 
 function salesDriverDetailGrain() {
+  return diagnosticsBreakdownGrain();
+}
+
+function defaultDiagnosticsBreakdownGrain() {
   return previewByGrain[salesDriverSummaryGrain()] || "store";
+}
+
+function ensureDiagnosticsDimension() {
+  const valid = diagnosticsDimensions.some((item) => item.grain === state.diagnosticsDimension);
+  if (!valid) state.diagnosticsDimension = defaultDiagnosticsBreakdownGrain();
+}
+
+function diagnosticsBreakdownGrain() {
+  ensureDiagnosticsDimension();
+  return state.diagnosticsDimension;
+}
+
+function syncDiagnosticsSelectedMetric() {
+  if (!overviewTrendDefinition(state.chartMetric)) state.chartMetric = "units";
+  state.salesDriverMetric = state.chartMetric;
 }
 
 function entityIdsForSummary() {
@@ -5387,7 +5903,11 @@ function entityIdsForPreview() {
 }
 
 function entityIdsForSalesDriverDetail() {
-  return firstEntityIds(salesDriverDetailGrain(), state.tablePageSize);
+  return entityIdsForDiagnosticsDetail();
+}
+
+function entityIdsForDiagnosticsDetail() {
+  return firstEntityIds(diagnosticsBreakdownGrain(), state.tablePageSize);
 }
 
 function entityIdsForStores() {
@@ -6720,7 +7240,7 @@ function setLoading(isLoading, message) {
 
 function showPageError(error) {
   const target = state.activeView === "sales_drivers"
-    ? document.getElementById("sales-drivers-chart-box")
+    ? document.getElementById("diagnostics-bars")
     : state.activeView === "portfolio_market"
       ? document.getElementById("portfolio-share-strip")
       : state.activeView === "stores"
