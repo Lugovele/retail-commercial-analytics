@@ -1761,8 +1761,8 @@ def test_overview_uses_ordered_business_kpi_surface() -> None:
         '"retailer_margin_abs"',
         '"retailer_margin_pct"',
         '"velocity"',
-        '"weighted_distribution"',
         '"distribution"',
+        '"weighted_distribution"',
         '"active_sku_count"',
         '"average_price_per_liter"',
         '"weighted_shelf_price_vat"',
@@ -1807,10 +1807,12 @@ def test_overview_kpi_groups_preserve_business_reading_order() -> None:
     assert overview_surface.index('"retailer_margin_abs"') < overview_surface.index('"retailer_margin_pct"')
     assert overview_surface.index('"retailer_margin_pct"') < overview_surface.index('"velocity"')
     assert 'slot: 5, group: "result", visualTier: "primary", concept: "velocity"' in overview_surface
-    assert 'slot: 7, group: "coverage", visualTier: "secondary", concept: "distribution"' in overview_surface
+    assert 'slot: 6, group: "coverage", visualTier: "secondary", concept: "distribution"' in overview_surface
+    assert 'slot: 7,\n    group: "coverage",\n    visualTier: "secondary",\n    concept: "weighted_distribution"' in overview_surface
     assert 'slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count"' in overview_surface
-    assert overview_surface.index('"weighted_distribution"') < overview_surface.index('"distribution"')
     assert overview_surface.index('"distribution"') < overview_surface.index('"active_sku_count"')
+    assert overview_surface.index('"distribution"') < overview_surface.index('"weighted_distribution"')
+    assert overview_surface.index('"weighted_distribution"') < overview_surface.index('"active_sku_count"')
     assert overview_surface.index('"average_price_per_liter"') < overview_surface.index('"weighted_shelf_price_vat"')
     assert overview_surface.index('"weighted_shelf_price_vat"') < overview_surface.index('"weighted_input_price_vat"')
     assert "renderKpiPartialComparisonNotice(models)" in script
@@ -2016,7 +2018,7 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "min-height: 104px" not in css
     assert "padding: 9px 10px 8px" not in css
     assert "min-height: 110px" not in css
-    assert "padding: 4px 6px" not in kpi_block
+    assert "padding: 4px 6px 5px" in kpi_block
     assert "padding: 5px 7px" not in kpi_block
     assert "border: 1px solid rgba(219, 227, 238, 0.66)" not in kpi_block
     assert ".kpi-headline" in kpi_block
@@ -2024,12 +2026,15 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert ".kpi-evidence-row" in kpi_block
     assert ".kpi-evidence-period" in kpi_block
     assert ".kpi-evidence-value" in kpi_block
-    assert "grid-template-columns: 46px minmax(0, 1fr)" in kpi_block
+    assert "grid-template-columns: 52px minmax(0, 1fr)" in kpi_block
+    assert "font-size: 11.5px;" in css.split(".kpi-title", 1)[1].split(".kpi-evidence-row", 1)[0]
+    assert "font-size: 13px;" in css.split(".kpi-meta--delta", 1)[1].split(".kpi-reference", 1)[0]
+    assert "font-size: 11.4px;" in css.split(".kpi-evidence-value", 1)[1].split(".kpi-current-value", 1)[0]
     assert ".kpi-unit" not in css
     assert ".kpi-card-content" in css
     assert ".kpi-card-main" in css
     assert "align-items: flex-start" in css.split(".kpi-card-content", 1)[1].split(".kpi-card--primary", 1)[0]
-    assert "gap: 2px" in css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
+    assert "gap: 3px" in css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
     assert ".kpi-meta--delta" in css
     assert ".kpi-card--primary .kpi-meta--delta" not in kpi_block
     assert ".kpi-reference" in css
@@ -2051,8 +2056,11 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert ".kpi-meta--delta .metric-delta-button {\n  font-weight: 400;" in css
     assert "white-space: nowrap" in css.split(".kpi-title", 1)[1].split(".kpi-evidence-row", 1)[0]
     selected_body = css.split(".kpi-card.is-chart-selected {", 1)[1].split(".kpi-card:hover", 1)[0]
-    assert "background: color-mix(in srgb, var(--brand-menu-blue) 7%, var(--bg-surface));" in selected_body
+    assert "background: color-mix(in srgb, var(--brand-menu-blue) 12%, var(--bg-surface));" in selected_body
+    assert ".kpi-card.is-chart-selected::before" in selected_body
+    assert "width: 3px" in selected_body
     assert "box-shadow" not in selected_body
+    assert ".kpi-card.is-chart-selected .kpi-title" in css
     assert "min-height: 132px" not in css
 
 
@@ -2090,7 +2098,8 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "fill: var(--chart-primary)" in css
     assert "cursor: crosshair" in css
     assert "white-space: pre-line" in css
-    assert "stroke-width: 3" in css
+    assert "stroke-width: 2" in css.split(".overview-chart-line", 1)[1].split(".overview-chart-gap-bridge", 1)[0]
+    assert "r: 4.2" in script
     overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
     assert "value || 0" not in overview_chart
     assert "comparison-point-marker" not in overview_chart
@@ -2101,7 +2110,7 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "data-gap-end" in overview_chart
     assert '"data-period": point.period' in overview_chart
     assert '"data-value": String(point.value)' in overview_chart
-    assert "r: 4.8" in overview_chart
+    assert "r: 4.2" in overview_chart
 
 
 def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitations() -> None:
@@ -2122,6 +2131,7 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "function chronologicalMetricPoints" in script
     assert "chronologicalMetricPoints(rows, \"backend-trend-series\")" in script
     assert "recentChronologicalMetricPoints" not in script
+    assert 'document.getElementById("chart-title").textContent = definition.label;' in script
     assert 'document.getElementById("chart-context").textContent = overviewTrendContextText(definition);' in script
     assert "backend-trend-series" in script
     assert "линии выровнены по месяцу" in script
@@ -2147,7 +2157,8 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "Math.abs(Number(year)) % 5" in chart_year_class
     assert "seriesIndex" not in chart_year_class
     assert "comparison_mode: \"NONE\"" in script.split("function buildChartQueryPayload", 1)[1].split("function buildOverviewPortfolioPayload", 1)[0]
-    assert 'Динамика показателя' in html
+    assert '<h2 id="chart-title">Продажи</h2>' in html
+    assert 'Динамика показателя' not in html.split('id="overview"', 1)[1].split('id="sales-drivers"', 1)[0]
     assert 'id="chart-metric"' not in html
     assert "Пунктир — интервал без наблюдений" in html
     assert "document.getElementById(\"chart-metric\")?.addEventListener" in script

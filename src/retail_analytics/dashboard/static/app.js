@@ -59,8 +59,9 @@ const overviewKpiDefinitions = [
   { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржа", unit: "₽", source: "query" },
   { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность", unit: "%", source: "query" },
   { slot: 5, group: "result", visualTier: "primary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query" },
+  { slot: 6, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
   {
-    slot: 6,
+    slot: 7,
     group: "coverage",
     visualTier: "secondary",
     concept: "weighted_distribution",
@@ -70,7 +71,6 @@ const overviewKpiDefinitions = [
     unavailableText: "Требуется правило веса и вселенной.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 7, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
   { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio" },
   {
     slot: 9,
@@ -2064,6 +2064,7 @@ function renderChart() {
     footnote.textContent = "";
     return;
   }
+  document.getElementById("chart-title").textContent = definition.label;
   document.getElementById("chart-context").textContent = overviewTrendContextText(definition);
   const unsupported = overviewTrendUnsupportedText(definition, model);
   if (unsupported) {
@@ -2198,7 +2199,7 @@ function buildOverviewSvgChart(points, entry) {
         class: `overview-chart-point ${chartYearClass(yearSeries.year)}`,
         cx: x(point.monthIndex),
         cy: y(point.value),
-        r: 4.8,
+        r: 4.2,
         "data-period": point.period,
         "data-series-year": String(point.year),
         "data-value": String(point.value),

@@ -883,7 +883,7 @@ main {
     "result result"
     "coverage price";
   column-gap: 18px;
-  row-gap: 6px;
+  row-gap: 4px;
   align-items: start;
 }
 
@@ -892,7 +892,7 @@ main {
   align-content: start;
   align-items: start;
   min-width: 0;
-  gap: 3px;
+  gap: 2px;
   padding: 0;
   background: transparent;
   border: 0;
@@ -901,7 +901,7 @@ main {
 
 .kpi-group--result {
   grid-area: result;
-  padding-bottom: 5px;
+  padding-bottom: 3px;
   border-bottom: 1px solid rgba(219, 227, 238, 0.8);
 }
 
@@ -916,7 +916,7 @@ main {
 .kpi-group-label {
   margin: 0;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0;
   line-height: 1;
@@ -975,7 +975,8 @@ main {
   align-items: flex-start;
   min-width: 0;
   min-height: 0;
-  padding: 3px 5px 4px;
+  padding: 4px 6px 5px;
+  position: relative;
   background: transparent;
   border: 0;
   border-radius: 5px;
@@ -989,7 +990,7 @@ main {
 }
 
 .kpi-card--primary {
-  padding: 3px 5px 4px;
+  padding: 4px 6px 5px;
   background: transparent;
 }
 
@@ -1002,21 +1003,21 @@ main {
   min-width: 0;
   width: 100%;
   align-items: start;
-  gap: 2px;
+  gap: 3px;
 }
 
 .kpi-headline {
   display: flex;
   min-width: 0;
   align-items: baseline;
-  gap: 6px;
+  gap: 7px;
 }
 
 .kpi-title {
   min-width: 0;
   overflow: hidden;
   color: var(--text-secondary);
-  font-size: 10px;
+  font-size: 11.5px;
   font-weight: 500;
   line-height: 1.05;
   text-overflow: ellipsis;
@@ -1025,15 +1026,15 @@ main {
 
 .kpi-evidence-row {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr);
+  grid-template-columns: 52px minmax(0, 1fr);
   min-width: 0;
   align-items: baseline;
-  column-gap: 5px;
+  column-gap: 6px;
 }
 
 .kpi-evidence-period {
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 400;
   line-height: 1.05;
   white-space: nowrap;
@@ -1043,7 +1044,7 @@ main {
   min-width: 0;
   overflow: hidden;
   color: var(--text-primary);
-  font-size: 10px;
+  font-size: 11.4px;
   font-variant-numeric: tabular-nums;
   font-weight: 450;
   line-height: 1.05;
@@ -1072,7 +1073,7 @@ main {
   flex: 0 0 auto;
   color: var(--text-primary);
   margin-top: 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 400;
   line-height: 1.05;
 }
@@ -1111,7 +1112,7 @@ main {
   min-width: 0;
   overflow: hidden;
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10px;
   line-height: 1.05;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1146,7 +1147,23 @@ main {
 }
 
 .kpi-card.is-chart-selected {
-  background: color-mix(in srgb, var(--brand-menu-blue) 7%, var(--bg-surface));
+  background: color-mix(in srgb, var(--brand-menu-blue) 12%, var(--bg-surface));
+}
+
+.kpi-card.is-chart-selected::before {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 0;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--brand-menu-blue);
+  content: "";
+}
+
+.kpi-card.is-chart-selected .kpi-title {
+  color: var(--brand-menu-blue);
+  font-weight: 650;
 }
 
 .kpi-card:hover {
@@ -1330,7 +1347,10 @@ main {
   flex: 1 1 auto;
   flex-direction: column;
   min-height: 0;
-  padding: 10px 12px 8px;
+  padding: 6px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .overview-layout > .table-panel,
@@ -1342,29 +1362,30 @@ main {
 .panel-heading {
   display: flex;
   justify-content: space-between;
-  gap: var(--space-2);
+  gap: 10px;
   align-items: flex-start;
-  margin-bottom: var(--space-2);
+  margin-bottom: 4px;
 }
 
 .panel-heading p {
   margin-bottom: 0;
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 10.5px;
+  line-height: 1.2;
 }
 
 .panel-heading h2 {
-  margin-bottom: 1px;
-  font-size: 15px;
-  line-height: 1.12;
+  margin-bottom: 0;
+  font-size: 14px;
+  line-height: 1.1;
 }
 
 .chart-note {
   align-self: flex-start;
-  margin: 2px 0 0;
+  margin: 1px 0 0;
   color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.2;
+  font-size: 10.5px;
+  line-height: 1.15;
   white-space: nowrap;
 }
 
@@ -1429,26 +1450,26 @@ main {
 .axis-label,
 .axis-unit {
   fill: var(--text-muted);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .chart-line {
   fill: none;
   stroke: var(--chart-primary);
-  stroke-width: 3;
+  stroke-width: 2.4;
   stroke-linejoin: round;
 }
 
 .chart-point {
   fill: var(--bg-surface);
   stroke: var(--chart-primary);
-  stroke-width: 2.4;
+  stroke-width: 2;
 }
 
 .overview-chart-line {
   fill: none;
   stroke: var(--chart-primary);
-  stroke-width: 2.2;
+  stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
 }
@@ -1458,14 +1479,14 @@ main {
   stroke: var(--chart-primary);
   stroke-dasharray: 5 6;
   stroke-linecap: round;
-  stroke-width: 1.8;
+  stroke-width: 1.6;
   opacity: 0.38;
 }
 
 .overview-chart-point {
   fill: var(--chart-primary);
   stroke: var(--chart-primary);
-  stroke-width: 2.2;
+  stroke-width: 1.8;
 }
 
 .overview-chart-series-1 {
