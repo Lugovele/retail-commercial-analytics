@@ -55,7 +55,7 @@ metrics:
     formula_summary: Отношение суммы абсолютной маржи к сумме оборота в выбранном срезе.
     delta_semantics: OUTCOME_DIRECTIONAL
   - metric_concept: weighted_shelf_price_vat
-    default_display_label: Средняя полочная цена с НДС
+    default_display_label: Полочная цена
     description: Средневзвешенная полочная цена с НДС из deterministic metric outputs.
     format: currency
     dashboard_group: price
@@ -66,7 +66,7 @@ metrics:
     formula_summary: Средневзвешенная полочная цена по продажам выбранного среза.
     delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: weighted_input_price_vat
-    default_display_label: Средняя входная цена с НДС
+    default_display_label: Входная цена
     description: Средневзвешенная входная цена с НДС из deterministic metric outputs.
     format: currency
     dashboard_group: price
@@ -101,8 +101,8 @@ metrics:
     formula_summary: Количество активных торговых точек в периоде.
     delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: distribution
-    default_display_label: Дистрибуция
-    description: Дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
+    default_display_label: ND
+    description: Нумерическая дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
     format: percent
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only

@@ -183,7 +183,7 @@ capabilities:
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: weighted_shelf_price_vat
-  ui_label_ru: Средняя полочная цена с НДС
+  ui_label_ru: Полочная цена
   ui_description_ru: Средневзвешенная полочная цена с НДС из deterministic metric outputs.
   tab: Показатели
   group: Цена
@@ -217,7 +217,7 @@ capabilities:
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: weighted_input_price_vat
-  ui_label_ru: Средняя входная цена с НДС
+  ui_label_ru: Входная цена
   ui_description_ru: Средневзвешенная входная цена с НДС из deterministic metric outputs.
   tab: Показатели
   group: Цена
@@ -316,8 +316,8 @@ capabilities:
   signal_eligible: true
   recommendation_eligible_future: true
 - concept_id: distribution
-  ui_label_ru: Дистрибуция
-  ui_description_ru: Дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
+  ui_label_ru: ND
+  ui_description_ru: Нумерическая дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
   tab: Показатели
   group: Присутствие
   presentation_level: DEFAULT_TABLE

@@ -59,13 +59,14 @@ const overviewKpiDefinitions = [
   { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржа", unit: "₽", source: "query" },
   { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность", unit: "%", source: "query" },
   { slot: 5, group: "result", visualTier: "primary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query" },
-  { slot: 6, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
+  { slot: 6, group: "coverage", visualTier: "secondary", concept: "distribution", label: "ND", fullLabel: "Нумерическая дистрибуция", unit: "%", source: "query" },
   {
     slot: 7,
     group: "coverage",
     visualTier: "secondary",
     concept: "weighted_distribution",
-    label: "Взвешенная дистрибуция",
+    label: "WD",
+    fullLabel: "Взвешенная дистрибуция",
     unit: "%",
     source: "business_rule_required",
     unavailableText: "Требуется правило веса и вселенной.",
@@ -83,8 +84,8 @@ const overviewKpiDefinitions = [
     unavailableText: "Требуется утверждённая формула.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Средняя цена на полке", unit: "₽", source: "query" },
-  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Средняя цена входа", unit: "₽", source: "query" }
+  { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Полочная цена", unit: "₽", source: "query" },
+  { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Входная цена", unit: "₽", source: "query" }
 ];
 const overviewKpiGroups = [
   { id: "result", label: "РЕЗУЛЬТАТ", visualTier: "primary" },
@@ -318,6 +319,17 @@ const portfolioPresentationFallback = {
     formula_summary: "ТТ с продажами в выбранном формате / все ТТ выбранного формата в месячной вселенной",
     delta_semantics: "NEUTRAL_DIRECTIONAL"
   },
+  weighted_distribution: {
+    display_label: "WD",
+    display_alias: "Взвешенная дистрибуция",
+    format: "percent",
+    unit_label: "%",
+    business_meaning: "Взвешенная дистрибуция.",
+    business_question: "Какова взвешенная дистрибуция выбранного среза?",
+    decision_use: "Показывает компактный KPI как WD без изменения бизнес-смысла.",
+    formula_summary: "Требуется утверждённое бизнес-правило",
+    delta_semantics: "NEUTRAL_DIRECTIONAL"
+  },
   category_revenue_share: { display_label: "Доля в обороте категории", format: "percent" },
   category_units_share: { display_label: "Доля в штуках категории", format: "percent" },
   category_margin_share: { display_label: "Доля в марже категории", format: "percent" },
@@ -433,6 +445,10 @@ const neutralDirectionalMetrics = new Set([
   "contribution_to_delta"
 ]);
 const rankDirectionalMetrics = new Set(["manufacturer_rank_revenue", "manufacturer_rank_units"]);
+const metricFullNames = {
+  distribution: "Нумерическая дистрибуция",
+  weighted_distribution: "Взвешенная дистрибуция"
+};
 const previewColumns = {
   category: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct", "sku_count", "selling_store_count"],
   manufacturer: ["revenue", "units", "retailer_margin_abs", "retailer_margin_pct"],
@@ -588,6 +604,12 @@ function bindStaticControls() {
   document.addEventListener("click", (event) => {
     if (event.target?.closest?.("#close-drawer")) closeMetricInspector();
   });
+  document.addEventListener("mousemove", (event) => {
+    if (!event.target?.closest?.(".chart-svg")) hideTooltip();
+  });
+  document.addEventListener("focusin", (event) => {
+    if (!event.target?.closest?.(".chart-svg")) hideTooltip();
+  });
   document.getElementById("reset-filters").addEventListener("click", async () => {
     await applyScopeChange(async () => {
       resetAllEntityFilters();
@@ -741,6 +763,7 @@ function updateStickyGeometryVars() {
   const navHeight = document.querySelector(".workflow-nav")?.getBoundingClientRect().height || 36;
   document.documentElement.style.setProperty("--workflow-nav-current-height", `${Math.ceil(navHeight)}px`);
   document.documentElement.style.setProperty("--report-scroll-margin-top", `${stickyStackOffset()}px`);
+  alignOverviewChartShell();
 }
 
 async function applyScopeChange(work) {
@@ -879,7 +902,7 @@ function metricValueButton({ concept, text, result = null, response = null, clas
   button.type = "button";
   button.className = `metric-value-button ${className}`.trim();
   button.textContent = text;
-  button.setAttribute("aria-label", `Проверить показатель: ${displayLabel(concept)}`);
+  button.setAttribute("aria-label", `Проверить показатель: ${accessibleDisplayLabel(concept)}`);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
     openMetricInspector({ concept, result, response, mode, sections });
@@ -892,7 +915,7 @@ function metricDeltaButton({ concept, text, value, result = null, response = nul
   button.type = "button";
   button.className = `metric-value-button metric-delta-button ${deltaSemanticClass(concept, value)} ${className}`.trim();
   button.textContent = text;
-  button.setAttribute("aria-label", `Проверить изменение: ${displayLabel(concept)}`);
+  button.setAttribute("aria-label", `Проверить изменение: ${accessibleDisplayLabel(concept)}`);
   button.dataset.deltaSemantics = deltaSemanticsFor(concept);
   button.addEventListener("click", (event) => {
     event.stopPropagation();
@@ -1711,7 +1734,8 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
   card.tabIndex = 0;
   card.setAttribute("role", "button");
   card.setAttribute("aria-pressed", isSelectedMetric ? "true" : "false");
-  card.setAttribute("aria-label", `Показать динамику: ${definition.label}`);
+  card.setAttribute("aria-label", `Показать динамику: ${kpiAccessibleLabel(definition)}`);
+  if (definition.fullLabel) card.title = kpiAccessibleLabel(definition);
   card.addEventListener("click", async (event) => {
     if (event.target.closest("button, a, input, select, textarea")) return;
     await selectOverviewTrendMetric(concept);
@@ -1728,11 +1752,8 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
     const left = document.createElement("div");
     left.className = "kpi-card-main";
     left.appendChild(renderKpiHeadline(definition, model));
-    const value = document.createElement("div");
-    value.className = "kpi-evidence-row kpi-evidence-row--unavailable";
-    appendText(value, "span", "н/д").className = "kpi-evidence-value";
-    left.appendChild(value);
-    appendText(left, "span", conciseKpiUnavailableText(definition, model)).className = "kpi-unavailable-reason";
+    appendText(left, "div", "н/д").className = "kpi-na";
+    appendText(left, "div", conciseKpiUnavailableText(definition, model)).className = "kpi-unavailable-reason";
     content.appendChild(left);
     card.appendChild(content);
     return card;
@@ -1772,7 +1793,9 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
 function renderKpiHeadline(definition, model) {
   const headline = document.createElement("div");
   headline.className = "kpi-headline";
-  appendText(headline, "span", definition.label).className = "kpi-title";
+  const title = appendText(headline, "span", definition.label);
+  title.className = "kpi-title";
+  if (definition.fullLabel) title.title = kpiAccessibleLabel(definition);
   if (state.chartMetric === definition.concept) {
     appendText(headline, "span", "выбран").className = "visually-hidden";
   }
@@ -1796,7 +1819,6 @@ function renderKpiHeadline(definition, model) {
 function renderKpiEvidenceRow(kind, period, text, node = null) {
   const row = document.createElement("div");
   row.className = `kpi-evidence-row kpi-evidence-row--${kind}`;
-  appendText(row, "span", kpiCompactPeriodText(period)).className = "kpi-evidence-period";
   const value = document.createElement("span");
   value.className = "kpi-evidence-value";
   if (node) {
@@ -1805,7 +1827,14 @@ function renderKpiEvidenceRow(kind, period, text, node = null) {
     value.textContent = text;
   }
   row.appendChild(value);
+  if (kind === "reference") {
+    appendText(row, "span", `· ${kpiCompactPeriodText(period)}`).className = "kpi-evidence-period";
+  }
   return row;
+}
+
+function kpiAccessibleLabel(definition) {
+  return definition.fullLabel ? `${definition.fullLabel} (${definition.label})` : definition.label;
 }
 
 function chronologicalMetricPoints(rows, source) {
@@ -2052,6 +2081,7 @@ function renderKpiSecondaryContext() {
 }
 
 function renderChart() {
+  hideTooltip();
   const definition = overviewTrendDefinition(state.chartMetric);
   const model = definition ? overviewTrendModel(definition) : null;
   const result = model?.result || null;
@@ -2065,7 +2095,7 @@ function renderChart() {
     return;
   }
   document.getElementById("chart-title").textContent = definition.label;
-  document.getElementById("chart-context").textContent = overviewTrendContextText(definition);
+  document.getElementById("chart-context").textContent = "по месяцам · сравнение лет";
   const unsupported = overviewTrendUnsupportedText(definition, model);
   if (unsupported) {
     replaceWithMessage(box, "empty-state", unsupported);
@@ -2079,6 +2109,7 @@ function renderChart() {
     return;
   }
   box.replaceChildren(buildOverviewSvgChart(points, entry));
+  alignOverviewChartShell();
   const missing = (coverage?.missing_periods || []).map(formatPeriod).join(", ");
   const limitation = limitationText(result);
   footnote.textContent = [
@@ -2145,9 +2176,9 @@ function overviewTrendContextText(definition) {
 }
 
 function buildOverviewSvgChart(points, entry) {
-  const width = 860;
-  const height = 318;
-  const pad = { left: 72, right: 34, top: 30, bottom: 54 };
+  const width = 720;
+  const height = 360;
+  const pad = { left: 48, right: 24, top: 20, bottom: 40 };
   const svg = svgEl("svg", { class: "chart-svg overview-chart-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${entry.display_label}: динамика` });
   const values = points.map((point) => point.value);
   const max = Math.max(...values, 1);
@@ -2165,12 +2196,11 @@ function buildOverviewSvgChart(points, entry) {
   }
   svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: height - pad.bottom, x2: width - pad.right, y2: height - pad.bottom }));
   svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: pad.top, x2: pad.left, y2: height - pad.bottom }));
-  svg.appendChild(svgText(pad.left, 14, unitLabel(entry.format), "start", "axis-unit"));
 
   monthLabelsShort().forEach((month, index) => {
     const xx = x(index);
-    svg.appendChild(svgEl("line", { class: "month-grid-line", x1: xx, y1: pad.top, x2: xx, y2: height - pad.bottom }));
-    svg.appendChild(svgText(xx, height - 28, month, "middle", "axis-label month-label"));
+    svg.appendChild(svgEl("line", { class: `month-grid-line${index === 5 ? " june-axis" : ""}`, x1: xx, y1: pad.top, x2: xx, y2: height - pad.bottom, "data-month-index": String(index) }));
+    svg.appendChild(svgText(xx, height - 15, month, "middle", "axis-label month-label"));
   });
 
   series.forEach((yearSeries, seriesIndex) => {
@@ -2201,6 +2231,7 @@ function buildOverviewSvgChart(points, entry) {
         cy: y(point.value),
         r: 4.2,
         "data-period": point.period,
+        "data-month-index": String(point.monthIndex),
         "data-series-year": String(point.year),
         "data-value": String(point.value),
         tabindex: 0
@@ -2213,7 +2244,12 @@ function buildOverviewSvgChart(points, entry) {
       circle.addEventListener("click", () => openProvenance(entry.metric_concept));
       svg.appendChild(circle);
     });
-    svg.appendChild(svgText(width - pad.right - 58, pad.top + 14 + seriesIndex * 18, String(yearSeries.year), "start", `chart-legend ${chartYearClass(yearSeries.year)}`));
+    const lastPoint = yearSeries.points[yearSeries.points.length - 1];
+    if (lastPoint) {
+      const anchor = lastPoint.monthIndex >= 10 ? "end" : "start";
+      const labelX = anchor === "end" ? x(lastPoint.monthIndex) - 8 : x(lastPoint.monthIndex) + 10;
+      svg.appendChild(svgText(labelX, y(lastPoint.value), String(yearSeries.year), anchor, `chart-legend ${chartYearClass(yearSeries.year)}`));
+    }
   });
 
   monthLabelsShort().forEach((month, monthIndex) => {
@@ -2238,6 +2274,21 @@ function buildOverviewSvgChart(points, entry) {
     svg.appendChild(group);
   });
   return svg;
+}
+
+function alignOverviewChartShell() {
+  window.requestAnimationFrame(() => {
+    const shell = document.querySelector(".overview-layout .chart-panel");
+    const divider = document.querySelector('.kpi-group--price');
+    const juneAxis = document.querySelector('#chart-box .june-axis');
+    if (!shell || !divider || !juneAxis) return;
+    shell.style.transform = "";
+    const dividerX = divider.getBoundingClientRect().left;
+    const juneRect = juneAxis.getBoundingClientRect();
+    const juneX = juneRect.left + juneRect.width / 2;
+    shell.style.transform = `translateX(${dividerX - juneX}px)`;
+    shell.dataset.juneAlignmentDelta = String(Math.round((dividerX - juneX) * 100) / 100);
+  });
 }
 
 function buildSvgChart(points, entry) {
@@ -2303,6 +2354,10 @@ function chartYearSeries(points) {
 }
 
 function chartYearClass(year) {
+  const currentYear = new Date(`${selectedDateFrom()}T00:00:00`).getFullYear();
+  const referenceYear = new Date(`${kpiReferencePeriodCandidate()}T00:00:00`).getFullYear();
+  if (Number(year) === currentYear) return "overview-chart-series-current";
+  if (Number(year) === referenceYear) return "overview-chart-series-reference";
   const paletteIndex = Math.abs(Number(year)) % 5;
   return `overview-chart-series-${paletteIndex}`;
 }
@@ -5280,6 +5335,12 @@ function displayLabel(concept) {
   return catalogEntry(concept)?.display_label || portfolioPresentationFallback[concept]?.display_label || concept;
 }
 
+function accessibleDisplayLabel(concept) {
+  const label = displayLabel(concept);
+  const fullName = metricFullNames[concept] || metricPresentation(concept)?.display_alias;
+  return fullName && fullName !== label ? `${fullName} (${label})` : label;
+}
+
 function metricPresentation(concept) {
   return catalogEntry(concept) || portfolioPresentationFallback[concept] || {};
 }
@@ -5312,7 +5373,7 @@ function deltaSemanticsText(concept) {
 function metricInspectorDefinition(concept) {
   const entry = metricPresentation(concept);
   return {
-    business_alias: entry.display_alias || null,
+    business_alias: entry.display_alias || metricFullNames[concept] || null,
     business_meaning: entry.business_meaning || entry.description || "н/д",
     business_question: entry.business_question || "н/д",
     decision_use: entry.decision_use || "н/д",

@@ -1188,20 +1188,23 @@ def test_workspace_spacing_remediation_uses_stable_sticky_geometry() -> None:
     css = html_or_script("styles.css")
     script = html_or_script("app.js")
 
-    assert "--app-header-height: 48px;" in css
-    assert "--workflow-nav-height: 36px;" in css
+    assert "--app-header-height: 42px;" in css
+    assert "--workflow-nav-height: 32px;" in css
     assert "--workflow-nav-current-height: var(--workflow-nav-height);" in css
     assert "--report-scroll-margin-top: 168px;" in css
     header_body = css.split(".app-header {", 1)[1].split(".app-title", 1)[0]
-    assert "margin: 0 calc(-1 * var(--space-6));" in header_body
+    assert "margin: 0 -26px;" in header_body
+    assert "padding: 0 26px;" in header_body
     app_title_body = css.split(".app-title {", 1)[1].split(".app-header-actions", 1)[0]
     assert "font-size: 14px;" in app_title_body
     assert "text-transform: uppercase" not in app_title_body
     assert '<h1 class="app-title">Аналитика</h1>' in html_or_script("index.html")
     assert ">Отчёты</button>" in html_or_script("index.html")
     scope_body = css.split(".scope-panel {", 1)[1].split(".scope-toolbar", 1)[0]
-    assert "padding: 5px 0 6px;" in scope_body
-    assert "top: calc(var(--app-header-height) + var(--workflow-nav-current-height));" in scope_body
+    assert "flex: 0 0 46px;" in scope_body
+    assert "padding: 5px 0;" in scope_body
+    assert "position: static;" in scope_body
+    assert "top: auto;" in scope_body
     assert ".context-coverage-note:empty" in css
     assert ".breadcrumb-row:empty" in css
     assert "scroll-margin-top: var(--report-scroll-margin-top);" in css
@@ -1369,7 +1372,10 @@ def test_scope_toolbar_uses_single_row_multiselect_contract() -> None:
     positions = [scope_body.index(marker) for marker in expected_order]
     assert positions == sorted(positions)
     assert "filter-grid" in scope_body
-    assert "display: contents;" in css.split(".filter-grid", 1)[1].split(".multi-filter", 1)[0]
+    filter_grid_body = css.split(".filter-grid", 1)[1].split(".native-filter-select", 1)[0]
+    assert "display: flex;" in filter_grid_body
+    assert "gap: 7px;" in filter_grid_body
+    assert "align-items: center;" in filter_grid_body
     assert scope_body.count("native-filter-select") == 5
     assert scope_body.count('id="private-label-scope"') == 1
     assert "filter-chip" not in html
@@ -1395,7 +1401,7 @@ def test_filter_toolbar_visual_noise_contract_keeps_labels_above_controls() -> N
     assert 'placeholder="Все' not in scope_body
 
     label_body = css.split(".scope-label {", 1)[1].split(".report-identity", 1)[0]
-    assert "font-size: 11px;" in label_body
+    assert "font-size: 10px;" in label_body
     assert "font-weight: 400;" in label_body
     assert "letter-spacing: 0;" in label_body
 
@@ -1433,10 +1439,9 @@ def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> 
     css = html_or_script("styles.css")
 
     toolbar_body = css.split(".scope-toolbar {", 1)[1].split(".control,", 1)[0]
-    assert "column-gap: 5px;" in toolbar_body
-    assert "row-gap: 0;" in toolbar_body
-    assert '.multi-filter[data-filter="category"] {' in css
-    assert "margin-left: 8px;" in css
+    assert "display: flex;" in toolbar_body
+    assert "gap: 7px;" in toolbar_body
+    assert "min-height: 36px;" in toolbar_body
     control_body = css.split(".scope-control,", 1)[1].split(".scope-trigger,", 1)[0]
     assert "var(--scope-control-bg)" in css
     assert "var(--scope-control-border)" in css
@@ -1775,9 +1780,18 @@ def test_overview_uses_ordered_business_kpi_surface() -> None:
     assert 'label: "Маржа", unit: "₽"' in overview_surface
     assert 'label: "Маржинальность", unit: "%"' in overview_surface
     assert 'label: "V\\u0050O", unit: "шт./ТТ"' in overview_surface
+    assert 'label: "ND"' in overview_surface
+    assert 'fullLabel: "Нумерическая дистрибуция"' in overview_surface
+    assert 'label: "WD"' in overview_surface
+    assert 'fullLabel: "Взвешенная дистрибуция"' in overview_surface
     assert 'label: "Цена за литр"' in overview_surface
+    assert 'label: "Полочная цена"' in overview_surface
+    assert 'label: "Входная цена"' in overview_surface
     assert 'unit: "₽/л"' in overview_surface
-    assert "Взвешенная дистрибуция" in overview_surface
+    assert 'label: "Нумерическая дистрибуция"' not in overview_surface
+    assert 'label: "Взвешенная дистрибуция"' not in overview_surface
+    assert "Средняя цена на полке" not in overview_surface
+    assert "Средняя цена входа" not in overview_surface
     assert "с НДС" not in overview_surface
     assert "на ТТ" not in overview_surface
     assert "₽/уп." not in overview_surface
@@ -2013,12 +2027,14 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     kpi_block = css.split(".kpi-grid", 1)[1].split(".metric-value-button", 1)[0]
     assert "background: rgba(248, 250, 252, 0.78)" not in kpi_block
     assert "border: 1px solid rgba(219, 227, 238, 0.84)" not in kpi_block
-    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in kpi_block
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" not in kpi_block
+    assert "minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1.18fr) minmax(0, 0.92fr)" in kpi_block
+    assert "column-gap: 30px;" in kpi_block
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "min-height: 104px" not in css
     assert "padding: 9px 10px 8px" not in css
     assert "min-height: 110px" not in css
-    assert "padding: 4px 6px 5px" in kpi_block
+    assert "padding: 4px 8px 5px" in kpi_block
     assert "padding: 5px 7px" not in kpi_block
     assert "border: 1px solid rgba(219, 227, 238, 0.66)" not in kpi_block
     assert ".kpi-headline" in kpi_block
@@ -2026,15 +2042,16 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert ".kpi-evidence-row" in kpi_block
     assert ".kpi-evidence-period" in kpi_block
     assert ".kpi-evidence-value" in kpi_block
-    assert "grid-template-columns: 52px minmax(0, 1fr)" in kpi_block
-    assert "font-size: 11.5px;" in css.split(".kpi-title", 1)[1].split(".kpi-evidence-row", 1)[0]
-    assert "font-size: 13px;" in css.split(".kpi-meta--delta", 1)[1].split(".kpi-reference", 1)[0]
-    assert "font-size: 11.4px;" in css.split(".kpi-evidence-value", 1)[1].split(".kpi-current-value", 1)[0]
+    assert "display: flex;" in css.split(".kpi-evidence-row", 1)[1].split(".kpi-evidence-period", 1)[0]
+    assert "font-size: 15px;" in css.split(".kpi-title", 1)[1].split(".kpi-evidence-row", 1)[0]
+    assert "font-size: 18px;" in css.split(".kpi-meta--delta", 1)[1].split(".kpi-reference", 1)[0]
+    assert "font-size: 18px;" in css.split(".kpi-evidence-value", 1)[1].split(".kpi-evidence-row--current", 1)[0]
+    assert "font-size: 11.5px;" in css.split(".kpi-evidence-row--reference .kpi-evidence-value", 1)[1].split(".kpi-current-value", 1)[0]
     assert ".kpi-unit" not in css
     assert ".kpi-card-content" in css
     assert ".kpi-card-main" in css
     assert "align-items: flex-start" in css.split(".kpi-card-content", 1)[1].split(".kpi-card--primary", 1)[0]
-    assert "gap: 3px" in css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
+    assert "gap: 0" in css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
     assert ".kpi-meta--delta" in css
     assert ".kpi-card--primary .kpi-meta--delta" not in kpi_block
     assert ".kpi-reference" in css
@@ -2056,12 +2073,14 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert ".kpi-meta--delta .metric-delta-button {\n  font-weight: 400;" in css
     assert "white-space: nowrap" in css.split(".kpi-title", 1)[1].split(".kpi-evidence-row", 1)[0]
     selected_body = css.split(".kpi-card.is-chart-selected {", 1)[1].split(".kpi-card:hover", 1)[0]
-    assert "background: color-mix(in srgb, var(--brand-menu-blue) 12%, var(--bg-surface));" in selected_body
+    assert "background: var(--overview-brand-soft);" in selected_body
+    assert "box-shadow: inset 0 -2px 0 var(--brand-menu-blue);" in selected_body
     assert ".kpi-card.is-chart-selected::before" in selected_body
-    assert "width: 3px" in selected_body
-    assert "box-shadow" not in selected_body
+    assert "content: none;" in selected_body
     assert ".kpi-card.is-chart-selected .kpi-title" in css
     assert "min-height: 132px" not in css
+    assert "border-top: 2px solid var(--overview-section-line);" in kpi_block
+    assert "border-left: 2px solid var(--overview-section-line);" in kpi_block
 
 
 def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> None:
@@ -2086,29 +2105,45 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "overview-chart-crosshair" in script
     assert "overviewMonthTooltip(monthIndex, series, entry)" in script
     assert "нет данных" in script
+    assert "alignOverviewChartShell()" in script
+    assert "function alignOverviewChartShell()" in script
+    assert "document.querySelector('#chart-box .june-axis')" in script
+    assert "shell.dataset.juneAlignmentDelta" in script
     assert "month-grid-line" in css
+    assert ".month-grid-line.june-axis" in css
     assert "#chart-box" in css
     assert "overview-chart-svg" in css
+    assert "min-height: 320px" in css.split(".chart-svg", 1)[1].split(".overview-main .chart-svg", 1)[0]
+    assert "height: 100%" in css.split(".overview-main .chart-svg", 1)[1].split("#chart-box", 1)[0]
     assert "height: 100%" in css.split(".overview-chart-svg", 1)[1].split(".grid-line", 1)[0]
     assert "#chart-box {\n  flex: 1 1 auto;" in css
-    assert "min-height: 300px" in css
-    assert "stroke-dasharray: 5 6" in css
+    assert "min-height: 300px" not in css.split("#chart-box", 1)[1].split(".overview-chart-svg", 1)[0]
+    assert "flex: 0 1 760px;" in css
+    assert "width: min(760px, 100%);" in css
+    assert "aspect-ratio: 1.72 / 1;" in css
+    assert "stroke-dasharray: 7 6" in css
     assert "opacity: 0.38" in css
     assert ".overview-chart-point {" in css
     assert "fill: var(--chart-primary)" in css
     assert "cursor: crosshair" in css
     assert "white-space: pre-line" in css
-    assert "stroke-width: 2" in css.split(".overview-chart-line", 1)[1].split(".overview-chart-gap-bridge", 1)[0]
+    assert "stroke-width: 3" in css.split(".overview-chart-line", 1)[1].split(".overview-chart-gap-bridge", 1)[0]
     assert "r: 4.2" in script
     overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
+    assert "const width = 720;" in overview_chart
+    assert "const height = 360;" in overview_chart
+    assert "const pad = { left: 48, right: 24, top: 20, bottom: 40 };" in overview_chart
     assert "value || 0" not in overview_chart
     assert "comparison-point-marker" not in overview_chart
     assert "marker-label" not in overview_chart
     assert "chartYearClass(yearSeries.year)" in overview_chart
     assert "chartYearClass(seriesIndex)" not in overview_chart
+    assert '"data-month-index": String(monthIndex)' in overview_chart
+    assert 'index === 5 ? " june-axis" : ""' in overview_chart
     assert "data-gap-start" in overview_chart
     assert "data-gap-end" in overview_chart
     assert '"data-period": point.period' in overview_chart
+    assert '"data-month-index": String(point.monthIndex)' in overview_chart
     assert '"data-value": String(point.value)' in overview_chart
     assert "r: 4.2" in overview_chart
 
@@ -2132,7 +2167,7 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "chronologicalMetricPoints(rows, \"backend-trend-series\")" in script
     assert "recentChronologicalMetricPoints" not in script
     assert 'document.getElementById("chart-title").textContent = definition.label;' in script
-    assert 'document.getElementById("chart-context").textContent = overviewTrendContextText(definition);' in script
+    assert 'document.getElementById("chart-context").textContent = "по месяцам · сравнение лет";' in script
     assert "backend-trend-series" in script
     assert "линии выровнены по месяцу" in script
     assert "сопоставимые доступные месяцы" in script
@@ -2160,7 +2195,8 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert '<h2 id="chart-title">Продажи</h2>' in html
     assert 'Динамика показателя' not in html.split('id="overview"', 1)[1].split('id="sales-drivers"', 1)[0]
     assert 'id="chart-metric"' not in html
-    assert "Пунктир — интервал без наблюдений" in html
+    assert "● данные · пунктир — пропуск" in html
+    assert ".overview-main .chart-footnote" in css
     assert "document.getElementById(\"chart-metric\")?.addEventListener" in script
     assert "if (!select) return;" in script
     assert "is-chart-selected" in css
@@ -2451,8 +2487,10 @@ def test_current_reference_and_ownership_visual_hierarchy_is_not_color_only() ->
     styles = html_or_script("styles.css")
 
     assert 'row.className = `kpi-evidence-row kpi-evidence-row--${kind}`;' in script
-    assert 'appendText(row, "span", kpiCompactPeriodText(period)).className = "kpi-evidence-period";' in script
     assert 'value.className = "kpi-evidence-value";' in script
+    assert 'row.appendChild(value);' in script
+    assert 'if (kind === "reference") {' in script
+    assert 'appendText(row, "span", `· ${kpiCompactPeriodText(period)}`).className = "kpi-evidence-period";' in script
     assert 'left.appendChild(renderKpiEvidenceRow(' in script
     assert 'metric-current' in styles
     assert 'metric-reference' in styles
@@ -2605,11 +2643,19 @@ def test_provenance_drawer_uses_russian_presentation_labels() -> None:
 def test_metric_inspector_supports_private_alias_metadata() -> None:
     script = html_or_script("app.js")
 
+    assert 'const metricFullNames = {' in script
+    assert 'distribution: "Нумерическая дистрибуция"' in script
+    assert 'weighted_distribution: "Взвешенная дистрибуция"' in script
+    assert "function accessibleDisplayLabel(concept)" in script
+    assert "metricPresentation(concept)?.display_alias" in script
+    assert "function kpiAccessibleLabel(definition)" in script
+    assert 'definition.fullLabel ? `${definition.fullLabel} (${definition.label})` : definition.label' in script
     assert "display_alias" in script
     assert "business_alias" in script
     assert "business_meaning" in script
     assert "unit_label" in script
     assert "definition.business_alias" in script
+    assert "entry.display_alias || metricFullNames[concept] || null" in script
     assert "unitLabel(entry.format)" in script
     assert "inventory turnover" not in script.lower()
 
