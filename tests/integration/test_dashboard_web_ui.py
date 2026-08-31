@@ -308,6 +308,26 @@ def test_dashboard_query_route_resolves_cascading_source_like_filters(tmp_path: 
     assert provenance["scoped_rollup"]["source_fact_grain"] == "sku"
 
 
+def test_dashboard_sku_options_respect_selected_store_scope(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "GET",
+        "/api/dashboard/options",
+        query=(
+            "retailer_id=retailer_a&source_id=source_a&private_label_scope=INCLUDE"
+            "&date_from=2026-06-01&date_to=2026-06-01"
+            "&category=CATEGORY_STANDARD&store=STORE_001"
+        ),
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert [item["value"] for item in response["entities"]["sku"]] == ["SKU_A_001"]
+
 
 def test_dashboard_product_routes_resolve_and_report_user_execution_filters(tmp_path: Path) -> None:
     source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
@@ -925,7 +945,7 @@ def _write_source_like_rows(path: Path) -> Path:
                 "revision_dashboard_stale",
                 "revision_dashboard_synthetic",
             ],
-            "period": ["2026-06-01", "2026-06-01", "2026-06-01", "2026-06-01"],
+            "period": [date(2026, 6, 1), date(2026, 6, 1), date(2026, 6, 1), date(2026, 6, 1)],
             "category": ["CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD"],
             "manufacturer": ["Manufacturer A", "Manufacturer B", "Manufacturer Stale", "Manufacturer X"],
             "brand": ["Brand A", "Brand B", "Brand Stale", "Brand X"],

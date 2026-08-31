@@ -895,6 +895,169 @@ def test_active_sku_records_zero_active_period_as_evaluated(tmp_path) -> None:
     )
 
 
+def test_active_sku_resolves_brand_scope_from_source_like_sku_universe(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows(
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False),
+            ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_b", False),
+            ("category_a", "manufacturer_b", "brand_b", "sku_c", "store_c", False),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            grain_id="brand",
+            entity_filters={"brand": ("brand_a",)},
+            user_entity_filters={"brand": ("brand_a",)},
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.READY
+    assert response.items[0].value == 2
+    assert response.items[0].limitations == ()
+
+
+def test_active_sku_resolves_category_manufacturer_scope_from_source_like_sku_universe(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows(
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False),
+            ("category_a", "manufacturer_a", "brand_b", "sku_b", "store_b", False),
+            ("category_a", "manufacturer_b", "brand_a", "sku_c", "store_c", False),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            entity_filters={
+                "category": ("category_a",),
+                "manufacturer": ("manufacturer_a",),
+            },
+            user_entity_filters={
+                "category": ("category_a",),
+                "manufacturer": ("manufacturer_a",),
+            },
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.READY
+    assert response.items[0].value == 2
+    assert response.items[0].limitations == ()
+
+
+def test_active_sku_source_like_resolution_preserves_private_label_scope(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(
+            private_label_scope=PrivateLabelScope.EXCLUDE,
+            current_active_skus=("sku_a", "sku_b"),
+        ),
+        source_like_rows=_source_like_rows(
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False),
+            ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_b", True),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            grain_id="brand",
+            entity_filters={"brand": ("brand_a",)},
+            user_entity_filters={"brand": ("brand_a",)},
+            private_label_scope=PrivateLabelScope.EXCLUDE,
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.READY
+    assert response.items[0].value == 1
+    assert response.items[0].limitations == ()
+
+
+def test_active_sku_source_like_resolution_uses_selected_period_window(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows_with_period(
+            (
+                "category_a",
+                "manufacturer_a",
+                "brand_a",
+                "sku_a",
+                "store_a",
+                False,
+                date(2026, 1, 1),
+            ),
+            (
+                "category_a",
+                "manufacturer_a",
+                "brand_a",
+                "sku_b",
+                "store_b",
+                False,
+                date(2025, 1, 1),
+            ),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            grain_id="brand",
+            entity_filters={"brand": ("brand_a",)},
+            user_entity_filters={"brand": ("brand_a",)},
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.READY
+    assert response.items[0].value == 1
+    assert response.items[0].limitations == ()
+
+
+def test_active_sku_preserves_route_resolved_execution_sku_scope(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows_with_period(
+            (
+                "category_a",
+                "manufacturer_a",
+                "brand_a",
+                "sku_a",
+                "store_a",
+                False,
+                date(2026, 1, 1),
+            ),
+            (
+                "category_a",
+                "manufacturer_a",
+                "brand_a",
+                "sku_b",
+                "store_b",
+                False,
+                date(2025, 1, 1),
+            ),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            grain_id="brand",
+            entity_filters={"sku": ("sku_a", "sku_b")},
+            user_entity_filters={"brand": ("brand_a",)},
+        )
+    )
+
+    assert response.items[0].status == PortfolioConceptStatus.READY
+    assert response.items[0].value == 2
+    assert response.items[0].limitations == ()
+
+
 def test_active_sku_scalar_is_not_defined_for_date_range(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts())
 
@@ -1146,10 +1309,21 @@ def test_gated_market_and_competitor_concepts_are_honest(tmp_path) -> None:
     assert "direct_peer_flavor_semantics_unresolved" in limitations
 
 
-def _service(tmp_path, facts: pl.DataFrame) -> PortfolioMarketService:
+def _service(
+    tmp_path,
+    facts: pl.DataFrame,
+    *,
+    source_like_rows: pl.DataFrame | None = None,
+) -> PortfolioMarketService:
     path = tmp_path / "portfolio_facts.parquet"
     write_mart_metric_facts(facts, path)
-    return PortfolioMarketService(DashboardMartQueryService(path, mart_builds=(_build(),)))
+    source_like_path = None
+    if source_like_rows is not None:
+        source_like_path = tmp_path / "source_like.parquet"
+        source_like_rows.write_parquet(source_like_path)
+    return PortfolioMarketService(
+        DashboardMartQueryService(path, mart_builds=(_build(),), source_like_rows_path=source_like_path)
+    )
 
 
 def _request(
@@ -1201,6 +1375,31 @@ def _build() -> MartBuildMetadata:
         period_grain="month",
         period_start=date(2025, 1, 1),
         period_end=date(2026, 1, 31),
+    )
+
+
+def _source_like_rows(*rows: tuple[str, str, str, str, str, bool]) -> pl.DataFrame:
+    return _source_like_rows_with_period(*(row + (date(2026, 1, 1),) for row in rows))
+
+
+def _source_like_rows_with_period(
+    *rows: tuple[str, str, str, str, str, bool, date],
+) -> pl.DataFrame:
+    return pl.DataFrame(
+        [
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "period": period,
+                "category": category,
+                "manufacturer": manufacturer,
+                "brand": brand,
+                "canonical_product_id": sku,
+                "canonical_store_id": store,
+                "private_label_flag": private_label,
+            }
+            for category, manufacturer, brand, sku, store, private_label, period in rows
+        ]
     )
 
 
@@ -1366,7 +1565,7 @@ def _portfolio_facts(
                     1.0 if sku in active_skus else 0.0,
                     "sum",
                     private_label_scope,
-                    parent_entity_ids={"category": "category_a", "sku": sku},
+                    parent_entity_ids={"category": "category_a", "canonical_product_id": sku},
                 )
             )
             rows.append(
@@ -1378,7 +1577,7 @@ def _portfolio_facts(
                     200.0 if sku == "sku_b" else 100.0,
                     "sum",
                     private_label_scope,
-                    parent_entity_ids={"category": "category_a", "sku": sku},
+                    parent_entity_ids={"category": "category_a", "canonical_product_id": sku},
                 )
             )
     return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)

@@ -9,6 +9,8 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Final, cast
 
+import polars as pl
+
 from retail_analytics.mart.metric_facts import RangeAggregationStrategy
 from retail_analytics.mart.query import (
     ComparisonMode,
@@ -30,6 +32,16 @@ class PortfolioConceptStatus(StrEnum):
     PARTIAL = "PARTIAL"
     NOT_AVAILABLE = "NOT_AVAILABLE"
     NOT_APPLICABLE = "NOT_APPLICABLE"
+
+
+ACTIVE_SKU_FILTER_COLUMNS: Final = {
+    "category": "category",
+    "manufacturer": "manufacturer",
+    "brand": "brand",
+    "sku": "canonical_product_id",
+    "store": "canonical_store_id",
+}
+NO_MATCHING_ACTIVE_SKU_FILTER: Final = "__NO_MATCHING_ACTIVE_SKU_FILTER__"
 
 
 @dataclass(frozen=True)
@@ -740,6 +752,7 @@ class PortfolioMarketService:
             return _not_applicable(request, concept_id, "assortment", "active_sku_requires_current_period")
         history_start = request.date_from if request.period_mode == PeriodMode.DATE_RANGE else None
         history_end = request.date_to or request.date_from
+        entity_filters = self._active_sku_entity_filters(request, history_end=history_end)
         response = self.query_service.query(
             _metric_request(
                 request,
@@ -747,6 +760,7 @@ class PortfolioMarketService:
                 metric_concepts=("units",),
                 comparison_mode=ComparisonMode.NONE,
                 entity_ids=(),
+                entity_filters=entity_filters,
                 date_from=history_start,
                 date_to=history_end,
             )
@@ -805,6 +819,34 @@ class PortfolioMarketService:
                 reference_period=reference_period,
             ),
         )
+
+    def _active_sku_entity_filters(
+        self,
+        request: PortfolioMarketQueryRequest,
+        *,
+        history_end: date | None,
+    ) -> dict[str, tuple[str, ...]] | None:
+        if (request.entity_filters or {}).get("sku"):
+            return request.entity_filters
+        semantic_filters = _semantic_entity_filters(request)
+        if not semantic_filters:
+            return request.entity_filters
+        resolved_skus = _resolve_active_sku_filter_skus(
+            self.query_service.source_like_rows_path,
+            request,
+            history_end=history_end,
+            filters=semantic_filters,
+            source_revision_ids=_active_sku_source_revision_ids(self.query_service.mart_builds, request),
+        )
+        if resolved_skus is None:
+            return request.entity_filters
+        filters = {
+            key: values
+            for key, values in (request.entity_filters or {}).items()
+            if key not in {"manufacturer", "brand", "sku"} and values
+        }
+        filters["sku"] = resolved_skus or (NO_MATCHING_ACTIVE_SKU_FILTER,)
+        return filters
 
     def _brand_category_item(self, request: PortfolioMarketQueryRequest, concept_id: str) -> PortfolioMarketItem:
         if request.comparison_mode == ComparisonMode.NONE or request.period_mode != PeriodMode.SINGLE_PERIOD:
@@ -1522,6 +1564,69 @@ def _single_brand_entity(request: PortfolioMarketQueryRequest) -> tuple[str | No
 
 def _semantic_entity_filters(request: PortfolioMarketQueryRequest) -> dict[str, tuple[str, ...]]:
     return request.user_entity_filters or request.entity_filters or {}
+
+
+def _resolve_active_sku_filter_skus(
+    source_like_rows_path: Path | None,
+    request: PortfolioMarketQueryRequest,
+    *,
+    history_end: date | None,
+    filters: dict[str, tuple[str, ...]],
+    source_revision_ids: tuple[str, ...] = (),
+) -> tuple[str, ...] | None:
+    if source_like_rows_path is None or not source_like_rows_path.exists():
+        return None
+    selected = {
+        key: tuple(value for value in filters.get(key, ()) if value)
+        for key in ACTIVE_SKU_FILTER_COLUMNS
+        if filters.get(key)
+    }
+    if not selected:
+        return None
+    available_columns = set(pl.read_parquet_schema(source_like_rows_path).names())
+    if "canonical_product_id" not in available_columns:
+        return None
+    frame = pl.scan_parquet(source_like_rows_path).filter(
+        (pl.col("retailer_id") == request.retailer_id)
+        & (pl.col("source_id") == request.source_id)
+        & pl.col("canonical_product_id").is_not_null()
+        & (pl.col("canonical_product_id") != "")
+    )
+    if source_revision_ids and "source_revision_id" in available_columns:
+        frame = frame.filter(
+            pl.col("source_revision_id").cast(pl.Utf8).is_in([str(value) for value in source_revision_ids])
+        )
+    if request.date_from is not None and "period" in available_columns:
+        frame = frame.filter(pl.col("period") >= request.date_from)
+    if history_end is not None and "period" in available_columns:
+        frame = frame.filter(pl.col("period") <= history_end)
+    if "private_label_flag" in available_columns and request.private_label_scope != PrivateLabelScope.INCLUDE:
+        frame = frame.filter(pl.col("private_label_flag") == (request.private_label_scope == PrivateLabelScope.ONLY))
+    for key, values in selected.items():
+        column = ACTIVE_SKU_FILTER_COLUMNS[key]
+        if column not in available_columns:
+            return None
+        frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
+    return tuple(
+        str(value)
+        for value in frame.select(pl.col("canonical_product_id").cast(pl.Utf8).unique().sort()).collect().to_series()
+    )
+
+
+def _active_sku_source_revision_ids(
+    mart_builds: tuple[Any, ...],
+    request: PortfolioMarketQueryRequest,
+) -> tuple[str, ...]:
+    matched = [
+        build
+        for build in mart_builds
+        if build.retailer_id == request.retailer_id
+        and request.source_id in build.source_ids
+        and (request.mart_build_id is None or build.mart_build_id == request.mart_build_id)
+    ]
+    if len(matched) != 1:
+        return ()
+    return tuple(str(value) for value in matched[0].source_revision_ids)
 
 
 def _block_for_concept(concept_id: str) -> str:

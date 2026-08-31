@@ -66,7 +66,7 @@ ENTITY_PARENT_FILTERS = {
     "category": (),
     "manufacturer": ("category",),
     "brand": ("category", "manufacturer"),
-    "sku": ("category", "manufacturer", "brand"),
+    "sku": ("category", "manufacturer", "brand", "store"),
     "store": ("category", "manufacturer", "brand", "sku"),
 }
 PRODUCT_FILTERS = ("category", "manufacturer", "brand", "sku")
