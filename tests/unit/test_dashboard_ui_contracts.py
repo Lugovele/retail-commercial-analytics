@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import shutil
+import subprocess
+import textwrap
 from dataclasses import replace
 from datetime import date
 from importlib import resources
@@ -1966,7 +1969,7 @@ def test_overview_kpi_matrix_removes_comparator_visual_while_preserving_directio
     assert ".kpi-comparator-track" not in styles
     assert ".kpi-comparator-marker" not in styles
     assert "deltaSemanticClass(definition.concept" not in script
-    assert "kpiDirectionPresentationClass(comparison.delta)" in script
+    assert "kpiDirectionPresentationClass(deltaValue, deltaFormat)" in script
     assert "--status-positive" in styles
     assert "--status-negative" in styles
     assert "--status-neutral" in styles
@@ -2014,11 +2017,15 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert 'left.className = "kpi-card-main"' in kpi_renderer
     assert 'if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {' in kpi_renderer
     assert "if (isComparisonDisplayMode() && comparison)" not in kpi_renderer
-    assert 'delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`' in kpi_renderer
+    assert "const deltaFormat = kpiDeltaPresentationFormat(comparison, model.entry);" in kpi_renderer
+    assert "const deltaValue = kpiDeltaPresentationValue(comparison, model.entry);" in kpi_renderer
+    assert 'delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(deltaValue, deltaFormat)}`' in kpi_renderer
     assert 'deltaSlot.className = "kpi-meta kpi-meta--delta kpi-meta--delta-placeholder";' in kpi_renderer
     assert 'deltaSlot.setAttribute("aria-hidden", "true");' in kpi_renderer
     assert "text: kpiDeltaText(comparison, model.entry)" in kpi_renderer
-    assert 'className: kpiDirectionPresentationClass(comparison.delta)' in kpi_renderer
+    assert 'value: deltaValue,' in kpi_renderer
+    assert 'format: deltaFormat,' in kpi_renderer
+    assert 'className: kpiDirectionPresentationClass(deltaValue, deltaFormat)' in kpi_renderer
     assert 'model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE"' in kpi_renderer
     assert 'left.appendChild(renderKpiEvidenceRow(' in kpi_renderer
     assert 'model.state === "CURRENT_ONLY_NO_REFERENCE"' in kpi_renderer
@@ -2029,8 +2036,11 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "meta.textContent = kpiContextText(comparison, entry)" not in kpi_renderer
     assert "comparison.comparison_value" not in kpi_helpers
     assert 'return "";' in kpi_helpers
-    assert 'if (entry.format === "percent") return formatDeltaValue(comparison.delta, deltaFormat);' in kpi_helpers
-    assert 'return formatDeltaValue(comparison.pct_delta, "percent");' in kpi_helpers
+    assert "function kpiDeltaPresentationFormat(comparison, entry)" in kpi_helpers
+    assert "function kpiDeltaPresentationValue(comparison, entry)" in kpi_helpers
+    assert "return formatDeltaValue(presentationValue, presentationFormat);" in kpi_helpers
+    assert 'if (entry.format === "percent") return deltaFormat;' in kpi_helpers
+    assert 'return "percent";' in kpi_helpers
     assert "comparison.comparison_period_start" in kpi_helpers
     assert "function kpiValueWithUnit" in script
     assert "function conciseKpiUnavailableText" in script
@@ -2517,6 +2527,7 @@ def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
     assert "retailer_margin_pct" in script
     assert "function deltaFormatFor(format)" in script
     assert 'return format === "percent" ? "percentage_points" : format;' in script
+    assert "function displayNormalizedDeltaValue(value, format)" in script
     assert "formatDeltaValue(comparison.delta, deltaFormatFor(entry.format))" in script
     assert "formatDeltaValue(row.delta, deltaFormatFor(metric?.format || \"decimal\"))" in script
     assert "delta-rank-improved" in script
@@ -2538,6 +2549,77 @@ def test_semantic_delta_classes_are_directional_not_good_bad() -> None:
     assert "--delta-rank-improved" in styles
     assert "--delta-rank-declined" in styles
     assert ".delta-neutral-up,\n.delta-neutral-down,\n.delta-neutral {\n  color: var(--delta-neutral);" in styles
+
+
+def test_zero_delta_display_is_normalized_before_text_and_direction() -> None:
+    script = html_or_script("app.js")
+
+    assert "const normalizedValue = displayNormalizedDeltaValue(value, format);" in script
+    assert "if (Object.is(roundedScaledValue, -0) || roundedScaledValue === 0) return 0;" in script
+    assert 'const prefix = normalizedValue > 0 ? "+" : "";' in script
+    assert "formatValue(normalizedValue, format)" in script
+    assert "function deltaSemanticClass(concept, value, format = null)" in script
+    assert "const normalizedValue = displayNormalizedDeltaValue(value, format || deltaFormatFor(metricPresentation(concept)?.format || \"decimal\"));" in script
+    assert "deltaSemanticClass(concept, value, format)" in script
+    assert 'if (normalizedValue === null || normalizedValue === 0) return "kpi-direction-zero";' in script
+    assert "Number(value) === 0" not in script.split("function kpiDirectionPresentationClass", 1)[1].split("function overviewPortfolioItem", 1)[0]
+    assert "Number(value) === 0" not in script.split("function deltaSemanticClass", 1)[1].split("function deltaSemanticsText", 1)[0]
+
+
+def test_zero_delta_formatter_and_direction_execute_against_app_js() -> None:
+    node = shutil.which("node")
+    bundled_node = Path.home() / ".cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node.exe"
+    if node is None and bundled_node.exists():
+        node = str(bundled_node)
+    if node is None:
+        pytest.skip("node executable is required for dashboard JavaScript formatter contract")
+
+    app_js = resources.files("retail_analytics.dashboard.static").joinpath("app.js")
+    script = textwrap.dedent(
+        f"""
+        const fs = require("fs");
+        const src = fs.readFileSync({str(app_js)!r}, "utf8");
+        function extract(name) {{
+          const start = src.indexOf(`function ${{name}}`);
+          if (start < 0) throw new Error(`missing ${{name}}`);
+          const open = src.indexOf("{{", start);
+          let depth = 0;
+          for (let index = open; index < src.length; index += 1) {{
+            if (src[index] === "{{") depth += 1;
+            if (src[index] === "}}") depth -= 1;
+            if (depth === 0) return src.slice(start, index + 1);
+          }}
+          throw new Error(`unterminated ${{name}}`);
+        }}
+        eval([
+          extract("formatValue"),
+          extract("displayNormalizedDeltaValue"),
+          extract("formatDeltaValue"),
+          extract("kpiDirectionPresentationClass")
+        ].join("\\n"));
+        const cases = [
+          ["exact zero", 0, "percent", "0%", "kpi-direction-zero"],
+          ["negative zero", -0, "percent", "0%", "kpi-direction-zero"],
+          ["positive zero", +0, "percent", "0%", "kpi-direction-zero"],
+          ["small negative display zero", -0.00004, "percent", "0%", "kpi-direction-zero"],
+          ["small positive display zero", 0.00004, "percent", "0%", "kpi-direction-zero"],
+          ["real positive", 0.012, "percent", "+1,2%", "kpi-direction-up"],
+          ["real negative", -0.012, "percent", "-1,2%", "kpi-direction-down"],
+          ["zero percentage points", -0.00004, "percentage_points", "0 п.п.", "kpi-direction-zero"],
+          ["integer rounded zero", -0.4, "integer", "0", "kpi-direction-zero"],
+          ["currency rounded zero", 0.4, "currency", "0", "kpi-direction-zero"]
+        ];
+        for (const [label, value, format, expectedText, expectedClass] of cases) {{
+          const actualText = formatDeltaValue(value, format);
+          const actualClass = kpiDirectionPresentationClass(value, format);
+          if (actualText !== expectedText || actualClass !== expectedClass) {{
+            throw new Error(`${{label}}: got ${{actualText}}/${{actualClass}}, expected ${{expectedText}}/${{expectedClass}}`);
+          }}
+        }}
+        """
+    )
+
+    subprocess.run([node, "-e", script], check=True, capture_output=True, text=True)
 
 
 def test_excel_visual_grammar_tokens_and_portfolio_components_are_semantic() -> None:

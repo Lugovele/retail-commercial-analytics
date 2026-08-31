@@ -911,10 +911,10 @@ function metricValueButton({ concept, text, result = null, response = null, clas
   return button;
 }
 
-function metricDeltaButton({ concept, text, value, result = null, response = null, className = "", sections = null }) {
+function metricDeltaButton({ concept, text, value, format = null, result = null, response = null, className = "", sections = null }) {
   const button = document.createElement("button");
   button.type = "button";
-  button.className = `metric-value-button metric-delta-button ${deltaSemanticClass(concept, value)} ${className}`.trim();
+  button.className = `metric-value-button metric-delta-button ${deltaSemanticClass(concept, value, format)} ${className}`.trim();
   button.textContent = text;
   button.setAttribute("aria-label", `Проверить изменение: ${accessibleDisplayLabel(concept)}`);
   button.dataset.deltaSemantics = deltaSemanticsFor(concept);
@@ -925,7 +925,7 @@ function metricDeltaButton({ concept, text, value, result = null, response = nul
   return button;
 }
 
-function metricComparisonCell({ concept, label, text, result = null, response = null, role = "current", deltaValue = null }) {
+function metricComparisonCell({ concept, label, text, result = null, response = null, role = "current", deltaValue = null, deltaFormat = null }) {
   const wrap = document.createElement("div");
   wrap.className = `metric-comparison-cell metric-comparison-cell--${role}`;
   if (label) appendText(wrap, "span", label);
@@ -934,7 +934,7 @@ function metricComparisonCell({ concept, label, text, result = null, response = 
   if (result) {
     value.appendChild(
       role === "delta"
-        ? metricDeltaButton({ concept, text, value: deltaValue, result, response })
+        ? metricDeltaButton({ concept, text, value: deltaValue, format: deltaFormat, result, response })
         : metricValueButton({ concept, text, result, response })
     );
   } else {
@@ -1844,15 +1844,18 @@ function renderKpiHeadline(definition, model) {
   }
   const comparison = model.comparison;
   if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {
+    const deltaFormat = kpiDeltaPresentationFormat(comparison, model.entry);
+    const deltaValue = kpiDeltaPresentationValue(comparison, model.entry);
     const delta = document.createElement("span");
-    delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`;
+    delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(deltaValue, deltaFormat)}`;
     delta.appendChild(metricDeltaButton({
       concept: definition.concept,
       text: kpiDeltaText(comparison, model.entry),
-      value: comparison.delta,
+      value: deltaValue,
+      format: deltaFormat,
       result: model.result,
       response: model.response,
-      className: kpiDirectionPresentationClass(comparison.delta)
+      className: kpiDirectionPresentationClass(deltaValue, deltaFormat)
     }));
     headline.appendChild(delta);
   } else {
@@ -2040,9 +2043,10 @@ function offsetPeriodMonth(period, monthOffset) {
   return `${year}-${String(month).padStart(2, "0")}-${match[3]}`;
 }
 
-function kpiDirectionPresentationClass(value) {
-  if (value === null || value === undefined || Number.isNaN(value) || Number(value) === 0) return "kpi-direction-zero";
-  return Number(value) > 0 ? "kpi-direction-up" : "kpi-direction-down";
+function kpiDirectionPresentationClass(value, format = "decimal") {
+  const normalizedValue = displayNormalizedDeltaValue(value, format);
+  if (normalizedValue === null || normalizedValue === 0) return "kpi-direction-zero";
+  return normalizedValue > 0 ? "kpi-direction-up" : "kpi-direction-down";
 }
 
 function overviewPortfolioItem(concept) {
@@ -2558,7 +2562,8 @@ function renderSalesDriverMatrix() {
           result,
           response,
           role: cell.role || "current",
-          deltaValue: cell.deltaValue
+          deltaValue: cell.deltaValue,
+          deltaFormat: cell.deltaFormat
         }));
       } else {
         td.textContent = cell.text;
@@ -2634,7 +2639,7 @@ function salesDriverRows() {
 function salesDriverMetricCells(result, entry, concept, response = state.salesDriversResponse) {
   const staticCell = (text) => ({ text, inspectable: false });
   const valueCell = (text, role = "current") => ({ text, inspectable: true, isDelta: false, role });
-  const deltaCell = (text, deltaValue) => ({ text, inspectable: true, isDelta: true, deltaValue, role: "delta" });
+  const deltaCell = (text, deltaValue, deltaFormat) => ({ text, inspectable: true, isDelta: true, deltaValue, deltaFormat, role: "delta" });
   const localLimitation = salesDriverLocalLimitation(concept);
   if (localLimitation) {
     return isComparisonDisplayMode()
@@ -2667,7 +2672,7 @@ function salesDriverMetricCells(result, entry, concept, response = state.salesDr
   return [
     valueCell(formatValue(comparison.current_value, entry.format), "current"),
     valueCell(formatValue(comparison.comparison_value, entry.format), "reference"),
-    deltaCell(`${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`, comparison.delta)
+    deltaCell(`${formatDeltaValue(comparison.delta, deltaFormat)} · ${formatValue(comparison.pct_delta, "percent")}`, comparison.delta, deltaFormat)
   ];
 }
 
@@ -3500,6 +3505,7 @@ function geographyTableDeltaCell(concept, entityId) {
     response: state.storesGeographyResponse,
     inspectable: Boolean(result && comparison),
     deltaValue: comparison?.delta,
+    deltaFormat,
     role: "delta"
   };
 }
@@ -3705,7 +3711,9 @@ function storeTableDelta(concept, entityId) {
 
 function storeTableDeltaCell(concept, entityId) {
   const result = storeResultFor(concept, entityId);
+  const entry = catalogEntry(concept);
   const comparison = comparisonFor(state.storesResponse, result);
+  const deltaFormat = entry?.format === "percent" ? "percentage_points" : entry?.format;
   return {
     text: storeTableDelta(concept, entityId),
     concept,
@@ -3713,6 +3721,7 @@ function storeTableDeltaCell(concept, entityId) {
     response: state.storesResponse,
     inspectable: Boolean(result && comparison),
     deltaValue: comparison?.delta,
+    deltaFormat,
     role: "delta"
   };
 }
@@ -4541,7 +4550,7 @@ function renderContributionTable(table) {
     [
       { text: formatValue(row.current_value, metric?.format || "decimal"), value: row.current_value, type: "value", role: "current" },
       { text: formatValue(row.reference_value, metric?.format || "decimal"), value: row.reference_value, type: "value", role: "reference" },
-      { text: formatDeltaValue(row.delta, deltaFormatFor(metric?.format || "decimal")), value: row.delta, type: "delta", role: "delta" },
+      { text: formatDeltaValue(row.delta, deltaFormatFor(metric?.format || "decimal")), value: row.delta, format: deltaFormatFor(metric?.format || "decimal"), type: "delta", role: "delta" },
       {
         text: row.contribution_share === null ? "н/д" : formatValue(row.contribution_share, "percent"),
         value: row.contribution_share,
@@ -4559,6 +4568,7 @@ function renderContributionTable(table) {
           concept: state.contributionResponse.metric_concept,
           text: cell.text,
           value: cell.value,
+          format: cell.format,
           result: contributionResultFromRow(row, cell.value),
           response: state.contributionResponse,
           sections: rowSections
@@ -5445,10 +5455,11 @@ function deltaSemanticsFor(concept) {
   return "NEUTRAL_DIRECTIONAL";
 }
 
-function deltaSemanticClass(concept, value) {
-  if (value === null || value === undefined || Number.isNaN(value) || Number(value) === 0) return "delta-neutral";
+function deltaSemanticClass(concept, value, format = null) {
+  const normalizedValue = displayNormalizedDeltaValue(value, format || deltaFormatFor(metricPresentation(concept)?.format || "decimal"));
+  if (normalizedValue === null || normalizedValue === 0) return "delta-neutral";
   const semantics = deltaSemanticsFor(concept);
-  const sign = Number(value) > 0 ? "up" : "down";
+  const sign = normalizedValue > 0 ? "up" : "down";
   if (semantics === "RANK_DIRECTIONAL") return sign === "up" ? "delta-rank-declined" : "delta-rank-improved";
   if (semantics === "OUTCOME_DIRECTIONAL") return sign === "up" ? "delta-outcome-up" : "delta-outcome-down";
   return sign === "up" ? "delta-neutral-up" : "delta-neutral-down";
@@ -5860,12 +5871,26 @@ function kpiContextText(comparison, entry) {
 }
 
 function kpiDeltaText(comparison, entry) {
+  const presentationFormat = kpiDeltaPresentationFormat(comparison, entry);
+  const presentationValue = kpiDeltaPresentationValue(comparison, entry);
+  return formatDeltaValue(presentationValue, presentationFormat);
+}
+
+function kpiDeltaPresentationFormat(comparison, entry) {
   const deltaFormat = deltaFormatFor(entry.format);
-  if (entry.format === "percent") return formatDeltaValue(comparison.delta, deltaFormat);
+  if (entry.format === "percent") return deltaFormat;
   if (comparison.pct_delta === null || comparison.pct_delta === undefined || Number.isNaN(comparison.pct_delta)) {
-    return formatDeltaValue(comparison.delta, deltaFormat);
+    return deltaFormat;
   }
-  return formatDeltaValue(comparison.pct_delta, "percent");
+  return "percent";
+}
+
+function kpiDeltaPresentationValue(comparison, entry) {
+  if (entry.format === "percent") return comparison.delta;
+  if (comparison.pct_delta === null || comparison.pct_delta === undefined || Number.isNaN(comparison.pct_delta)) {
+    return comparison.delta;
+  }
+  return comparison.pct_delta;
 }
 
 function kpiReferenceText(comparison, entry, definition = null) {
@@ -6589,12 +6614,24 @@ function formatValue(value, format) {
 
 function formatDeltaValue(value, format) {
   if (value === null || value === undefined || Number.isNaN(value)) return "н/д";
-  const prefix = value > 0 ? "+" : "";
-  return `${prefix}${formatValue(value, format)}`;
+  const normalizedValue = displayNormalizedDeltaValue(value, format);
+  const prefix = normalizedValue > 0 ? "+" : "";
+  return `${prefix}${formatValue(normalizedValue, format)}`;
 }
 
 function deltaFormatFor(format) {
   return format === "percent" ? "percentage_points" : format;
+}
+
+function displayNormalizedDeltaValue(value, format) {
+  if (value === null || value === undefined || Number.isNaN(value)) return null;
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) return null;
+  const scaledValue = (format === "percent" || format === "percentage_points") ? numericValue * 100 : numericValue;
+  const maximumFractionDigits = format === "integer" || format === "currency" ? 0 : format === "decimal" ? 2 : 1;
+  const roundedScaledValue = Number(scaledValue.toFixed(maximumFractionDigits));
+  if (Object.is(roundedScaledValue, -0) || roundedScaledValue === 0) return 0;
+  return (format === "percent" || format === "percentage_points") ? roundedScaledValue / 100 : roundedScaledValue;
 }
 
 function formatPeriod(value) {
