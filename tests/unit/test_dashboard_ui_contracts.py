@@ -1275,6 +1275,20 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert 'id="period-popover-button"' in html
     assert 'aria-haspopup="dialog"' in html
     assert 'id="period-summary"' in html
+    popover_body = css.split(".period-popover {", 1)[1].split(".period-mode", 1)[0]
+    assert "width: min(680px, calc(100vw - 52px));" in popover_body
+    assert "max-height: min(560px, calc(100vh - 134px));" in popover_body
+    assert "overflow: auto;" in popover_body
+    assert "padding: 10px;" in popover_body
+    fields_body = css.split(".period-fields {", 1)[1].split(".period-fields--available", 1)[0]
+    assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in fields_body
+    assert ".period-fields--available" in css
+    assert "grid-template-columns: minmax(150px, 190px) minmax(170px, 210px) minmax(0, 1fr);" in css
+    derived_body = css.split(".derived-field strong {", 1)[1].split(".filter-count", 1)[0]
+    assert "max-height: 78px;" in derived_body
+    assert "overflow: auto;" in derived_body
+    assert "overflow-wrap: anywhere;" in derived_body
+    assert "data-toggle-full-list-filter" not in html.split('id="period-popover"', 1)[1].split('<div class="filter-grid"', 1)[0]
     active_mode_body = css.split(".mode-button.is-active {", 1)[1].split(".period-fields", 1)[0]
     assert "var(--brand-secondary)" not in active_mode_body
     assert "rgba(42, 125, 225, 0.1)" in active_mode_body
@@ -1311,14 +1325,21 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
         assert f'data-clear-pending-filter="{filter_id}"' in html
         assert f'data-inline-clear-filter="{filter_id}"' in html
         assert f'data-apply-filter="{filter_id}"' in html
+        assert f'data-toggle-full-list-filter="{filter_id}"' in html
 
     assert "function applyPendingFilter(id)" in script
     assert "state.pendingFilters[id]" in script
+    assert "expandedFilters: {}" in script
     assert "state.filters[id] = next;" in script
     assert "function renderFilterOptions(id)" in script
     assert "function visibleEntityOptions(id)" in script
-    assert ".slice(0, maxComboboxOptions)" in script
+    assert "state.expandedFilters[id] ? values : values.slice(0, maxComboboxOptions)" in script
     assert "const available = visibleEntityOptions(id);" in script
+    assert 'document.querySelectorAll("[data-toggle-full-list-filter]")' in script
+    assert "state.expandedFilters[id] = !state.expandedFilters[id];" in script
+    assert 'document.getElementById(`${id}-filter-popover`)?.classList.toggle("is-expanded", Boolean(state.expandedFilters[id]));' in script
+    assert 'fullList.textContent = expanded ? "Свернуть список" : "Показать весь список";' in script
+    assert "Показан весь список" in script
     select_visible_body = script.split('document.querySelector(`[data-select-all="${id}"]`)', 1)[1].split("document.querySelectorAll(\"[data-clear-pending-filter]\")", 1)[0]
     assert "const next = new Set(pendingValuesForFilter(id));" in select_visible_body
     assert "if (event.target.checked) next.add(item.value);" in select_visible_body
@@ -1334,6 +1355,7 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     assert 'primary.className = "filter-option-primary"' in script
     assert 'secondary.className = "filter-option-secondary"' in script
     assert "Показано ${visibleValues.length} из ${totalCount}" in script
+    assert "filter-popover.is-expanded" in html_or_script("styles.css")
     assert '"store": {' not in script
     assert "Фильтр ТТ будет подключён отдельно" not in script
     assert "function handleFilterSearchKeydown(event, id)" in script

@@ -34,6 +34,7 @@ const state = {
   filters: { category: [], manufacturer: [], brand: [], sku: [], store: [] },
   pendingFilters: {},
   filterQueries: { category: "", manufacturer: "", brand: "", sku: "", store: "" },
+  expandedFilters: {},
   openFilterId: null,
   scopeEditView: null,
   suppressScrollspyUntil: 0,
@@ -1089,6 +1090,17 @@ function bindDynamicControls() {
         invalidateLoadedViews();
         await runActiveViewQuery();
       });
+    });
+  });
+
+  document.querySelectorAll("[data-toggle-full-list-filter]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const id = button.dataset.toggleFullListFilter;
+      state.expandedFilters[id] = !state.expandedFilters[id];
+      renderFilterOptions(id);
+      document.getElementById(`${id}-filter-popover`)?.classList.toggle("is-expanded", Boolean(state.expandedFilters[id]));
+      button.setAttribute("aria-expanded", state.expandedFilters[id] ? "true" : "false");
     });
   });
 
@@ -4857,10 +4869,11 @@ function renderFilterOptions(id) {
   const input = document.getElementById(`${id}-search`);
   const list = document.getElementById(`${id}-options`);
   if (!input || !list) return;
-  const values = rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || "");
   const totalCount = state.options.entities?.[id]?.length || 0;
   const visibleValues = visibleEntityOptions(id);
   const pending = new Set(pendingValuesForFilter(id));
+  const isExpanded = Boolean(state.expandedFilters[id]);
+  document.getElementById(`${id}-filter-popover`)?.classList.toggle("is-expanded", isExpanded);
   list.replaceChildren();
   if (!visibleValues.length) {
     const empty = document.createElement("div");
@@ -4898,7 +4911,7 @@ function renderFilterOptions(id) {
     });
     const count = document.createElement("div");
     count.className = "filter-count-note";
-    count.textContent = `Показано ${visibleValues.length} из ${totalCount}`;
+    count.textContent = isExpanded ? `Показан весь список: ${visibleValues.length} из ${totalCount}` : `Показано ${visibleValues.length} из ${totalCount}`;
     list.appendChild(count);
   }
   input.setAttribute("aria-expanded", state.openFilterId === id ? "true" : "false");
@@ -4906,8 +4919,8 @@ function renderFilterOptions(id) {
 }
 
 function visibleEntityOptions(id) {
-  return rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || "")
-    .slice(0, maxComboboxOptions);
+  const values = rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || "");
+  return state.expandedFilters[id] ? values : values.slice(0, maxComboboxOptions);
 }
 
 function togglePendingFilterValue(id, value, checked) {
@@ -4999,6 +5012,7 @@ function openFilterPopover(id) {
   state.openFilterId = id;
   state.pendingFilters[id] = selectedValuesForFilter(id);
   state.filterQueries[id] = "";
+  state.expandedFilters[id] = false;
   const input = document.getElementById(`${id}-search`);
   if (input) input.value = "";
   document.getElementById(`${id}-filter-popover`)?.classList.remove("is-hidden");
@@ -5066,6 +5080,12 @@ function updateFilterPopoverFooter(id) {
   const selectedCount = pendingValuesForFilter(id).length;
   const footer = document.getElementById(`${id}-selected-count`);
   if (footer) footer.textContent = `Выбрано: ${selectedCount}`;
+  const fullList = document.querySelector(`[data-toggle-full-list-filter="${id}"]`);
+  if (fullList) {
+    const expanded = Boolean(state.expandedFilters[id]);
+    fullList.textContent = expanded ? "Свернуть список" : "Показать весь список";
+    fullList.setAttribute("aria-expanded", expanded ? "true" : "false");
+  }
   const selected = new Set(pendingValuesForFilter(id));
   const visible = visibleEntityOptions(id);
   const selectAll = document.querySelector(`[data-select-all="${id}"]`);
