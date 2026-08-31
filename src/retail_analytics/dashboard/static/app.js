@@ -58,7 +58,7 @@ const overviewKpiDefinitions = [
   { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот", unit: "₽", source: "query" },
   { slot: 3, group: "result", visualTier: "primary", concept: "retailer_margin_abs", label: "Маржа", unit: "₽", source: "query" },
   { slot: 4, group: "result", visualTier: "primary", concept: "retailer_margin_pct", label: "Маржинальность", unit: "%", source: "query" },
-  { slot: 5, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
+  { slot: 5, group: "result", visualTier: "primary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query" },
   {
     slot: 6,
     group: "coverage",
@@ -70,7 +70,7 @@ const overviewKpiDefinitions = [
     unavailableText: "Требуется правило веса и вселенной.",
     status: "BUSINESS_RULE_REQUIRED"
   },
-  { slot: 7, group: "coverage", visualTier: "secondary", concept: "velocity", label: "V\u0050O", unit: "шт./ТТ", source: "query" },
+  { slot: 7, group: "coverage", visualTier: "secondary", concept: "distribution", label: "Нумерическая дистрибуция", unit: "%", source: "query" },
   { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio" },
   {
     slot: 9,
@@ -665,6 +665,11 @@ function setActiveView(view, { refresh = true, scroll = false } = {}) {
       button.removeAttribute("aria-current");
     }
   });
+  document.querySelectorAll("[data-view-panel]").forEach((panel) => {
+    const isActive = panel.dataset.viewPanel === target;
+    panel.classList.toggle("is-hidden", !isActive);
+    panel.setAttribute("aria-hidden", isActive ? "false" : "true");
+  });
   if (scroll) {
     updateHash(target);
     scrollToView(target);
@@ -764,13 +769,14 @@ function setupSectionObserver() {
   const stickyOffset = stickyStackOffset();
   sectionObserver = new IntersectionObserver((entries) => {
     if (Date.now() < state.suppressScrollspyUntil) return;
+    const visibleSections = sections.filter((section) => !section.classList.contains("is-hidden"));
     if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
-      const lastView = sections[sections.length - 1]?.dataset.viewPanel;
+      const lastView = visibleSections[visibleSections.length - 1]?.dataset.viewPanel;
       if (lastView && lastView !== state.activeView) setActiveView(lastView, { refresh: true, scroll: false });
       return;
     }
     const visible = entries
-      .filter((entry) => entry.isIntersecting)
+      .filter((entry) => entry.isIntersecting && !entry.target.classList.contains("is-hidden"))
       .sort((left, right) => Math.abs(left.boundingClientRect.top - stickyOffset) - Math.abs(right.boundingClientRect.top - stickyOffset));
     const active = visible[0]?.target;
     const view = active?.dataset.viewPanel;
@@ -795,7 +801,7 @@ function setupSectionObserver() {
 
 function updateActiveSectionFromScroll() {
   if (Date.now() < state.suppressScrollspyUntil) return;
-  const sections = Array.from(document.querySelectorAll(".report-section"));
+  const sections = Array.from(document.querySelectorAll(".report-section")).filter((section) => !section.classList.contains("is-hidden"));
   if (!sections.length) return;
   if (window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 4) {
     const lastView = sections[sections.length - 1]?.dataset.viewPanel;
@@ -974,7 +980,7 @@ function bindDynamicControls() {
       await runActiveViewQuery();
     });
   });
-  document.getElementById("chart-metric").addEventListener("change", async (event) => {
+  document.getElementById("chart-metric")?.addEventListener("change", async (event) => {
     state.chartMetric = event.target.value;
     state.activeProvenanceConcept = event.target.value;
     await runOverviewQuery();
@@ -1693,15 +1699,26 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
   const concept = definition.concept;
   const result = model.result;
   const entry = model.entry;
+  const comparison = model.comparison;
   const card = document.createElement("article");
   card.className = `kpi-card kpi-card--${definition.visualTier} kpi-card--${deltaSemanticsFor(concept).toLowerCase().replace("_", "-")}`;
   card.dataset.kpiSlot = String(definition.slot);
   card.dataset.kpiGroup = definition.group;
   card.dataset.trendMetric = concept;
   card.dataset.kpiState = model.state;
-  if (state.chartMetric === concept) card.classList.add("is-chart-selected");
+  const isSelectedMetric = state.chartMetric === concept;
+  if (isSelectedMetric) card.classList.add("is-chart-selected");
+  card.tabIndex = 0;
+  card.setAttribute("role", "button");
+  card.setAttribute("aria-pressed", isSelectedMetric ? "true" : "false");
+  card.setAttribute("aria-label", `Показать динамику: ${definition.label}`);
   card.addEventListener("click", async (event) => {
     if (event.target.closest("button, a, input, select, textarea")) return;
+    await selectOverviewTrendMetric(concept);
+  });
+  card.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
     await selectOverviewTrendMetric(concept);
   });
   if (!model.available) {
@@ -1710,56 +1727,85 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
     content.className = "kpi-card-content";
     const left = document.createElement("div");
     left.className = "kpi-card-main";
-    appendText(left, "small", definition.label);
-    const value = document.createElement("strong");
-    value.className = "metric-current kpi-current-value";
-    value.textContent = "н/д";
+    left.appendChild(renderKpiHeadline(definition, model));
+    const value = document.createElement("div");
+    value.className = "kpi-evidence-row kpi-evidence-row--unavailable";
+    appendText(value, "span", "н/д").className = "kpi-evidence-value";
     left.appendChild(value);
     appendText(left, "span", conciseKpiUnavailableText(definition, model)).className = "kpi-unavailable-reason";
     content.appendChild(left);
     card.appendChild(content);
     return card;
   }
-  const comparison = model.comparison;
   const content = document.createElement("div");
   content.className = "kpi-card-content";
   const left = document.createElement("div");
   left.className = "kpi-card-main";
-  appendText(left, "small", definition.label);
-  const valueWrap = document.createElement("strong");
-  valueWrap.className = "metric-current kpi-current-value";
-  valueWrap.appendChild(metricValueButton({
-    concept,
-    text: kpiValueWithUnit(overviewKpiValueText(result, entry, definition), definition),
-    result,
-    response: model.response,
-    className: "metric-value-button--kpi"
-  }));
-  left.appendChild(valueWrap);
-  if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {
-    const meta = document.createElement("span");
-    meta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`;
-    meta.appendChild(metricDeltaButton({
+  left.appendChild(renderKpiHeadline(definition, model));
+  left.appendChild(renderKpiEvidenceRow(
+    "current",
+    kpiCurrentPeriodText(comparison),
+    kpiValueWithUnit(overviewKpiValueText(result, entry, definition), definition),
+    metricValueButton({
       concept,
-      text: kpiDeltaText(comparison, entry),
-      value: comparison.delta,
+      text: kpiValueWithUnit(overviewKpiValueText(result, entry, definition), definition),
       result,
       response: model.response,
-      className: kpiDirectionPresentationClass(comparison.delta)
-    }));
-    left.appendChild(meta);
-  }
+      className: "metric-value-button--kpi"
+    })
+  ));
   if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {
-    const reference = renderKpiReferenceLine(definition, model);
-    if (reference) left.appendChild(reference);
+    left.appendChild(renderKpiEvidenceRow(
+      "reference",
+      kpiReferencePeriodText(comparison),
+      kpiValueWithUnit(formatValue(comparison.comparison_value, model.entry.format), definition)
+    ));
   } else if (model.state === "CURRENT_ONLY_NO_REFERENCE") {
-    appendText(left, "span", "Сравнение недоступно").className = "kpi-meta kpi-missing-reference";
     const period = kpiMissingReferencePeriodText();
-    appendText(left, "span", period ? `Нет данных за ${period}` : "Нет данных за период сравнения").className = "kpi-meta kpi-missing-reference";
+    left.appendChild(renderKpiEvidenceRow("reference", period || "сравн.", "нет данных"));
   }
   content.appendChild(left);
   card.appendChild(content);
   return card;
+}
+
+function renderKpiHeadline(definition, model) {
+  const headline = document.createElement("div");
+  headline.className = "kpi-headline";
+  appendText(headline, "span", definition.label).className = "kpi-title";
+  if (state.chartMetric === definition.concept) {
+    appendText(headline, "span", "выбран").className = "visually-hidden";
+  }
+  const comparison = model.comparison;
+  if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {
+    const delta = document.createElement("span");
+    delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`;
+    delta.appendChild(metricDeltaButton({
+      concept: definition.concept,
+      text: kpiDeltaText(comparison, model.entry),
+      value: comparison.delta,
+      result: model.result,
+      response: model.response,
+      className: kpiDirectionPresentationClass(comparison.delta)
+    }));
+    headline.appendChild(delta);
+  }
+  return headline;
+}
+
+function renderKpiEvidenceRow(kind, period, text, node = null) {
+  const row = document.createElement("div");
+  row.className = `kpi-evidence-row kpi-evidence-row--${kind}`;
+  appendText(row, "span", kpiCompactPeriodText(period)).className = "kpi-evidence-period";
+  const value = document.createElement("span");
+  value.className = "kpi-evidence-value";
+  if (node) {
+    value.appendChild(node);
+  } else {
+    value.textContent = text;
+  }
+  row.appendChild(value);
+  return row;
 }
 
 function chronologicalMetricPoints(rows, source) {
@@ -1854,6 +1900,25 @@ function kpiReferencePeriodText(comparison) {
       : formatCompactPeriod(comparison.comparison_period_start);
   }
   return comparison.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "";
+}
+
+function kpiCurrentPeriodText(comparison = null) {
+  if (state.periodMode === "AVAILABLE_MONTH_SET") {
+    return comparison?.current_included_periods?.length
+      ? formatPeriodList(comparison.current_included_periods)
+      : formatCompactPeriod(selectedDateTo());
+  }
+  return formatCompactPeriod(selectedDateFrom());
+}
+
+function kpiCompactPeriodText(periodText) {
+  if (!periodText) return "";
+  const known = (state.options.periods || []).find((period) => formatCompactPeriod(period.value) === periodText || formatPeriod(period.value) === periodText);
+  const value = known?.value || (String(periodText).match(/\d{4}-\d{2}-\d{2}/)?.[0]);
+  if (!value) return periodText;
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return periodText;
+  return `${monthLabelsShort()[date.getMonth()]} ${String(date.getFullYear()).slice(-2)}`;
 }
 
 function kpiReferencePeriodCandidate() {
@@ -1960,6 +2025,7 @@ function overviewKpiUnavailableText(definition, model) {
 
 function renderKpiSecondaryContext() {
   const container = document.getElementById("kpi-secondary");
+  if (!container) return;
   const concepts = (secondaryContextByGrain[state.currentGrain] || [])
     .filter((concept) => visibleSummaryResult(concept))
     .slice(0, 3);
@@ -4478,6 +4544,7 @@ function breadcrumbLabel(grain, value) {
 
 function renderChartMetricOptions() {
   const select = document.getElementById("chart-metric");
+  if (!select) return;
   const metrics = overviewKpiDefinitions.filter((definition) => definition.source !== "reserved");
   select.replaceChildren(...metrics.map((definition) => {
     const label = definition.status === "BUSINESS_RULE_REQUIRED"
@@ -4504,7 +4571,7 @@ function renderSkeletons() {
     card.className = "kpi-card is-loading";
     return card;
   })));
-  document.getElementById("kpi-secondary").replaceChildren();
+  document.getElementById("kpi-secondary")?.replaceChildren();
   replaceWithMessage(document.getElementById("chart-box"), "loading-state", "Загрузка динамики...");
 }
 

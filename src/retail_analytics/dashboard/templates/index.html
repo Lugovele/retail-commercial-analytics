@@ -9,11 +9,11 @@
   <body>
     <div class="app-shell">
       <header class="app-header">
-        <h1 class="app-title">АНАЛИТИКА ПРОДАЖ</h1>
+        <h1 class="app-title">Аналитика</h1>
         <div class="app-header-actions" aria-label="Действия приложения">
-          <button type="button" class="header-link" data-header-action="reports" aria-controls="reports-panel">ОТЧЁТЫ</button>
-          <button type="button" class="header-icon" data-header-action="settings" aria-label="Настройки" title="Настройки будут подключены позже" disabled>⚙</button>
-          <button type="button" class="header-icon" data-header-action="help" aria-label="Помощь" title="Помощь будет подключена позже" disabled>?</button>
+          <button type="button" class="header-link" data-header-action="reports" aria-controls="reports-panel">Отчёты</button>
+          <button type="button" class="header-link" data-header-action="settings" title="Настройки будут подключены позже" disabled>Настройки</button>
+          <button type="button" class="header-link" data-header-action="help" title="Помощь будет подключена позже" disabled>Помощь</button>
         </div>
       </header>
       <nav class="workflow-nav" aria-label="Разделы аналитического отчёта">
@@ -228,7 +228,6 @@
             <article class="kpi-card is-loading"></article>
             <article class="kpi-card is-loading"></article>
           </section>
-          <section class="kpi-secondary" id="kpi-secondary" aria-label="Контекст по срезу"></section>
 
           <section class="overview-main">
             <article class="surface chart-panel">
@@ -237,13 +236,7 @@
                   <h2>Динамика показателя</h2>
                   <p id="chart-context">Фактические доступные периоды без заполнения пропусков.</p>
                 </div>
-                <div class="chart-actions">
-                  <label class="control compact">
-                    <span>Показатель</span>
-                    <select id="chart-metric"></select>
-                  </label>
-                  <button type="button" class="text-button inline-link" data-open-provenance aria-label="Проверить выбранный показатель">i</button>
-                </div>
+                <p class="chart-note">Пунктир — интервал без наблюдений</p>
               </div>
               <div class="chart-box" id="chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
               <div class="chart-footnote" id="chart-footnote"></div>

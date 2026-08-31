@@ -598,7 +598,9 @@ def test_fmcg_navigation_shell_mounts_section_placeholders_without_fake_content(
     assert "if (refresh) void ensureActiveViewData();" in script
     assert 'button.setAttribute("aria-current", "page");' in script
     assert 'button.removeAttribute("aria-current");' in script
-    assert 'panel.classList.toggle("is-hidden"' not in script
+    assert 'panel.classList.toggle("is-hidden", !isActive);' in script
+    assert 'panel.setAttribute("aria-hidden", isActive ? "false" : "true");' in script
+    assert 'const visibleSections = sections.filter((section) => !section.classList.contains("is-hidden"));' in script
     assert "showToast(\"Раздел будет раскрыт" not in script
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-header-action]")', 1)[0]
     assert "runOverviewQuery" not in nav_handler
@@ -1186,16 +1188,19 @@ def test_workspace_spacing_remediation_uses_stable_sticky_geometry() -> None:
     css = html_or_script("styles.css")
     script = html_or_script("app.js")
 
-    assert "--app-header-height: 54px;" in css
+    assert "--app-header-height: 48px;" in css
     assert "--workflow-nav-height: 36px;" in css
     assert "--workflow-nav-current-height: var(--workflow-nav-height);" in css
     assert "--report-scroll-margin-top: 168px;" in css
     header_body = css.split(".app-header {", 1)[1].split(".app-title", 1)[0]
-    assert "margin: calc(-1 * var(--space-5)) calc(-1 * var(--space-6)) 0;" in header_body
-    compact_header_body = css.split("@media (max-width: 1280px)", 1)[1].split(".workflow-nav", 1)[0]
-    assert "margin: calc(-1 * var(--space-4)) calc(-1 * var(--space-4)) 0;" in compact_header_body
+    assert "margin: 0 calc(-1 * var(--space-6));" in header_body
+    app_title_body = css.split(".app-title {", 1)[1].split(".app-header-actions", 1)[0]
+    assert "font-size: 14px;" in app_title_body
+    assert "text-transform: uppercase" not in app_title_body
+    assert '<h1 class="app-title">Аналитика</h1>' in html_or_script("index.html")
+    assert ">Отчёты</button>" in html_or_script("index.html")
     scope_body = css.split(".scope-panel {", 1)[1].split(".scope-toolbar", 1)[0]
-    assert "padding: 10px 0 16px;" in scope_body
+    assert "padding: 5px 0 6px;" in scope_body
     assert "top: calc(var(--app-header-height) + var(--workflow-nav-current-height));" in scope_body
     assert ".context-coverage-note:empty" in css
     assert ".breadcrumb-row:empty" in css
@@ -1428,7 +1433,7 @@ def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> 
     css = html_or_script("styles.css")
 
     toolbar_body = css.split(".scope-toolbar {", 1)[1].split(".control,", 1)[0]
-    assert "column-gap: 6px;" in toolbar_body
+    assert "column-gap: 5px;" in toolbar_body
     assert "row-gap: 0;" in toolbar_body
     assert '.multi-filter[data-filter="category"] {' in css
     assert "margin-left: 8px;" in css
@@ -1625,7 +1630,7 @@ def test_continuous_report_scope_keeps_filters_during_period_and_assortment_chan
     script = html_or_script("app.js")
 
     period_handler = script.split('["period-single", "period-a", "period-available-end", "date-from", "date-to"].forEach((id) => {', 1)[1].split('document.getElementById("sales-drivers-provenance")', 1)[0]
-    assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("chart-metric")', 1)[0]
+    assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("preview-grain")', 1)[0]
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-signal-kind]")', 1)[0]
 
     assert "await refreshRuntimeOptions();" in period_handler
@@ -1755,9 +1760,9 @@ def test_overview_uses_ordered_business_kpi_surface() -> None:
         '"revenue_vat"',
         '"retailer_margin_abs"',
         '"retailer_margin_pct"',
-        '"distribution"',
-        '"weighted_distribution"',
         '"velocity"',
+        '"weighted_distribution"',
+        '"distribution"',
         '"active_sku_count"',
         '"average_price_per_liter"',
         '"weighted_shelf_price_vat"',
@@ -1800,9 +1805,12 @@ def test_overview_kpi_groups_preserve_business_reading_order() -> None:
     assert "ПОКРЫТИЕ · СКОРОСТЬ · АССОРТИМЕНТ" not in overview_groups
     assert 'id: "price", label: "ЦЕНА", visualTier: "secondary"' in overview_groups
     assert overview_surface.index('"retailer_margin_abs"') < overview_surface.index('"retailer_margin_pct"')
-    assert overview_surface.index('"distribution"') < overview_surface.index('"weighted_distribution"')
-    assert overview_surface.index('"weighted_distribution"') < overview_surface.index('"velocity"')
-    assert overview_surface.index('"velocity"') < overview_surface.index('"active_sku_count"')
+    assert overview_surface.index('"retailer_margin_pct"') < overview_surface.index('"velocity"')
+    assert 'slot: 5, group: "result", visualTier: "primary", concept: "velocity"' in overview_surface
+    assert 'slot: 7, group: "coverage", visualTier: "secondary", concept: "distribution"' in overview_surface
+    assert 'slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count"' in overview_surface
+    assert overview_surface.index('"weighted_distribution"') < overview_surface.index('"distribution"')
+    assert overview_surface.index('"distribution"') < overview_surface.index('"active_sku_count"')
     assert overview_surface.index('"average_price_per_liter"') < overview_surface.index('"weighted_shelf_price_vat"')
     assert overview_surface.index('"weighted_shelf_price_vat"') < overview_surface.index('"weighted_input_price_vat"')
     assert "renderKpiPartialComparisonNotice(models)" in script
@@ -1830,7 +1838,17 @@ def test_overview_kpi_cards_use_compact_matrix_without_comparator_or_sparklines(
     assert "kpi-comparator" not in script
     assert "kpi-card-content" in kpi_renderer
     assert "kpi-card-main" in kpi_renderer
-    assert 'value.className = "metric-current kpi-current-value"' in kpi_renderer
+    assert "renderKpiHeadline(definition, model)" in kpi_renderer
+    assert "renderKpiEvidenceRow(" in kpi_renderer
+    assert '"current"' in kpi_renderer
+    assert '"reference"' in kpi_renderer
+    assert 'card.setAttribute("role", "button");' in kpi_renderer
+    assert 'card.setAttribute("aria-pressed", isSelectedMetric ? "true" : "false");' in kpi_renderer
+    assert 'card.addEventListener("keydown", async (event) => {' in kpi_renderer
+    assert 'appendText(headline, "span", "выбран").className = "visually-hidden";' in script
+    assert "kpiCurrentPeriodText(comparison)" in kpi_renderer
+    assert "kpiReferencePeriodText(comparison)" in kpi_renderer
+    assert "kpiCompactPeriodText(period)" in kpi_renderer
     assert "content.appendChild(left)" in kpi_renderer
     assert "card.dataset.kpiState = model.state" in kpi_renderer
     assert 'if (definition?.concept === "active_sku_count") return text;' in script
@@ -1895,17 +1913,15 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "kpiValueWithUnit(overviewKpiValueText(result, entry, definition), definition)" in kpi_renderer
     assert 'content.className = "kpi-card-content"' in kpi_renderer
     assert 'left.className = "kpi-card-main"' in kpi_renderer
-    assert 'valueWrap.className = "metric-current kpi-current-value"' in kpi_renderer
     assert 'if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {' in kpi_renderer
     assert "if (isComparisonDisplayMode() && comparison)" not in kpi_renderer
-    assert 'meta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`' in kpi_renderer
-    assert "text: kpiDeltaText(comparison, entry)" in kpi_renderer
+    assert 'delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`' in kpi_renderer
+    assert "text: kpiDeltaText(comparison, model.entry)" in kpi_renderer
     assert 'className: kpiDirectionPresentationClass(comparison.delta)' in kpi_renderer
     assert 'model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE"' in kpi_renderer
-    assert "renderKpiReferenceLine(definition, model)" in kpi_renderer
+    assert 'left.appendChild(renderKpiEvidenceRow(' in kpi_renderer
     assert 'model.state === "CURRENT_ONLY_NO_REFERENCE"' in kpi_renderer
-    assert "Сравнение недоступно" in kpi_renderer
-    assert "Нет данных за" in kpi_renderer
+    assert "нет данных" in kpi_renderer
     assert "kpiMissingReferencePeriodText()" in kpi_renderer
     assert "renderKpiComparator(definition, model)" not in kpi_renderer
     assert "function renderKpiComparator" not in script
@@ -1919,13 +1935,13 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "function conciseKpiUnavailableText" in script
     assert "Требуется бизнес-правило" in script
 
-    state_helpers = script.split("function overviewKpiState", 1)[1].split("function renderKpiReferenceLine", 1)[0]
-    reference_helpers = script.split("function renderKpiReferenceLine", 1)[1].split("function overviewPortfolioItem", 1)[0]
-    assert 'reference.className = "kpi-reference"' in reference_helpers
-    assert "kpiValueWithUnit(formatValue(comparison.comparison_value, model.entry.format), definition)" in reference_helpers
-    assert 'className = "kpi-reference-value"' in reference_helpers
-    assert 'className = "kpi-reference-period"' in reference_helpers
-    assert " · " not in reference_helpers
+    state_helpers = script.split("function overviewKpiState", 1)[1].split("function kpiReferencePeriodText", 1)[0]
+    reference_helpers = script.split("function kpiReferencePeriodText", 1)[1].split("function overviewPortfolioItem", 1)[0]
+    assert "function kpiCurrentPeriodText" in reference_helpers
+    assert "function kpiCompactPeriodText" in reference_helpers
+    assert "monthLabelsShort()[date.getMonth()]" in reference_helpers
+    assert 'String(date.getFullYear()).slice(-2)' in reference_helpers
+    assert "formatValue(comparison.comparison_value, model.entry.format)" in kpi_renderer
     assert 'return Number(comparison.delta) === 0 ? "ZERO_CHANGE" : "COMPLETE_COMPARE";' in state_helpers
     assert 'if (!isComparisonDisplayMode()) return "CURRENT_ONLY";' in state_helpers
     assert '"CURRENT_ONLY_NO_REFERENCE"' in state_helpers
@@ -1987,30 +2003,35 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     css = html_or_script("styles.css")
 
     assert 'grid-template-areas:\n    "result result"\n    "coverage price"' in css
-    assert "grid-template-columns: minmax(0, 4fr) minmax(250px, 3fr)" in css
+    assert "grid-template-columns: minmax(0, 1fr) minmax(0, 1fr)" in css
     assert ".kpi-group--result" in css
     assert ".kpi-group--coverage" in css
     assert ".kpi-group--price" in css
     assert ".kpi-group-label" in css
-    assert "background: rgba(248, 250, 252, 0.78)" in css
-    assert "border: 1px solid rgba(219, 227, 238, 0.84)" in css
-    assert "grid-template-columns: repeat(4, minmax(0, 1fr))" in css
+    kpi_block = css.split(".kpi-grid", 1)[1].split(".metric-value-button", 1)[0]
+    assert "background: rgba(248, 250, 252, 0.78)" not in kpi_block
+    assert "border: 1px solid rgba(219, 227, 238, 0.84)" not in kpi_block
+    assert "grid-template-columns: repeat(5, minmax(0, 1fr))" in kpi_block
     assert "grid-template-columns: repeat(3, minmax(0, 1fr))" in css
     assert "min-height: 104px" not in css
     assert "padding: 9px 10px 8px" not in css
     assert "min-height: 110px" not in css
-    assert "padding: 4px 6px" in css
-    assert "padding: 5px 7px" in css
-    assert "font-size: 19px" in css
-    assert "border: 1px solid rgba(219, 227, 238, 0.66)" in css
-    assert "font-size: 18px" in css
+    assert "padding: 4px 6px" not in kpi_block
+    assert "padding: 5px 7px" not in kpi_block
+    assert "border: 1px solid rgba(219, 227, 238, 0.66)" not in kpi_block
+    assert ".kpi-headline" in kpi_block
+    assert ".kpi-title" in kpi_block
+    assert ".kpi-evidence-row" in kpi_block
+    assert ".kpi-evidence-period" in kpi_block
+    assert ".kpi-evidence-value" in kpi_block
+    assert "grid-template-columns: 46px minmax(0, 1fr)" in kpi_block
     assert ".kpi-unit" not in css
     assert ".kpi-card-content" in css
     assert ".kpi-card-main" in css
-    assert "align-items: flex-start" in css.split(".kpi-card-content", 1)[1].split(".kpi-card small", 1)[0]
-    assert "gap: 2px" in css.split(".kpi-card-main", 1)[1].split(".kpi-current-value", 1)[0]
+    assert "align-items: flex-start" in css.split(".kpi-card-content", 1)[1].split(".kpi-card--primary", 1)[0]
+    assert "gap: 2px" in css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
     assert ".kpi-meta--delta" in css
-    assert ".kpi-card--primary .kpi-meta--delta" in css
+    assert ".kpi-card--primary .kpi-meta--delta" not in kpi_block
     assert ".kpi-reference" in css
     assert "gap: 5px" in css
     assert ".kpi-reference-value" in css
@@ -2025,11 +2046,13 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert ".kpi-sparkline-period" not in css
     assert ".kpi-sparkline-hitpoint" not in css
     assert ".kpi-sparkline-line" not in css
-    assert "font-weight: 700" not in css.split(".kpi-card strong", 1)[1].split(".kpi-card.is-unavailable", 1)[0]
+    kpi_card_body = css.split(".kpi-card {", 1)[1].split(".kpi-partial-comparison-notice", 1)[0]
+    assert "font-weight: 700" not in kpi_card_body
     assert ".kpi-meta--delta .metric-delta-button {\n  font-weight: 400;" in css
-    assert "white-space: nowrap" in css.split(".kpi-card small", 1)[1].split(".kpi-card strong", 1)[0]
-    assert "padding: 7px 10px" in css
-    assert "border: 1px solid rgba(219, 227, 238, 0.78)" in css
+    assert "white-space: nowrap" in css.split(".kpi-title", 1)[1].split(".kpi-evidence-row", 1)[0]
+    selected_body = css.split(".kpi-card.is-chart-selected {", 1)[1].split(".kpi-card:hover", 1)[0]
+    assert "background: color-mix(in srgb, var(--brand-menu-blue) 7%, var(--bg-surface));" in selected_body
+    assert "box-shadow" not in selected_body
     assert "min-height: 132px" not in css
 
 
@@ -2058,7 +2081,9 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "month-grid-line" in css
     assert "#chart-box" in css
     assert "overview-chart-svg" in css
-    assert "height: 304px" in css
+    assert "height: 100%" in css.split(".overview-chart-svg", 1)[1].split(".grid-line", 1)[0]
+    assert "#chart-box {\n  flex: 1 1 auto;" in css
+    assert "min-height: 300px" in css
     assert "stroke-dasharray: 5 6" in css
     assert "opacity: 0.38" in css
     assert ".overview-chart-point {" in css
@@ -2123,6 +2148,10 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "seriesIndex" not in chart_year_class
     assert "comparison_mode: \"NONE\"" in script.split("function buildChartQueryPayload", 1)[1].split("function buildOverviewPortfolioPayload", 1)[0]
     assert 'Динамика показателя' in html
+    assert 'id="chart-metric"' not in html
+    assert "Пунктир — интервал без наблюдений" in html
+    assert "document.getElementById(\"chart-metric\")?.addEventListener" in script
+    assert "if (!select) return;" in script
     assert "is-chart-selected" in css
 
 
@@ -2410,8 +2439,10 @@ def test_current_reference_and_ownership_visual_hierarchy_is_not_color_only() ->
     script = html_or_script("app.js")
     styles = html_or_script("styles.css")
 
-    assert 'valueWrap.className = "metric-current kpi-current-value"' in script
-    assert 'reference.className = "metric-reference"' in script
+    assert 'row.className = `kpi-evidence-row kpi-evidence-row--${kind}`;' in script
+    assert 'appendText(row, "span", kpiCompactPeriodText(period)).className = "kpi-evidence-period";' in script
+    assert 'value.className = "kpi-evidence-value";' in script
+    assert 'left.appendChild(renderKpiEvidenceRow(' in script
     assert 'metric-current' in styles
     assert 'metric-reference' in styles
     assert "ownershipBadge(row)" in script
