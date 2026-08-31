@@ -35,6 +35,65 @@ def test_price_per_liter_excludes_invalid_volume_rows_from_both_components(tmp_p
     assert result.value == 100
 
 
+def test_category_filter_preserves_legacy_overview_metrics_and_effective_approved_kpis(tmp_path: Path) -> None:
+    service = _service(
+        tmp_path,
+        [
+            _source_row("2026-06-01", "S1", "SKU_A", category="WATER", units=10, revenue_vat=100, volume_l=1),
+            _source_row("2026-06-01", "S2", "SKU_B", category="WATER", units=20, revenue_vat=200, volume_l=2),
+            _source_row("2026-06-01", "S3", "SKU_C", category="JUICE", units=5, revenue_vat=50, volume_l=1),
+        ],
+        fact_rows=[
+            _fact_row("units", 30, category="WATER"),
+            _fact_row("revenue_vat", 300, category="WATER"),
+            _fact_row("retailer_margin_abs", 75, category="WATER"),
+            _fact_row("retailer_margin_pct", 0.25, numerator=75, denominator=300, category="WATER"),
+            _fact_row("weighted_shelf_price_vat", 50, numerator=500, denominator=10, category="WATER"),
+            _fact_row("weighted_input_price_vat", 35, numerator=350, denominator=10, category="WATER"),
+        ],
+    )
+    request = replace(
+        _request(
+            "network",
+            ("ALL",),
+            (
+                "units",
+                "revenue_vat",
+                "retailer_margin_abs",
+                "retailer_margin_pct",
+                "velocity",
+                "distribution",
+                "weighted_distribution",
+                "average_price_per_liter",
+                "weighted_shelf_price_vat",
+                "weighted_input_price_vat",
+            ),
+        ),
+        entity_filters={"category": ("WATER",)},
+    )
+
+    response = service.query(request)
+
+    values = {result.metric_concept: result for result in response.metric_results}
+    assert values["units"].value == 30
+    assert values["revenue_vat"].value == 300
+    assert values["retailer_margin_abs"].value == 75
+    assert values["retailer_margin_pct"].value == 0.25
+    assert values["weighted_shelf_price_vat"].value == 50
+    assert values["weighted_input_price_vat"].value == 35
+    assert values["velocity"].grain_id == "category"
+    assert values["velocity"].entity_id == "WATER"
+    assert values["velocity"].value == 15
+    assert values["distribution"].value == pytest.approx(2 / 3)
+    assert values["average_price_per_liter"].grain_id == "category"
+    assert values["average_price_per_liter"].value == pytest.approx(300 / 50)
+    assert "weighted_distribution" not in values
+    assert {
+        (limitation.issue_code, limitation.metric_concept)
+        for limitation in response.limitations
+    } >= {("metric_not_supported_for_grain", "weighted_distribution")}
+
+
 def test_numeric_distribution_multi_month_uses_distinct_period_universe(tmp_path: Path) -> None:
     service = _service(
         tmp_path,
@@ -113,10 +172,15 @@ def test_manufacturer_is_not_approved_kpi_grain(tmp_path: Path) -> None:
     }
 
 
-def _service(tmp_path: Path, source_rows: list[dict[str, object]]) -> DashboardMartQueryService:
+def _service(
+    tmp_path: Path,
+    source_rows: list[dict[str, object]],
+    *,
+    fact_rows: list[dict[str, object]] | None = None,
+) -> DashboardMartQueryService:
     facts_path = tmp_path / "facts.parquet"
     source_path = tmp_path / "canonical.parquet"
-    write_mart_metric_facts(pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), facts_path)
+    write_mart_metric_facts(pl.DataFrame(fact_rows or [], schema=MART_METRIC_FACT_SCHEMA), facts_path)
     pl.DataFrame(source_rows).write_parquet(source_path)
     return DashboardMartQueryService(
         facts_path,
@@ -190,4 +254,52 @@ def _source_row(
         "units": units,
         "revenue_vat": revenue_vat,
         "volume_l": volume_l,
+    }
+
+
+def _fact_row(
+    concept: str,
+    value: float,
+    *,
+    category: str,
+    numerator: float | None = None,
+    denominator: float | None = None,
+) -> dict[str, object]:
+    return {
+        "retailer_id": "globus",
+        "source_id": "globus_base_2025_06_2026",
+        "source_revision_id": "source_revision_test",
+        "analysis_run_id": "analysis_run_test",
+        "mart_build_id": "build_approved_kpis",
+        "private_label_scope": "INCLUDE",
+        "period_grain": "month",
+        "period_start": date(2026, 6, 1),
+        "period_end": date(2026, 6, 30),
+        "business_period_id": "2026-06-01",
+        "grain_id": "category",
+        "entity_id": category,
+        "parent_entity_ids": "{}",
+        "metric_concept": concept,
+        "metric_name": concept,
+        "metric_definition_id": f"globus.category.{concept}.v1",
+        "metric_definition_version": "v1",
+        "metric_config_hash": "hash_test",
+        "semantic_family": None,
+        "semantic_compatibility_version": None,
+        "cross_retailer_comparable": False,
+        "value": value,
+        "numerator_value": numerator,
+        "denominator_value": denominator,
+        "business_rule_id": None,
+        "denominator_universe_type": None,
+        "store_alias_mapping_version": None,
+        "numerator_metric_name": None,
+        "denominator_metric_name": None,
+        "aggregation": "ratio_of_sums" if numerator is not None else "sum",
+        "range_aggregation_strategy": "ratio_of_sums" if numerator is not None else "sum_available_periods",
+        "share_scope": None,
+        "rule_version": "private_rules_v1",
+        "quality_status": "valid",
+        "quality_flags": None,
+        "created_at": datetime(2026, 6, 1, tzinfo=UTC),
     }

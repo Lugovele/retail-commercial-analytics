@@ -318,22 +318,28 @@ class DashboardMartQueryService:
             raw = pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
         else:
             raw = self._read_facts(fact_request, mart_build_id=mart_build_id, period_start=fetch_start)
-        if source_like_concepts and not unsupported_distribution_scope:
-            source_like_raw, source_like_limitations = self._read_source_like_approved_kpi_facts(
-                request,
-                mart_build_id=mart_build_id,
-                period_start=fetch_start,
-                metric_concepts=source_like_concepts,
-            )
-            limitations.extend(source_like_limitations)
-            raw = _concat_fact_frames(raw, source_like_raw)
-        if raw.is_empty() and fact_request.entity_filters and not _has_product_store_intersection(fact_request):
+        if (
+            raw.is_empty()
+            and fact_request.entity_filters
+            and not _has_product_store_intersection(fact_request)
+            and not _source_like_only_request(request, fact_request)
+        ):
             raw, scoped_rollup_grain, rollup_limitations = self._read_scoped_rollup_facts(
                 fact_request,
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
             )
             limitations.extend(rollup_limitations)
+        if source_like_concepts and not unsupported_distribution_scope:
+            source_like_request = _source_like_effective_scope_request(request)
+            source_like_raw, source_like_limitations = self._read_source_like_approved_kpi_facts(
+                source_like_request,
+                mart_build_id=mart_build_id,
+                period_start=fetch_start,
+                metric_concepts=source_like_concepts,
+            )
+            limitations.extend(source_like_limitations)
+            raw = _concat_fact_frames(raw, source_like_raw)
         requested = _filter_requested_periods(raw, request)
         self._validate_fact_active_revisions(requested, request)
         _reject_source_revision_ambiguity(requested)
@@ -1771,6 +1777,28 @@ def _source_like_only_request(
         bool(_source_like_approved_kpi_concepts(request))
         and not fact_request.metric_concepts
         and not fact_request.metric_definition_ids
+    )
+
+
+def _source_like_effective_scope_request(request: DashboardMetricQueryRequest) -> DashboardMetricQueryRequest:
+    if request.metric_definition_ids:
+        return request
+    effective_grain = _effective_filter_grain(request)
+    if effective_grain not in {"category", "brand", "sku"}:
+        return request
+    selected = tuple((request.entity_filters or {}).get(effective_grain, ()))
+    if len(selected) != 1:
+        return request
+    remaining_filters = {
+        grain: values
+        for grain, values in (request.entity_filters or {}).items()
+        if grain != effective_grain and values
+    }
+    return replace(
+        request,
+        grain_id=effective_grain,
+        entity_ids=selected,
+        entity_filters=remaining_filters,
     )
 
 
