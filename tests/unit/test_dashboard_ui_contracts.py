@@ -1338,6 +1338,13 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
         assert f'data-inline-clear-filter="{filter_id}"' in html
         assert f'data-apply-filter="{filter_id}"' in html
         assert f'data-toggle-full-list-filter="{filter_id}"' in html
+        footer = html.split(f'id="{filter_id}-filter-popover"', 1)[1].split("</div>\n              </div>", 1)[0]
+        assert 'class="filter-footer-left"' in footer
+        assert 'class="filter-footer-right"' in footer
+        assert footer.index('class="filter-footer-left"') < footer.index(f'data-toggle-full-list-filter="{filter_id}"')
+        assert footer.index(f'data-toggle-full-list-filter="{filter_id}"') < footer.index(f'id="{filter_id}-selected-count"')
+        assert footer.index('class="filter-footer-right"') < footer.index(f'data-clear-pending-filter="{filter_id}"')
+        assert footer.index(f'data-clear-pending-filter="{filter_id}"') < footer.index(f'data-apply-filter="{filter_id}"')
 
     assert "function applyPendingFilter(id)" in script
     assert "state.pendingFilters[id]" in script
@@ -1368,6 +1375,12 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     assert 'secondary.className = "filter-option-secondary"' in script
     assert "Показано ${visibleValues.length} из ${totalCount}" in script
     assert "filter-popover.is-expanded" in html_or_script("styles.css")
+    footer_body = html_or_script("styles.css").split(".filter-popover-footer {", 1)[1].split(".filter-clear-action", 1)[0]
+    assert "display: flex;" in footer_body
+    assert "justify-content: space-between;" in footer_body
+    assert ".filter-footer-left" in footer_body
+    assert ".filter-footer-right" in footer_body
+    assert "white-space: nowrap;" in html_or_script("styles.css").split(".filter-clear-action,", 1)[1].split(".filter-clear-action,", 1)[0]
     assert '"store": {' not in script
     assert "Фильтр ТТ будет подключён отдельно" not in script
     assert "function handleFilterSearchKeydown(event, id)" in script
@@ -2147,7 +2160,12 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "border-top: 2px solid var(--overview-section-line);" in kpi_block
     assert "border-left: 2px solid var(--overview-section-line);" in kpi_block
     assert "--overview-section-line: #c8d8e8;" in css
-    assert "font-weight: 600;" in css.split(".kpi-group-label", 1)[1].split(".kpi-group-cards", 1)[0]
+    label_body = css.split(".kpi-group-label", 1)[1].split(".kpi-group-cards", 1)[0]
+    assert "padding-left: var(--kpi-group-label-inset, 8px);" in label_body
+    assert "font-weight: 500;" in label_body
+    assert "--kpi-group-label-inset: 6px;" in css.split(".kpi-group--result", 1)[1].split(".kpi-group--coverage", 1)[0]
+    assert "--kpi-group-label-inset: 8px;" in css.split(".kpi-group--coverage", 1)[1].split(".kpi-group--price", 1)[0]
+    assert "--kpi-group-label-inset: 8px;" in css.split(".kpi-group--price", 1)[1].split(".kpi-group-label", 1)[0]
 
 
 def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> None:

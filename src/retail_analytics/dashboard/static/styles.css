@@ -862,23 +862,51 @@ input {
 }
 
 .filter-popover-footer {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto auto;
-  gap: var(--space-2);
+  display: flex;
+  min-width: 0;
+  gap: 12px;
   align-items: center;
+  justify-content: space-between;
   padding-top: var(--space-2);
   border-top: 1px solid var(--border-default);
   color: var(--text-muted);
   font-size: 11px;
 }
 
+.filter-footer-left,
+.filter-footer-right {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+}
+
+.filter-footer-left {
+  flex: 1 1 auto;
+}
+
+.filter-footer-left span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-footer-right {
+  flex: 0 0 auto;
+}
+
 .filter-clear-action,
 .filter-full-list-action,
 .filter-apply-action {
+  flex: 0 0 auto;
   min-height: 30px;
   padding: 0 10px;
   font-size: 12px;
   font-weight: 600;
+  white-space: nowrap;
 }
 
 .filter-clear-action,
@@ -1065,11 +1093,13 @@ main {
 
 .kpi-group--result {
   grid-area: result;
+  --kpi-group-label-inset: 6px;
   padding-bottom: 9px;
 }
 
 .kpi-group--coverage {
   grid-area: coverage;
+  --kpi-group-label-inset: 8px;
   padding-top: 8px;
   padding-right: 24px;
   border-top: 2px solid var(--overview-section-line);
@@ -1077,6 +1107,7 @@ main {
 
 .kpi-group--price {
   grid-area: price;
+  --kpi-group-label-inset: 8px;
   padding-top: 8px;
   padding-left: 24px;
   border-top: 2px solid var(--overview-section-line);
@@ -1085,9 +1116,10 @@ main {
 
 .kpi-group-label {
   margin: 0;
+  padding-left: var(--kpi-group-label-inset, 8px);
   color: var(--text-muted);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: 0;
   line-height: 1;
   text-transform: uppercase;
