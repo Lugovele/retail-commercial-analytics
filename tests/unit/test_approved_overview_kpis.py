@@ -172,6 +172,163 @@ def test_manufacturer_is_not_approved_kpi_grain(tmp_path: Path) -> None:
     }
 
 
+@pytest.mark.parametrize(
+    ("filters", "expected_grain", "expected_support"),
+    [
+        ({}, "network", {"average_price_per_liter"}),
+        ({"category": ("WATER",)}, "category", {"velocity", "distribution", "average_price_per_liter"}),
+        (
+            {"brand": ("BRAND_A",)},
+            "brand",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        (
+            {"sku": ("SKU_A",)},
+            "sku",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        ({"manufacturer": ("MFR_A",)}, "network", {"average_price_per_liter"}),
+        (
+            {"category": ("WATER",), "manufacturer": ("MFR_A",)},
+            "category",
+            {"velocity", "distribution", "average_price_per_liter"},
+        ),
+        (
+            {"category": ("WATER",), "brand": ("BRAND_A",)},
+            "brand",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        (
+            {"category": ("WATER",), "manufacturer": ("MFR_A",), "brand": ("BRAND_A",)},
+            "brand",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        (
+            {"category": ("WATER",), "manufacturer": ("MFR_A",), "brand": ("BRAND_A",), "sku": ("SKU_A",)},
+            "sku",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        (
+            {"brand": ("BRAND_A",), "manufacturer": ("MFR_A",)},
+            "brand",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        (
+            {"sku": ("SKU_A",), "manufacturer": ("MFR_A",)},
+            "sku",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+    ],
+)
+def test_source_like_kpis_use_supported_product_scope_precedence(
+    tmp_path: Path,
+    filters: dict[str, tuple[str, ...]],
+    expected_grain: str,
+    expected_support: set[str],
+) -> None:
+    service = _service(
+        tmp_path,
+        [
+            _source_row(
+                "2026-06-01",
+                "S1",
+                "SKU_A",
+                category="WATER",
+                manufacturer="MFR_A",
+                brand="BRAND_A",
+                units=10,
+                revenue_vat=100,
+                volume_l=1,
+            ),
+            _source_row(
+                "2026-06-01",
+                "S2",
+                "SKU_B",
+                category="WATER",
+                manufacturer="MFR_B",
+                brand="BRAND_B",
+                units=5,
+                revenue_vat=50,
+                volume_l=1,
+            ),
+        ],
+    )
+    request = replace(
+        _request(
+            "network",
+            ("ALL",),
+            ("velocity", "distribution", "weighted_distribution", "average_price_per_liter"),
+        ),
+        entity_filters=filters,
+    )
+
+    response = service.query(request)
+
+    results = {result.metric_concept: result for result in response.metric_results}
+    assert set(results) == expected_support
+    assert {result.grain_id for result in results.values()} == {expected_grain}
+    unsupported = {
+        limitation.metric_concept
+        for limitation in response.limitations
+        if limitation.issue_code == "metric_not_supported_for_grain"
+    }
+    assert unsupported == {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"} - expected_support
+
+
+def test_source_like_kpis_use_user_filters_when_execution_filters_are_sku_resolved(tmp_path: Path) -> None:
+    service = _service(
+        tmp_path,
+        [
+            _source_row(
+                "2026-06-01",
+                "S1",
+                "SKU_A",
+                category="WATER",
+                manufacturer="MFR_A",
+                brand="BRAND_A",
+                units=10,
+                revenue_vat=100,
+                volume_l=1,
+            ),
+            _source_row(
+                "2026-06-01",
+                "S2",
+                "SKU_B",
+                category="WATER",
+                manufacturer="MFR_A",
+                brand="BRAND_A",
+                units=5,
+                revenue_vat=50,
+                volume_l=2,
+            ),
+        ],
+    )
+    request = replace(
+        _request(
+            "network",
+            ("ALL",),
+            ("velocity", "distribution", "weighted_distribution", "average_price_per_liter"),
+        ),
+        entity_filters={"sku": ("SKU_A", "SKU_B")},
+        user_entity_filters={
+            "category": ("WATER",),
+            "manufacturer": ("MFR_A",),
+            "brand": ("BRAND_A",),
+        },
+    )
+
+    response = service.query(request)
+
+    results = {result.metric_concept: result for result in response.metric_results}
+    assert set(results) == {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"}
+    assert {result.grain_id for result in results.values()} == {"brand"}
+    assert {result.entity_id for result in results.values()} == {"BRAND_A"}
+    assert results["velocity"].value == 7.5
+    assert results["distribution"].value == 1
+    assert results["weighted_distribution"].value == 1
+    assert results["average_price_per_liter"].value == pytest.approx(150 / 20)
+
+
 def _service(
     tmp_path: Path,
     source_rows: list[dict[str, object]],

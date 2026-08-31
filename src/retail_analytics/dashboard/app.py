@@ -126,6 +126,13 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 payload = _read_json(environ)
                 original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
                 request = build_backend_query_request(payload)
+                if original_entity_filters is not None:
+                    request = replace(
+                        request,
+                        user_entity_filters={
+                            key: tuple(values) for key, values in original_entity_filters.items()
+                        },
+                    )
                 response = resolved_runtime.query_service.query(request)
                 data = serialize_dashboard_query_response(response)
                 _attach_user_execution_filters(data, original_entity_filters)

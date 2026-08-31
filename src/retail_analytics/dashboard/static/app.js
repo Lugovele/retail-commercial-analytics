@@ -1516,6 +1516,7 @@ function buildOverviewPortfolioPayload() {
     ...payload,
     grain_id: "manufacturer",
     entity_ids: [],
+    entity_filters: selectedFilterValuesForPortfolio(),
     concept_ids: ["active_sku_count"]
   };
 }

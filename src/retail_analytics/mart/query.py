@@ -26,6 +26,7 @@ from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
 from retail_analytics.mart.store_universe import MONTHLY_STORE_FORMAT_UNIVERSE
 
 FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
+SOURCE_LIKE_APPROVED_KPI_FILTER_PRECEDENCE = ("sku", "brand", "category")
 STORE_FORMAT_DISTRIBUTION_CONCEPT = "numeric_distribution_store_format"
 STORE_FORMAT_DISTRIBUTION_RULE_ID = "BR-009B"
 STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS = frozenset({"category", "manufacturer", "brand", "sku"})
@@ -127,6 +128,7 @@ class DashboardMetricQueryRequest:
     grain_id: str
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
+    user_entity_filters: dict[str, tuple[str, ...]] | None = None
     metric_concepts: tuple[str, ...] = ()
     metric_definition_ids: tuple[str, ...] = ()
     comparison_mode: ComparisonMode = ComparisonMode.NONE
@@ -1098,7 +1100,11 @@ class DashboardMartQueryService:
                     )
                 )
                 continue
-            validation_grain = scoped_rollup_grain or request.grain_id
+            validation_grain = (
+                str(row["grain_id"])
+                if str(row["metric_concept"]) in SOURCE_LIKE_APPROVED_KPI_CONCEPTS
+                else scoped_rollup_grain or request.grain_id
+            )
             if validation_grain not in entry.grain_support:
                 limitations.append(
                     QueryLimitation(
@@ -1783,15 +1789,16 @@ def _source_like_only_request(
 def _source_like_effective_scope_request(request: DashboardMetricQueryRequest) -> DashboardMetricQueryRequest:
     if request.metric_definition_ids:
         return request
-    effective_grain = _effective_filter_grain(request)
+    effective_grain = _source_like_effective_filter_grain(request)
     if effective_grain not in {"category", "brand", "sku"}:
         return request
-    selected = tuple((request.entity_filters or {}).get(effective_grain, ()))
+    semantic_filters = _source_like_semantic_filters(request)
+    selected = tuple(semantic_filters.get(effective_grain, ()))
     if len(selected) != 1:
         return request
     remaining_filters = {
         grain: values
-        for grain, values in (request.entity_filters or {}).items()
+        for grain, values in semantic_filters.items()
         if grain != effective_grain and values
     }
     return replace(
@@ -1800,6 +1807,18 @@ def _source_like_effective_scope_request(request: DashboardMetricQueryRequest) -
         entity_ids=selected,
         entity_filters=remaining_filters,
     )
+
+
+def _source_like_effective_filter_grain(request: DashboardMetricQueryRequest) -> str | None:
+    selected = _source_like_semantic_filters(request)
+    for grain in SOURCE_LIKE_APPROVED_KPI_FILTER_PRECEDENCE:
+        if selected.get(grain):
+            return grain
+    return _effective_filter_grain(request)
+
+
+def _source_like_semantic_filters(request: DashboardMetricQueryRequest) -> dict[str, tuple[str, ...]]:
+    return request.user_entity_filters or request.entity_filters or {}
 
 
 def _source_like_metric_concept_from_definition_id(

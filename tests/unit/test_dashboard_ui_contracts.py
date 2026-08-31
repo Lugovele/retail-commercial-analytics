@@ -1994,6 +1994,7 @@ def test_overview_approved_kpis_are_backend_owned_without_frontend_formulas() ->
     assert "average_price_per_liter =" not in script
     assert "const overviewQueryKpis" in script
     assert 'concept_ids: ["active_sku_count"]' in script
+    assert "entity_filters: selectedFilterValuesForPortfolio()" in script
 
 
 def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
