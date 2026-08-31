@@ -955,6 +955,17 @@ function setupRetailerControl() {
   );
   retailerSelect.value = state.runtime.default_retailer_id;
   renderRetailerIdentity();
+  document.getElementById("retailer-control")?.addEventListener("click", (event) => {
+    if (event.target === retailerSelect) return;
+    retailerSelect.focus({ preventScroll: true });
+    retailerSelect.showPicker?.();
+  });
+  document.getElementById("retailer-control")?.addEventListener("keydown", (event) => {
+    if (!["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    retailerSelect.focus({ preventScroll: true });
+    retailerSelect.showPicker?.();
+  });
   retailerSelect.addEventListener("change", async () => {
     await applyScopeChange(async () => {
       resetAllEntityFilters();
@@ -975,12 +986,11 @@ function renderRetailerIdentity() {
   const identity = document.getElementById("retailer-identity");
   const selectControl = document.getElementById("retailer-select-control");
   const retailer = selectedRetailer();
-  const hasMultipleRetailers = (state.runtime?.retailers || []).length > 1;
 
-  selectControl?.classList.toggle("is-hidden", !hasMultipleRetailers);
-  identity?.classList.toggle("is-hidden", hasMultipleRetailers);
-  control?.classList.toggle("has-multiple-retailers", hasMultipleRetailers);
-  if (!identity || hasMultipleRetailers) return;
+  selectControl?.classList.remove("is-hidden");
+  identity?.classList.add("is-hidden");
+  control?.classList.add("has-retailer-filter");
+  if (!identity) return;
   identity.replaceChildren();
   appendText(identity, "strong", retailer.display_label || "Текущий отчёт").className = "scope-value";
 }
@@ -2121,7 +2131,7 @@ function renderChart() {
     return;
   }
   document.getElementById("chart-title").textContent = definition.label;
-  document.getElementById("chart-context").textContent = "по месяцам · сравнение лет";
+  document.getElementById("chart-context").textContent = "· по месяцам · сравнение лет";
   const unsupported = overviewTrendUnsupportedText(definition, model);
   if (unsupported) {
     replaceWithMessage(box, "empty-state", unsupported);
@@ -2305,10 +2315,17 @@ function buildOverviewSvgChart(points, entry) {
 function alignOverviewChartShell() {
   window.requestAnimationFrame(() => {
     const shell = document.querySelector(".overview-layout .chart-panel");
+    const coverage = document.querySelector('.kpi-group--coverage');
     const divider = document.querySelector('.kpi-group--price');
     const juneAxis = document.querySelector('#chart-box .month-grid-line[data-month-index="5"]');
-    if (!shell || !divider || !juneAxis) return;
+    if (!shell || !coverage || !divider || !juneAxis) return;
     shell.style.transform = "";
+    const coverageRect = coverage.getBoundingClientRect();
+    const dividerRect = divider.getBoundingClientRect();
+    if (Math.abs(coverageRect.top - dividerRect.top) > 2) {
+      shell.dataset.juneAlignmentDelta = "0";
+      return;
+    }
     const dividerX = divider.getBoundingClientRect().left;
     const juneRect = juneAxis.getBoundingClientRect();
     const juneX = juneRect.left + juneRect.width / 2;

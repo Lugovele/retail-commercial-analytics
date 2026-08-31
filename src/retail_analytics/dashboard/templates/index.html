@@ -31,9 +31,9 @@
           <div class="scope-toolbar">
             <div class="scope-field report-control" id="retailer-control">
               <span class="scope-label">Сеть</span>
-              <div class="scope-control report-identity" id="retailer-identity" aria-live="polite">
+              <button type="button" class="scope-control report-identity filter-trigger" id="retailer-identity" aria-live="polite" aria-haspopup="listbox" aria-expanded="false" aria-controls="retailer-select">
                 <strong class="scope-value">Загрузка отчёта</strong>
-              </div>
+              </button>
               <label class="control control-retailer is-hidden" id="retailer-select-control">
                 <span>Сеть</span>
                 <select id="retailer-select"></select>
@@ -238,9 +238,9 @@
           <section class="overview-main">
             <article class="surface chart-panel">
               <div class="panel-heading">
-                <div>
+                <div class="chart-title-line">
                   <h2 id="chart-title">Продажи</h2>
-                  <p id="chart-context">по месяцам · сравнение лет</p>
+                  <span id="chart-context">· по месяцам · сравнение лет</span>
                 </div>
                 <p class="chart-note">● данные · пунктир — пропуск</p>
               </div>

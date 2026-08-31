@@ -1260,7 +1260,11 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert 'EXCLUDE: `Без ${scopeName}`' in script
     assert 'ONLY: `Только ${scopeName}`' in script
     assert "function renderRetailerIdentity()" in script
-    assert "hasMultipleRetailers" in script
+    assert "control?.classList.add(\"has-retailer-filter\");" in script
+    assert "selectControl?.classList.remove(\"is-hidden\");" in script
+    assert "identity?.classList.add(\"is-hidden\");" in script
+    assert 'document.getElementById("retailer-control")?.addEventListener("click"' in script
+    assert "retailerSelect.showPicker?.();" in script
     assert 'data-clear-pending-filter="category"' in html
     assert 'data-inline-clear-filter="category"' in html
     assert 'document.querySelector(`[data-inline-clear-filter="${id}"]`)?.classList.toggle("is-hidden", selected.length === 0);' in script
@@ -1429,6 +1433,10 @@ def test_filter_toolbar_visual_noise_contract_keeps_labels_above_controls() -> N
     assert '<span class="scope-label">ТТ</span>' in scope_body
     assert '<span class="scope-label" id="private-label-label">СТМ</span>' in scope_body
     assert 'placeholder="Все' not in scope_body
+    assert 'class="control control-retailer is-hidden" id="retailer-select-control"' in scope_body
+    assert ".control-retailer > span" in css
+    assert "display: none;" in css.split(".control-retailer > span", 1)[1].split("}", 1)[0]
+    assert "cursor: pointer;" in css.split(".control-retailer select {", 1)[1].split("}", 1)[0]
 
     label_body = css.split(".scope-label {", 1)[1].split(".report-identity", 1)[0]
     assert "font-size: 10px;" in label_body
@@ -2138,6 +2146,8 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert "min-height: 132px" not in css
     assert "border-top: 2px solid var(--overview-section-line);" in kpi_block
     assert "border-left: 2px solid var(--overview-section-line);" in kpi_block
+    assert "--overview-section-line: #c8d8e8;" in css
+    assert "font-weight: 600;" in css.split(".kpi-group-label", 1)[1].split(".kpi-group-cards", 1)[0]
 
 
 def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> None:
@@ -2185,6 +2195,7 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "cursor: crosshair" in css
     assert "white-space: pre-line" in css
     assert "stroke-width: 3" in css.split(".overview-chart-line", 1)[1].split(".overview-chart-gap-bridge", 1)[0]
+    assert "font-weight: 400;" in css.split(".chart-legend", 1)[1].split(".chart-legend.overview-chart-series-1", 1)[0]
     assert "r: 4.2" in script
     overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
     assert "const width = 720;" in overview_chart
@@ -2224,7 +2235,7 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "chronologicalMetricPoints(rows, \"backend-trend-series\")" in script
     assert "recentChronologicalMetricPoints" not in script
     assert 'document.getElementById("chart-title").textContent = definition.label;' in script
-    assert 'document.getElementById("chart-context").textContent = "по месяцам · сравнение лет";' in script
+    assert 'document.getElementById("chart-context").textContent = "· по месяцам · сравнение лет";' in script
     assert "backend-trend-series" in script
     assert "линии выровнены по месяцу" in script
     assert "сопоставимые доступные месяцы" in script
@@ -2250,6 +2261,10 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "seriesIndex" not in chart_year_class
     assert "comparison_mode: \"NONE\"" in script.split("function buildChartQueryPayload", 1)[1].split("function buildOverviewPortfolioPayload", 1)[0]
     assert '<h2 id="chart-title">Продажи</h2>' in html
+    assert '<div class="chart-title-line">' in html
+    assert '<span id="chart-context">· по месяцам · сравнение лет</span>' in html
+    assert ".chart-title-line" in css
+    assert "white-space: nowrap;" in css.split(".chart-title-line", 1)[1].split(".panel-heading p", 1)[0]
     assert 'Динамика показателя' not in html.split('id="overview"', 1)[1].split('id="sales-drivers"', 1)[0]
     assert 'id="chart-metric"' not in html
     assert "● данные · пунктир — пропуск" in html

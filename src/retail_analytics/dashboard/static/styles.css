@@ -10,7 +10,7 @@
   --bg-subtle: #eef3f9;
   --border-default: #dbe3ee;
   --border-strong: #aebdd2;
-  --overview-section-line: #b9cde0;
+  --overview-section-line: #c8d8e8;
   --overview-brand-soft: #eef6ff;
   --text-primary: #101828;
   --text-secondary: #46566f;
@@ -358,6 +358,27 @@ h3 {
   border-radius: var(--radius-sm);
 }
 
+.control-retailer {
+  display: block;
+  min-width: 0;
+  width: 100%;
+}
+
+.control-retailer > span {
+  display: none;
+}
+
+.control-retailer select {
+  min-height: 29px;
+  padding: 0 18px 0 0;
+  background: transparent;
+  border: 0;
+  color: var(--text-primary);
+  font-size: 10px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
 .scope-value,
 .report-identity strong {
   overflow: hidden;
@@ -386,13 +407,6 @@ h3 {
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.control-retailer select {
-  min-height: 42px;
-  color: var(--text-primary);
-  font-size: 15px;
-  font-weight: 600;
 }
 
 select,
@@ -1073,7 +1087,7 @@ main {
   margin: 0;
   color: var(--text-muted);
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0;
   line-height: 1;
   text-transform: uppercase;
@@ -1535,6 +1549,14 @@ main {
   align-items: center;
 }
 
+.chart-title-line {
+  display: flex;
+  min-width: 0;
+  gap: 6px;
+  align-items: baseline;
+  white-space: nowrap;
+}
+
 .overview-layout > .table-panel,
 .overview-layout > .diagnosis-panel,
 .overview-layout > .attention-panel {
@@ -1556,10 +1578,18 @@ main {
   line-height: 1;
 }
 
+.chart-title-line span {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1;
+  text-overflow: ellipsis;
+}
+
 .panel-heading h2 {
   margin-bottom: 0;
   font-size: 16px;
-  font-weight: 650;
+  font-weight: 600;
   line-height: 1;
 }
 
@@ -1752,7 +1782,7 @@ main {
 .chart-legend {
   fill: var(--chart-primary);
   font-size: 11px;
-  font-weight: 700;
+  font-weight: 400;
 }
 
 .chart-legend.overview-chart-series-1 {
