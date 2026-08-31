@@ -29,6 +29,39 @@ FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
 STORE_FORMAT_DISTRIBUTION_CONCEPT = "numeric_distribution_store_format"
 STORE_FORMAT_DISTRIBUTION_RULE_ID = "BR-009B"
 STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS = frozenset({"category", "manufacturer", "brand", "sku"})
+SOURCE_LIKE_APPROVED_KPI_CONCEPTS = frozenset(
+    {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"}
+)
+SOURCE_LIKE_APPROVED_KPI_SUPPORT = {
+    "velocity": frozenset({"category", "brand", "sku"}),
+    "distribution": frozenset({"category", "brand", "sku"}),
+    "weighted_distribution": frozenset({"brand", "sku"}),
+    "average_price_per_liter": frozenset({"network", "category", "brand", "sku"}),
+}
+SOURCE_LIKE_ENTITY_COLUMNS = {
+    "network": None,
+    "category": "category",
+    "manufacturer": "manufacturer",
+    "brand": "brand",
+    "sku": "canonical_product_id",
+    "store": "canonical_store_id",
+}
+SOURCE_LIKE_REQUIRED_COLUMNS = frozenset(
+    {
+        "retailer_id",
+        "source_id",
+        "analysis_run_id",
+        "period",
+        "canonical_store_id",
+        "canonical_product_id",
+        "category",
+        "manufacturer",
+        "brand",
+        "units",
+        "revenue_vat",
+        "volume_l",
+    }
+)
 SCOPED_ROLLUP_SAFE_CONCEPTS = {
     "revenue_vat",
     "revenue",
@@ -237,10 +270,12 @@ class DashboardMartQueryService:
         source_ledger: tuple[SourceLedgerEntry, ...] = (),
         product_store_facts_path: str | Path | None = None,
         store_universe_path: str | Path | None = None,
+        source_like_rows_path: str | Path | None = None,
     ) -> None:
         self.metric_facts_path = Path(metric_facts_path)
         self.product_store_facts_path = Path(product_store_facts_path) if product_store_facts_path is not None else None
         self.store_universe_path = Path(store_universe_path) if store_universe_path is not None else None
+        self.source_like_rows_path = Path(source_like_rows_path) if source_like_rows_path is not None else None
         self.catalog = catalog
         self.mart_builds = mart_builds
         self.source_ledger = source_ledger
@@ -256,6 +291,12 @@ class DashboardMartQueryService:
         scoped_rollup_grain: str | None = None
         serving_fact_grain: str | None = None
         unsupported_distribution_scope = _unsupported_distribution_scope_limitations(request)
+        source_like_concepts = (
+            _source_like_approved_kpi_concepts(request)
+            if self.source_like_rows_path is not None and self.source_like_rows_path.exists()
+            else ()
+        )
+        fact_request = _request_without_source_like_approved_kpis(request) if source_like_concepts else request
         if unsupported_distribution_scope:
             raw = pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
             limitations.extend(unsupported_distribution_scope)
@@ -268,16 +309,27 @@ class DashboardMartQueryService:
             limitations.extend(product_store_limitations)
         elif _has_product_store_intersection(request):
             raw, serving_fact_grain, product_store_limitations = self._read_product_store_rollup_facts(
-                request,
+                fact_request,
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
             )
             limitations.extend(product_store_limitations)
+        elif _source_like_only_request(request, fact_request):
+            raw = pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
         else:
-            raw = self._read_facts(request, mart_build_id=mart_build_id, period_start=fetch_start)
-        if raw.is_empty() and request.entity_filters and not _has_product_store_intersection(request):
-            raw, scoped_rollup_grain, rollup_limitations = self._read_scoped_rollup_facts(
+            raw = self._read_facts(fact_request, mart_build_id=mart_build_id, period_start=fetch_start)
+        if source_like_concepts and not unsupported_distribution_scope:
+            source_like_raw, source_like_limitations = self._read_source_like_approved_kpi_facts(
                 request,
+                mart_build_id=mart_build_id,
+                period_start=fetch_start,
+                metric_concepts=source_like_concepts,
+            )
+            limitations.extend(source_like_limitations)
+            raw = _concat_fact_frames(raw, source_like_raw)
+        if raw.is_empty() and fact_request.entity_filters and not _has_product_store_intersection(fact_request):
+            raw, scoped_rollup_grain, rollup_limitations = self._read_scoped_rollup_facts(
+                fact_request,
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
             )
@@ -302,6 +354,12 @@ class DashboardMartQueryService:
             requested_periods,
         )
         limitations.extend(result_limitations)
+        if source_like_concepts and request.period_mode != PeriodMode.SINGLE_PERIOD:
+            metric_results = self._apply_source_like_approved_kpi_range_values(
+                metric_results,
+                request,
+                metric_concepts=source_like_concepts,
+            )
         self._validate_comparison_fact_scope(raw, request)
         comparisons, comparison_limitations = _comparisons(raw, metric_results, request)
         limitations.extend(comparison_limitations)
@@ -504,6 +562,141 @@ class DashboardMartQueryService:
             ORDER BY period_start, grain_id, entity_id, metric_definition_id
         """
         return duckdb.sql(sql, params=[_duckdb_path(self.metric_facts_path), *params]).pl()
+
+    def _read_source_like_approved_kpi_facts(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        mart_build_id: str,
+        period_start: date | None,
+        metric_concepts: tuple[str, ...],
+    ) -> tuple[pl.DataFrame, tuple[QueryLimitation, ...]]:
+        if not metric_concepts:
+            return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), ()
+        limitations = list(_source_like_approved_kpi_limitations(request, metric_concepts))
+        supported = tuple(
+            concept
+            for concept in metric_concepts
+            if request.grain_id in SOURCE_LIKE_APPROVED_KPI_SUPPORT.get(concept, frozenset())
+        )
+        if not supported:
+            return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), tuple(limitations)
+        if self.source_like_rows_path is None or not self.source_like_rows_path.exists():
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                (
+                    *limitations,
+                    QueryLimitation(
+                        "source_like_rows_missing",
+                        "Approved KPI recomposition requires configured canonical source-like rows.",
+                    ),
+                ),
+            )
+        columns = _duckdb_columns(self.source_like_rows_path)
+        missing = sorted(SOURCE_LIKE_REQUIRED_COLUMNS - columns)
+        if missing:
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                (
+                    *limitations,
+                    QueryLimitation(
+                        "source_like_rows_missing_required_columns",
+                        f"Approved KPI recomposition requires source columns: {', '.join(missing)}.",
+                    ),
+                ),
+            )
+        source = self._source_like_approved_kpi_source_rows(request, period_start=period_start)
+        if source.is_empty():
+            return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), tuple(limitations)
+        build = next((item for item in self.mart_builds if item.mart_build_id == mart_build_id), None)
+        if build is None:
+            return (
+                pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA),
+                (
+                    *limitations,
+                    QueryLimitation(
+                        "source_like_kpi_build_metadata_missing",
+                        "Approved KPI recomposition requires mart build metadata for lineage.",
+                    ),
+                ),
+            )
+        rows: list[dict[str, Any]] = []
+        for concept in supported:
+            rows.extend(_source_like_approved_kpi_rows(source, request, build, concept))
+        if not rows:
+            return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), tuple(limitations)
+        return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA), tuple(limitations)
+
+    def _source_like_approved_kpi_source_rows(
+        self,
+        request: DashboardMetricQueryRequest,
+        *,
+        period_start: date | None,
+    ) -> pl.DataFrame:
+        if self.source_like_rows_path is None:
+            raise ValueError("source-like rows path is not configured")
+        clauses = ["retailer_id = ?", "source_id = ?"]
+        params: list[Any] = [request.retailer_id, request.source_id]
+        if period_start is not None:
+            clauses.append("CAST(period AS DATE) >= CAST(? AS DATE)")
+            params.append(period_start.isoformat())
+        if request.date_to is not None:
+            clauses.append("CAST(period AS DATE) <= CAST(? AS DATE)")
+            params.append(request.date_to.isoformat())
+        if request.private_label_scope == PrivateLabelScope.ONLY:
+            clauses.append("private_label_flag = true")
+        elif request.private_label_scope == PrivateLabelScope.EXCLUDE:
+            clauses.append("(private_label_flag = false OR private_label_flag IS NULL)")
+        for key, values in (request.entity_filters or {}).items():
+            column = SOURCE_LIKE_ENTITY_COLUMNS.get(key)
+            if column is not None:
+                continue
+            if key in {"store_format", "territory", "fo", "fo2", "region"}:
+                _add_source_like_filter(clauses, params, key, values)
+                continue
+            raise ValueError(f"Unsupported query filter column for approved KPI recomposition: {key}")
+        sql = f"""
+            SELECT
+                retailer_id,
+                source_id,
+                analysis_run_id,
+                CAST(period AS DATE) AS period,
+                canonical_store_id,
+                canonical_product_id,
+                category,
+                manufacturer,
+                brand,
+                CAST(units AS DOUBLE) AS units,
+                CAST(revenue_vat AS DOUBLE) AS revenue_vat,
+                CAST(volume_l AS DOUBLE) AS volume_l
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+        """
+        return duckdb.sql(sql, params=[_duckdb_path(self.source_like_rows_path), *params]).pl()
+
+    def _apply_source_like_approved_kpi_range_values(
+        self,
+        metric_results: tuple[MetricQueryResult, ...],
+        request: DashboardMetricQueryRequest,
+        *,
+        metric_concepts: tuple[str, ...],
+    ) -> tuple[MetricQueryResult, ...]:
+        if self.source_like_rows_path is None or not self.source_like_rows_path.exists():
+            return metric_results
+        source = self._source_like_approved_kpi_source_rows(request, period_start=request.date_from)
+        if source.is_empty():
+            return metric_results
+        overrides = _source_like_range_components(source, request, metric_concepts)
+        adjusted: list[MetricQueryResult] = []
+        for result in metric_results:
+            key = (result.metric_concept, result.entity_id)
+            if key not in overrides:
+                adjusted.append(result)
+                continue
+            numerator, denominator = overrides[key]
+            value = None if numerator is None or denominator in (None, 0) else numerator / denominator
+            adjusted.append(replace(result, value=value, numerator_value=numerator, denominator_value=denominator))
+        return tuple(adjusted)
 
     def _read_product_store_rollup_facts(
         self,
@@ -1532,6 +1725,411 @@ def _requests_store_format_distribution(request: DashboardMetricQueryRequest) ->
     if STORE_FORMAT_DISTRIBUTION_CONCEPT in request.metric_concepts:
         return True
     return any(STORE_FORMAT_DISTRIBUTION_CONCEPT in item for item in request.metric_definition_ids)
+
+
+def _source_like_approved_kpi_concepts(request: DashboardMetricQueryRequest) -> tuple[str, ...]:
+    concepts = [concept for concept in request.metric_concepts if concept in SOURCE_LIKE_APPROVED_KPI_CONCEPTS]
+    concepts.extend(
+        concept
+        for concept in (
+            _source_like_metric_concept_from_definition_id(
+                request.retailer_id,
+                request.grain_id,
+                metric_definition_id,
+            )
+            for metric_definition_id in request.metric_definition_ids
+        )
+        if concept is not None
+    )
+    return tuple(dict.fromkeys(concepts))
+
+
+def _request_without_source_like_approved_kpis(
+    request: DashboardMetricQueryRequest,
+) -> DashboardMetricQueryRequest:
+    remaining_definition_ids = tuple(
+        metric_definition_id
+        for metric_definition_id in request.metric_definition_ids
+        if _source_like_metric_concept_from_definition_id(
+            request.retailer_id,
+            request.grain_id,
+            metric_definition_id,
+        )
+        is None
+    )
+    if not request.metric_concepts and remaining_definition_ids == request.metric_definition_ids:
+        return request
+    concepts = tuple(concept for concept in request.metric_concepts if concept not in SOURCE_LIKE_APPROVED_KPI_CONCEPTS)
+    return replace(request, metric_concepts=concepts, metric_definition_ids=remaining_definition_ids)
+
+
+def _source_like_only_request(
+    request: DashboardMetricQueryRequest,
+    fact_request: DashboardMetricQueryRequest,
+) -> bool:
+    return (
+        bool(_source_like_approved_kpi_concepts(request))
+        and not fact_request.metric_concepts
+        and not fact_request.metric_definition_ids
+    )
+
+
+def _source_like_metric_concept_from_definition_id(
+    retailer_id: str,
+    grain_id: str,
+    metric_definition_id: str,
+) -> str | None:
+    prefix = f"{retailer_id}.{grain_id}."
+    suffix = ".v1"
+    if not metric_definition_id.startswith(prefix) or not metric_definition_id.endswith(suffix):
+        return None
+    concept = metric_definition_id[len(prefix) : -len(suffix)]
+    if concept not in SOURCE_LIKE_APPROVED_KPI_CONCEPTS:
+        return None
+    return concept
+
+
+def _source_like_approved_kpi_limitations(
+    request: DashboardMetricQueryRequest,
+    metric_concepts: tuple[str, ...],
+) -> tuple[QueryLimitation, ...]:
+    limitations: list[QueryLimitation] = []
+    for concept in metric_concepts:
+        if request.grain_id not in SOURCE_LIKE_APPROVED_KPI_SUPPORT.get(concept, frozenset()):
+            limitations.append(
+                QueryLimitation(
+                    "metric_not_supported_for_grain",
+                    f"Approved KPI is not supported for grain_id={request.grain_id}",
+                    metric_definition_id=_source_like_metric_definition_id(request.retailer_id, request.grain_id, concept),
+                    metric_concept=concept,
+                )
+            )
+    if request.grain_id == "manufacturer":
+        for concept in metric_concepts:
+            limitations.append(
+                QueryLimitation(
+                    "manufacturer_kpi_grain_unsupported",
+                    "Approved KPI rules do not introduce manufacturer as a supported KPI grain.",
+                    metric_definition_id=_source_like_metric_definition_id(request.retailer_id, request.grain_id, concept),
+                    metric_concept=concept,
+                )
+            )
+    return tuple(_dedupe_limitations(limitations))
+
+
+def _source_like_approved_kpi_rows(
+    source: pl.DataFrame,
+    request: DashboardMetricQueryRequest,
+    build: MartBuildMetadata,
+    concept: str,
+) -> list[dict[str, Any]]:
+    scoped = _source_like_product_scoped_rows(source, request)
+    if scoped.is_empty() and request.grain_id != "network":
+        return []
+    active_universe = _active_store_universe_by_period(source)
+    rows: list[dict[str, Any]] = []
+    for period in sorted(source.get_column("period").unique().to_list()):
+        period_source = source.filter(pl.col("period") == period)
+        period_scoped = scoped.filter(pl.col("period") == period)
+        if request.grain_id == "network":
+            groups = [(request.entity_ids[0] if request.entity_ids else request.grain_id, period_scoped, {})]
+        else:
+            entity_column = SOURCE_LIKE_ENTITY_COLUMNS[request.grain_id]
+            assert entity_column is not None
+            groups = []
+            for entity_id in sorted(period_scoped.get_column(entity_column).drop_nulls().unique().to_list()):
+                entity_rows = period_scoped.filter(pl.col(entity_column) == entity_id)
+                groups.append((str(entity_id), entity_rows, _source_like_parent_ids(entity_rows, request.grain_id, str(entity_id))))
+        for entity_id, entity_rows, parent_ids in groups:
+            if entity_rows.is_empty():
+                continue
+            numerator, denominator = _source_like_components_for_concept(
+                concept,
+                entity_rows,
+                period_source,
+                active_universe.get(period, 0.0),
+            )
+            rows.append(
+                _source_like_metric_fact_row(
+                    request=request,
+                    build=build,
+                    period=period,
+                    entity_id=str(entity_id),
+                    parent_entity_ids=parent_ids,
+                    concept=concept,
+                    numerator=numerator,
+                    denominator=denominator,
+                )
+            )
+    return rows
+
+
+def _source_like_product_scoped_rows(source: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
+    result = source
+    for key, values in (request.entity_filters or {}).items():
+        column = SOURCE_LIKE_ENTITY_COLUMNS.get(key)
+        if column is not None and values:
+            result = result.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
+    entity_column = SOURCE_LIKE_ENTITY_COLUMNS.get(request.grain_id)
+    if request.entity_ids and entity_column is not None:
+        result = result.filter(pl.col(entity_column).cast(pl.Utf8).is_in([str(value) for value in request.entity_ids]))
+    return result
+
+
+def _source_like_range_components(
+    source: pl.DataFrame,
+    request: DashboardMetricQueryRequest,
+    metric_concepts: tuple[str, ...],
+) -> dict[tuple[str, str], tuple[float | None, float | None]]:
+    scoped = _source_like_product_scoped_rows(source, request)
+    active_universe = _distinct_active_stores(source)
+    overrides: dict[tuple[str, str], tuple[float | None, float | None]] = {}
+    if request.grain_id == "network":
+        entity_id = request.entity_ids[0] if request.entity_ids else request.grain_id
+        groups = [(str(entity_id), scoped)]
+    else:
+        entity_column = SOURCE_LIKE_ENTITY_COLUMNS[request.grain_id]
+        assert entity_column is not None
+        groups = [
+            (str(entity_id), scoped.filter(pl.col(entity_column).cast(pl.Utf8) == str(entity_id)))
+            for entity_id in sorted(scoped.get_column(entity_column).drop_nulls().unique().to_list())
+        ]
+    for entity_id, entity_rows in groups:
+        for concept in metric_concepts:
+            if request.grain_id not in SOURCE_LIKE_APPROVED_KPI_SUPPORT.get(concept, frozenset()):
+                continue
+            overrides[(concept, entity_id)] = _source_like_components_for_concept(
+                concept,
+                entity_rows,
+                source,
+                active_universe,
+            )
+    return overrides
+
+
+def _active_store_universe_by_period(source: pl.DataFrame) -> dict[date, float]:
+    if source.is_empty():
+        return {}
+    frame = (
+        source.filter((pl.col("units") > 0) & pl.col("canonical_store_id").is_not_null())
+        .group_by("period")
+        .agg(pl.col("canonical_store_id").n_unique().alias("active_store_count"))
+    )
+    return {row["period"]: float(row["active_store_count"]) for row in frame.to_dicts()}
+
+
+def _source_like_components_for_concept(
+    concept: str,
+    entity_rows: pl.DataFrame,
+    period_source: pl.DataFrame,
+    active_store_universe: float,
+) -> tuple[float | None, float | None]:
+    if concept == "velocity":
+        numerator = _sum(entity_rows, "units")
+        denominator = _distinct_active_stores(entity_rows)
+        return numerator, denominator
+    if concept == "distribution":
+        numerator = _distinct_active_stores(entity_rows)
+        return numerator, active_store_universe
+    if concept == "weighted_distribution":
+        categories = [str(value) for value in entity_rows.get_column("category").drop_nulls().unique().to_list()]
+        if len(categories) != 1:
+            return None, None
+        category_rows = period_source.filter(pl.col("category").cast(pl.Utf8) == categories[0])
+        active_stores = [
+            str(value)
+            for value in entity_rows.filter((pl.col("units") > 0) & pl.col("canonical_store_id").is_not_null())
+            .get_column("canonical_store_id")
+            .unique()
+            .to_list()
+        ]
+        numerator = _sum(category_rows.filter(pl.col("canonical_store_id").cast(pl.Utf8).is_in(active_stores)), "revenue_vat")
+        denominator = _sum(category_rows, "revenue_vat")
+        return numerator, denominator
+    if concept == "average_price_per_liter":
+        valid = entity_rows.filter(
+            pl.col("volume_l").is_not_null()
+            & (pl.col("volume_l") > 0)
+            & pl.col("units").is_not_null()
+            & pl.col("revenue_vat").is_not_null()
+        )
+        numerator = _sum(valid, "revenue_vat")
+        denominator = _sum_expr(valid, pl.col("units") * pl.col("volume_l"))
+        return numerator, denominator
+    raise ValueError(f"Unsupported approved KPI concept: {concept}")
+
+
+def _source_like_metric_fact_row(
+    *,
+    request: DashboardMetricQueryRequest,
+    build: MartBuildMetadata,
+    period: date,
+    entity_id: str,
+    parent_entity_ids: dict[str, Any],
+    concept: str,
+    numerator: float | None,
+    denominator: float | None,
+) -> dict[str, Any]:
+    value = None if numerator is None or denominator in (None, 0) else numerator / denominator
+    period_end = date(period.year, period.month, calendar.monthrange(period.year, period.month)[1])
+    return {
+        "retailer_id": request.retailer_id,
+        "source_id": request.source_id,
+        "source_revision_id": build.source_revision_ids[0],
+        "analysis_run_id": build.analysis_run_ids[0],
+        "mart_build_id": build.mart_build_id,
+        "private_label_scope": request.private_label_scope.value,
+        "period_grain": request.period_grain,
+        "period_start": period,
+        "period_end": period_end,
+        "business_period_id": period.isoformat(),
+        "grain_id": request.grain_id,
+        "entity_id": entity_id,
+        "parent_entity_ids": _json_parent_ids(parent_entity_ids),
+        "metric_concept": concept,
+        "metric_name": _source_like_metric_name(concept),
+        "metric_definition_id": _source_like_metric_definition_id(request.retailer_id, request.grain_id, concept),
+        "metric_definition_version": "v1",
+        "metric_config_hash": build.metric_config_hashes[0],
+        "semantic_family": None,
+        "semantic_compatibility_version": None,
+        "cross_retailer_comparable": False,
+        "value": value,
+        "numerator_value": numerator,
+        "denominator_value": denominator,
+        "business_rule_id": _source_like_business_rule_id(concept),
+        "denominator_universe_type": _source_like_denominator_universe_type(concept),
+        "store_alias_mapping_version": None,
+        "numerator_metric_name": _source_like_numerator_metric_name(concept),
+        "denominator_metric_name": _source_like_denominator_metric_name(concept),
+        "aggregation": "ratio_of_sums",
+        "range_aggregation_strategy": RangeAggregationStrategy.RATIO_OF_SUMS.value,
+        "share_scope": _source_like_share_scope(concept),
+        "rule_version": build.rule_versions[0],
+        "quality_status": "valid" if value is not None else "missing",
+        "quality_flags": None if value is not None else _source_like_null_quality_flag(concept),
+        "created_at": build.built_at,
+    }
+
+
+def _source_like_parent_ids(rows: pl.DataFrame, grain: str, entity_id: str) -> dict[str, Any]:
+    values: dict[str, Any] = {}
+    for column in ("category", "manufacturer", "brand"):
+        unique = rows.get_column(column).drop_nulls().unique().to_list() if column in rows.columns else []
+        if len(unique) == 1:
+            values[column] = str(unique[0])
+    if grain == "sku":
+        values["canonical_product_id"] = entity_id
+    elif grain in {"category", "brand", "manufacturer", "store"}:
+        values[PARENT_ENTITY_JSON_KEYS[grain]] = entity_id
+    return values
+
+
+def _source_like_metric_definition_id(retailer_id: str, grain: str, concept: str) -> str:
+    return f"{retailer_id}.{grain}.{concept}.v1"
+
+
+def _source_like_metric_name(concept: str) -> str:
+    return {
+        "velocity": "units_per_selling_store",
+        "distribution": "numeric_distribution",
+        "weighted_distribution": "weighted_distribution",
+        "average_price_per_liter": "average_price_per_liter",
+    }[concept]
+
+
+def _source_like_business_rule_id(concept: str) -> str:
+    return {
+        "velocity": "BR-VPO",
+        "distribution": "BR-ND",
+        "weighted_distribution": "BR-WD",
+        "average_price_per_liter": "BR-PPL",
+    }[concept]
+
+
+def _source_like_denominator_universe_type(concept: str) -> str:
+    return {
+        "velocity": "selling_store_count",
+        "distribution": "selected_period_file_active_store_universe",
+        "weighted_distribution": "category_revenue_outlet_universe",
+        "average_price_per_liter": "sold_liters_valid_volume_rows",
+    }[concept]
+
+
+def _source_like_numerator_metric_name(concept: str) -> str:
+    return {
+        "velocity": "units",
+        "distribution": "selling_store_count",
+        "weighted_distribution": "category_revenue_in_object_active_outlets",
+        "average_price_per_liter": "revenue_vat_valid_volume_rows",
+    }[concept]
+
+
+def _source_like_denominator_metric_name(concept: str) -> str:
+    return {
+        "velocity": "selling_store_count",
+        "distribution": "active_store_count",
+        "weighted_distribution": "category_revenue_total",
+        "average_price_per_liter": "sold_liters",
+    }[concept]
+
+
+def _source_like_share_scope(concept: str) -> str | None:
+    if concept == "weighted_distribution":
+        return "category"
+    if concept == "distribution":
+        return "selected_period_file_active_store_universe"
+    return None
+
+
+def _source_like_null_quality_flag(concept: str) -> str:
+    return {
+        "velocity": "no_active_selling_outlets",
+        "distribution": "empty_active_store_universe",
+        "weighted_distribution": "category_revenue_denominator_unavailable",
+        "average_price_per_liter": "sold_liters_denominator_unavailable",
+    }[concept]
+
+
+def _distinct_active_stores(frame: pl.DataFrame) -> float:
+    if frame.is_empty():
+        return 0.0
+    return float(
+        frame.filter((pl.col("units") > 0) & pl.col("canonical_store_id").is_not_null())
+        .get_column("canonical_store_id")
+        .n_unique()
+    )
+
+
+def _sum(frame: pl.DataFrame, column: str) -> float:
+    if frame.is_empty():
+        return 0.0
+    value = frame.select(pl.col(column).sum()).item()
+    return 0.0 if value is None else float(value)
+
+
+def _sum_expr(frame: pl.DataFrame, expr: pl.Expr) -> float:
+    if frame.is_empty():
+        return 0.0
+    value = frame.select(expr.sum()).item()
+    return 0.0 if value is None else float(value)
+
+
+def _add_source_like_filter(clauses: list[str], params: list[Any], column: str, values: tuple[str, ...]) -> None:
+    if not values:
+        return
+    placeholders = ", ".join("?" for _ in values)
+    clauses.append(f"CAST({column} AS VARCHAR) IN ({placeholders})")
+    params.extend(str(value) for value in values)
+
+
+def _concat_fact_frames(left: pl.DataFrame, right: pl.DataFrame) -> pl.DataFrame:
+    frames = [frame for frame in (left, right) if not frame.is_empty()]
+    if not frames:
+        return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
+    return pl.concat(frames, how="diagonal_relaxed").select(
+        [pl.col(column).cast(dtype) for column, dtype in MART_METRIC_FACT_SCHEMA.items()]
+    )
 
 
 def _unsupported_distribution_scope_limitations(

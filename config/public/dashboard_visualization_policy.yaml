@@ -961,7 +961,26 @@ metric_rules:
   presentation_priority: SECONDARY
   grain_support:
   - category
-  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: weighted_distribution
+  allowed_screens:
+  - overview
+  - sales_drivers
+  preferred_visualization: COMPARISON_STRIP
+  alternative_visualizations:
+  - LINE
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  - GAUGE
+  presentation_priority: SECONDARY
+  grain_support:
   - brand
   - sku
   period_modes:
@@ -1003,7 +1022,27 @@ metric_rules:
   presentation_priority: SECONDARY
   grain_support:
   - category
-  - manufacturer
+  - brand
+  - sku
+  period_modes:
+  - SINGLE_PERIOD
+  - COMPARE
+  readiness_requirement: READY_QUERY
+- concept_id: average_price_per_liter
+  allowed_screens:
+  - overview
+  - sales_drivers
+  preferred_visualization: LINE
+  alternative_visualizations:
+  - COMPARISON_STRIP
+  - DETAIL_TABLE
+  forbidden_visualizations:
+  - PIE
+  - DONUT
+  presentation_priority: SECONDARY
+  grain_support:
+  - network
+  - category
   - brand
   - sku
   period_modes:

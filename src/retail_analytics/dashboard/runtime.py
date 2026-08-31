@@ -481,6 +481,7 @@ def build_private_dashboard_runtime(config: DashboardRuntimeConfig) -> Dashboard
         source_ledger=_read_source_ledger_entries(config.source_ledger_path),
         product_store_facts_path=config.product_store_facts_path,
         store_universe_path=config.store_universe_path,
+        source_like_rows_path=config.source_like_rows_path,
     )
     return DashboardRuntime(
         query_service=service,

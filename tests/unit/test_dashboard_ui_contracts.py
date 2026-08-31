@@ -843,8 +843,10 @@ def test_sales_drivers_uses_backend_query_and_preserves_active_scope() -> None:
     assert 'entry.format === "percent" ? "percentage_points" : entry.format' in script
     assert "!salesDriverGrainSupport[concept]?.includes(grain)" in script
     assert 'active_store_count: ["network", "category", "manufacturer", "brand", "sku"]' in script
-    assert 'distribution: ["category", "manufacturer", "brand", "sku"]' in script
-    assert 'velocity: ["category", "manufacturer", "brand", "sku"]' in script
+    assert 'distribution: ["category", "brand", "sku"]' in script
+    assert 'velocity: ["category", "brand", "sku"]' in script
+    assert 'weighted_distribution: ["brand", "sku"]' in script
+    assert 'average_price_per_liter: ["network", "category", "brand", "sku"]' in script
     assert 'revenue_velocity: ["category", "manufacturer", "brand", "sku"]' in script
     assert 'margin_velocity: ["category", "manufacturer", "brand", "sku"]' in script
     assert "margin / revenue" not in script
@@ -1946,7 +1948,7 @@ def test_overview_kpi_cards_use_compact_matrix_without_comparator_or_sparklines(
     assert "content.appendChild(left)" in kpi_renderer
     assert "card.dataset.kpiState = model.state" in kpi_renderer
     assert 'if (definition?.concept === "active_sku_count") return text;' in script
-    assert "source: \"business_rule_required\"" in overview_surface
+    assert "source: \"business_rule_required\"" not in overview_surface
     assert "const selectedDefinition = overviewTrendDefinition(state.chartMetric);" in script
     assert "const metricConcepts = selectedDefinition?.source === \"query\" ? [state.chartMetric] : [];" in script
 
@@ -1973,7 +1975,7 @@ def test_overview_kpi_matrix_removes_comparator_visual_while_preserving_directio
     assert ".kpi-direction-zero" in styles
 
 
-def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> None:
+def test_overview_approved_kpis_are_backend_owned_without_frontend_formulas() -> None:
     script = (
         resources.files("retail_analytics.dashboard.static")
         .joinpath("app.js")
@@ -1981,9 +1983,11 @@ def test_overview_unapproved_kpis_fail_closed_without_frontend_formulas() -> Non
     )
     overview_surface = script.split("const overviewKpiDefinitions = ", 1)[1].split("];", 1)[0]
 
-    assert "BUSINESS_RULE_REQUIRED" in overview_surface
-    assert "Требуется утверждённая формула." in overview_surface
-    assert "Требуется правило веса и вселенной." in overview_surface
+    assert "BUSINESS_RULE_REQUIRED" not in overview_surface
+    assert "Требуется утверждённая формула." not in overview_surface
+    assert "Требуется правило веса и вселенной." not in overview_surface
+    assert 'concept: "weighted_distribution"' in overview_surface
+    assert 'concept: "average_price_per_liter"' in overview_surface
     assert "revenue_vat /" not in script
     assert "revenue_vat/" not in script
     assert "weighted_distribution =" not in script
@@ -2096,7 +2100,7 @@ def test_overview_portfolio_kpi_uses_backend_comparison_and_available_month_limi
     assert "comparison_included_periods" in kpi_model
     assert "!overviewKpiPeriodUnsupported(definition)" in kpi_model
     assert "function overviewKpiPeriodUnsupported(definition)" in script
-    assert '["velocity", "distribution", "active_sku_count"].includes(definition.concept)' in script
+    assert '["active_sku_count"].includes(definition.concept)' in script
     assert "overviewKpiPeriodUnsupported(definition)" in unavailable
 
 

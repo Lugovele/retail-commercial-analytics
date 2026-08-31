@@ -250,6 +250,40 @@ capabilities:
   provenance_supported: true
   signal_eligible: true
   recommendation_eligible_future: true
+- concept_id: average_price_per_liter
+  ui_label_ru: Цена за литр
+  ui_description_ru: Реализованная цена продаж за литр по строкам с валидным объёмом упаковки.
+  tab: Показатели
+  group: Цена
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - network
+  - category
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: READY
+  range_aggregation_strategy: ratio_of_sums
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: currency
+  unit: currency_per_liter
+  backend_fact_source: source_like_rows
+  availability_status: READY
+  limitations:
+  - manufacturer_grain_not_supported
+  - store_grain_not_supported
+  - ratio_of_sums_not_average
+  provenance_supported: true
+  signal_eligible: true
+  recommendation_eligible_future: true
 - concept_id: selling_store_count
   ui_label_ru: ТТ с продажами
   ui_description_ru: Количество ТТ с продажами на уровне периода.
@@ -317,13 +351,12 @@ capabilities:
   recommendation_eligible_future: true
 - concept_id: distribution
   ui_label_ru: ND
-  ui_description_ru: Нумерическая дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
+  ui_description_ru: Нумерическая дистрибуция по активной базе ТТ выбранного периода.
   tab: Показатели
   group: Присутствие
   presentation_level: DEFAULT_TABLE
   grain_support:
   - category
-  - manufacturer
   - brand
   - sku
   single_period_support: READY
@@ -332,18 +365,51 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
-  date_range_support: PARTIAL
-  range_aggregation_strategy: period_only
+  date_range_support: READY
+  range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
   - INCLUDE
   - EXCLUDE
   - ONLY
   format: percent
   unit: percent
-  backend_fact_source: mart_metric_facts
+  backend_fact_source: source_like_rows
   availability_status: READY
   limitations:
-  - selected_range_value_unavailable
+  - network_grain_not_supported
+  - store_grain_not_supported
+  - do_not_average_periods
+  provenance_supported: true
+  signal_eligible: true
+  recommendation_eligible_future: true
+- concept_id: weighted_distribution
+  ui_label_ru: WD
+  ui_description_ru: Взвешенная дистрибуция по обороту категории в ТТ присутствия выбранного SKU или бренда.
+  tab: Показатели
+  group: Присутствие
+  presentation_level: DEFAULT_TABLE
+  grain_support:
+  - brand
+  - sku
+  single_period_support: READY
+  comparison_support:
+  - NONE
+  - YOY
+  - MOM
+  - PREVIOUS_AVAILABLE
+  date_range_support: READY
+  range_aggregation_strategy: ratio_of_sums
+  private_label_scope_support:
+  - INCLUDE
+  - EXCLUDE
+  - ONLY
+  format: percent
+  unit: percent
+  backend_fact_source: source_like_rows
+  availability_status: READY
+  limitations:
+  - category_grain_not_supported
+  - network_grain_not_supported
   - store_grain_not_supported
   - do_not_average_periods
   provenance_supported: true
@@ -391,13 +457,12 @@ capabilities:
   recommendation_eligible_future: false
 - concept_id: velocity
   ui_label_ru: Продажи на ТТ
-  ui_description_ru: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
+  ui_description_ru: Продажи в штуках на активную ТТ с продажами выбранного SKU, бренда или категории.
   tab: Показатели
   group: Присутствие
   presentation_level: DEFAULT_TABLE
   grain_support:
   - category
-  - manufacturer
   - brand
   - sku
   single_period_support: READY
@@ -406,18 +471,18 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
-  date_range_support: PARTIAL
-  range_aggregation_strategy: period_only
+  date_range_support: READY
+  range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
   - INCLUDE
   - EXCLUDE
   - ONLY
   format: ratio
   unit: units_per_selling_store
-  backend_fact_source: mart_metric_facts
+  backend_fact_source: source_like_rows
   availability_status: READY
   limitations:
-  - selected_range_value_unavailable
+  - network_grain_not_supported
   - store_grain_not_supported
   - do_not_average_periods
   provenance_supported: true

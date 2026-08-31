@@ -69,9 +69,7 @@ const overviewKpiDefinitions = [
     label: "WD",
     fullLabel: "Взвешенная дистрибуция",
     unit: "%",
-    source: "business_rule_required",
-    unavailableText: "Требуется правило веса и вселенной.",
-    status: "BUSINESS_RULE_REQUIRED"
+    source: "query"
   },
   { slot: 8, group: "coverage", visualTier: "secondary", concept: "active_sku_count", label: "Активные SKU", unit: "SKU", source: "portfolio" },
   {
@@ -81,9 +79,7 @@ const overviewKpiDefinitions = [
     concept: "average_price_per_liter",
     label: "Цена за литр",
     unit: "₽/л",
-    source: "business_rule_required",
-    unavailableText: "Требуется утверждённая формула.",
-    status: "BUSINESS_RULE_REQUIRED"
+    source: "query"
   },
   { slot: 10, group: "price", visualTier: "secondary", concept: "weighted_shelf_price_vat", label: "Полочная цена", unit: "₽", source: "query" },
   { slot: 11, group: "price", visualTier: "secondary", concept: "weighted_input_price_vat", label: "Входная цена", unit: "₽", source: "query" }
@@ -175,9 +171,11 @@ const salesDriverGrainSupport = {
   weighted_input_price_vat: ["network", "category", "manufacturer", "brand", "sku", "store"],
   selling_store_count: ["network", "category", "manufacturer", "brand", "sku"],
   active_store_count: ["network", "category", "manufacturer", "brand", "sku"],
-  distribution: ["category", "manufacturer", "brand", "sku"],
+  distribution: ["category", "brand", "sku"],
   numeric_distribution_store_format: ["category", "manufacturer", "brand", "sku"],
-  velocity: ["category", "manufacturer", "brand", "sku"],
+  velocity: ["category", "brand", "sku"],
+  weighted_distribution: ["brand", "sku"],
+  average_price_per_liter: ["network", "category", "brand", "sku"],
   revenue_velocity: ["category", "manufacturer", "brand", "sku"],
   margin_velocity: ["category", "manufacturer", "brand", "sku"],
   sku_count: ["network", "category", "manufacturer", "brand", "store"],
@@ -418,6 +416,8 @@ const neutralDirectionalMetrics = new Set([
   "active_store_count",
   "distribution",
   "numeric_distribution_store_format",
+  "weighted_distribution",
+  "average_price_per_liter",
   "velocity",
   "revenue_velocity",
   "margin_velocity",
@@ -2070,7 +2070,7 @@ function overviewKpiHasBlockingLimitation(result) {
 
 function overviewKpiPeriodUnsupported(definition) {
   return state.periodMode === "AVAILABLE_MONTH_SET"
-    && ["velocity", "distribution", "active_sku_count"].includes(definition.concept);
+    && ["active_sku_count"].includes(definition.concept);
 }
 
 function overviewKpiValueText(result, entry, definition) {

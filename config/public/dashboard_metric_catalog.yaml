@@ -102,15 +102,25 @@ metrics:
     delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: distribution
     default_display_label: ND
-    description: Нумерическая дистрибуция на уровне периода; arbitrary selected-range recomputation не объявлен.
+    description: Нумерическая дистрибуция по активной базе ТТ выбранного периода.
     format: percent
     dashboard_group: distribution
-    default_range_aggregation_strategy: period_only
+    default_range_aggregation_strategy: ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
-    generic_limitations: [selected_range_value_unavailable]
     business_question: Какая доля активных ТТ продаёт выбранный срез?
     decision_use: Оценить ширину присутствия без причинной интерпретации.
-    formula_summary: Отношение ТТ с продажами к активным ТТ в периоде.
+    formula_summary: Distinct ТТ с продажами выбранного SKU/бренда/категории, делённые на все активные ТТ выбранного периода.
+    delta_semantics: NEUTRAL_DIRECTIONAL
+  - metric_concept: weighted_distribution
+    default_display_label: WD
+    description: Взвешенная дистрибуция по обороту категории в ТТ присутствия выбранного SKU или бренда.
+    format: percent
+    dashboard_group: distribution
+    default_range_aggregation_strategy: ratio_of_sums
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Какая доля оборота категории приходится на ТТ, где представлен выбранный SKU или бренд?
+    decision_use: Оценить экономическую важность присутствия выбранного SKU или бренда.
+    formula_summary: Оборот категории в ТТ с продажами выбранного SKU/бренда, делённый на весь оборот этой категории.
     delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: numeric_distribution_store_format
     default_display_label: Дистрибуция в формате ТТ
@@ -126,15 +136,25 @@ metrics:
     delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: velocity
     default_display_label: Продажи на ТТ
-    description: Продажи на ТТ на уровне периода; arbitrary selected-range recomputation не объявлен.
+    description: Продажи в штуках на активную ТТ с продажами выбранного SKU, бренда или категории.
     format: ratio
     dashboard_group: distribution
-    default_range_aggregation_strategy: period_only
+    default_range_aggregation_strategy: ratio_of_sums
     default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
-    generic_limitations: [selected_range_value_unavailable]
     business_question: Сколько единиц продаётся на одну ТТ с продажами?
     decision_use: Оценить интенсивность продаж там, где товар присутствует.
-    formula_summary: Продажи в штуках, делённые на количество ТТ с продажами.
+    formula_summary: Сумма продаж в штуках, делённая на distinct ТТ с ненулевыми продажами выбранного SKU/бренда/категории.
+    delta_semantics: NEUTRAL_DIRECTIONAL
+  - metric_concept: average_price_per_liter
+    default_display_label: Цена за литр
+    description: Реализованная цена продаж за литр по строкам с валидным объёмом упаковки.
+    format: currency
+    dashboard_group: price
+    default_range_aggregation_strategy: ratio_of_sums
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    business_question: Какая реализованная цена за литр у выбранного среза?
+    decision_use: Сравнить фактический ценовой уровень с учётом микса упаковок.
+    formula_summary: Сумма оборота с НДС по строкам с валидным volume_l, делённая на сумму units × volume_l тех же строк.
     delta_semantics: NEUTRAL_DIRECTIONAL
   - metric_concept: revenue_velocity
     default_display_label: Оборот на ТТ

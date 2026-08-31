@@ -270,7 +270,7 @@ coverage:
     - network
     - category
 - concept_id: distribution
-  fact_type: mart_metric_facts
+  fact_type: source_like_rows
   coverage_status: PARTIAL
   scope: COMPLETE
   definition: COMPLETE
@@ -291,7 +291,52 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - category
-    - manufacturer
+    - brand
+    - sku
+- concept_id: weighted_distribution
+  fact_type: source_like_rows
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Присутствие
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - brand
+    - sku
+- concept_id: average_price_per_liter
+  fact_type: source_like_rows
+  coverage_status: PARTIAL
+  scope: COMPLETE
+  definition: COMPLETE
+  components: COMPLETE
+  comparison: COMPLETE
+  rule: COMPLETE
+  run: COMPLETE
+  source_evidence: PARTIAL
+  quality: COMPLETE
+  missing_fields:
+  - source_row_ids
+  UI_provenance_supported: true
+  applicability:
+    tab: Показатели
+    group: Цена
+    availability_status: READY
+    presentation_level: DEFAULT_TABLE
+    grain_support:
+    - network
+    - category
     - brand
     - sku
 - concept_id: numeric_distribution_store_format
@@ -315,11 +360,10 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - category
-    - manufacturer
     - brand
     - sku
 - concept_id: velocity
-  fact_type: mart_metric_facts
+  fact_type: source_like_rows
   coverage_status: PARTIAL
   scope: COMPLETE
   definition: COMPLETE
@@ -340,7 +384,6 @@ coverage:
     presentation_level: DEFAULT_TABLE
     grain_support:
     - category
-    - manufacturer
     - brand
     - sku
 - concept_id: revenue_velocity

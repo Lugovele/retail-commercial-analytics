@@ -403,6 +403,13 @@ def _expands_period_only_strategy(
     concept = override.metric_concept.lower()
     if concept.endswith("_share") and private_strategy == RangeAggregationStrategy.RECOMPUTE_SHARE_SCOPE:
         return override.share_scope is None
+    if (
+        concept in {"distribution", "velocity"}
+        and override.grain_support == ("manufacturer",)
+        and public_strategy == RangeAggregationStrategy.RATIO_OF_SUMS
+        and private_strategy == RangeAggregationStrategy.PERIOD_ONLY
+    ):
+        return False
     if any(marker in concept for marker in ("distribution", "velocity", "abc")):
         return public_strategy != private_strategy
     limited = {RangeAggregationStrategy.PERIOD_ONLY, RangeAggregationStrategy.UNSUPPORTED}
