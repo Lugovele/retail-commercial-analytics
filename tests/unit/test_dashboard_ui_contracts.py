@@ -822,13 +822,20 @@ def test_diagnostics_screen_implements_reference_workspace_without_fake_shell() 
 
 
 def test_diagnostics_kpi_selector_menu_is_overlay_not_clipped() -> None:
+    script = html_or_script("app.js")
     css = html_or_script("styles.css")
 
+    selector = script.split("function renderDiagnosticsKpiSelector()", 1)[1].split("function renderDiagnosticsOutcome()", 1)[0]
     outcome = css.split(".diagnostics-outcome {", 1)[1].split("}", 1)[0]
     picker = css.split(".diagnostics-kpi-picker {", 1)[1].split("}", 1)[0]
     menu = css.split(".diagnostics-kpi-menu {", 1)[1].split("}", 1)[0]
+    group = css.split(".diagnostics-menu-group {", 1)[1].split("}", 1)[0]
+    option = css.split(".diagnostics-kpi-option {", 1)[1].split("}", 1)[0]
+    selected = css.split(".diagnostics-kpi-option.is-active {", 1)[1].split("}", 1)[0]
     grid = css.split(".diagnostics-grid {", 1)[1].split("}", 1)[0]
 
+    assert 'groupLabel.className = "diagnostics-menu-group";' in selector
+    assert 'optionButton.type = "button";' in selector
     assert "position: relative;" in outcome
     assert "overflow: visible;" in outcome
     assert "z-index: 25;" in outcome
@@ -836,8 +843,17 @@ def test_diagnostics_kpi_selector_menu_is_overlay_not_clipped() -> None:
     assert "z-index: 35;" in picker
     assert "position: absolute;" in menu
     assert "z-index: 40;" in menu
-    assert "max-height: min(420px, calc(100vh - 188px));" in menu
+    assert "width: 258px;" in menu
+    assert "max-height: min(456px, calc(100vh - 188px));" in menu
     assert "overflow: auto;" in menu
+    assert "height: 26px;" in group
+    assert "background: var(--bg-subtle);" in group
+    assert "cursor: default;" in group
+    assert "height: 32px;" in option
+    assert "font-size: 12px;" in option
+    assert ".diagnostics-kpi-option::after" in css
+    assert 'content: "✓";' in css
+    assert "background: var(--overview-brand-soft);" in selected
     assert "z-index" not in grid
 
 
