@@ -2010,6 +2010,8 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert 'if (model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE") {' in kpi_renderer
     assert "if (isComparisonDisplayMode() && comparison)" not in kpi_renderer
     assert 'delta.className = `kpi-meta kpi-meta--delta ${kpiDirectionPresentationClass(comparison.delta)}`' in kpi_renderer
+    assert 'deltaSlot.className = "kpi-meta kpi-meta--delta kpi-meta--delta-placeholder";' in kpi_renderer
+    assert 'deltaSlot.setAttribute("aria-hidden", "true");' in kpi_renderer
     assert "text: kpiDeltaText(comparison, model.entry)" in kpi_renderer
     assert 'className: kpiDirectionPresentationClass(comparison.delta)' in kpi_renderer
     assert 'model.state === "COMPLETE_COMPARE" || model.state === "ZERO_CHANGE"' in kpi_renderer
@@ -2028,6 +2030,11 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "function kpiValueWithUnit" in script
     assert "function conciseKpiUnavailableText" in script
     assert "Требуется бизнес-правило" in script
+    assert 'left.appendChild(renderKpiEvidenceRow(\n      "current",\n      "",\n      "н/д",\n      null,\n      "kpi-na"\n    ));' in kpi_renderer
+    assert "left.appendChild(renderKpiUnavailableReasonRow(conciseKpiUnavailableText(definition, model)))" in kpi_renderer
+    assert 'appendText(left, "div", "н/д").className = "kpi-na";' not in kpi_renderer
+    assert 'appendText(left, "div", conciseKpiUnavailableText(definition, model)).className = "kpi-unavailable-reason";' not in kpi_renderer
+    assert "function renderKpiUnavailableReasonRow(text)" in script
 
     state_helpers = script.split("function overviewKpiState", 1)[1].split("function kpiReferencePeriodText", 1)[0]
     reference_helpers = script.split("function kpiReferencePeriodText", 1)[1].split("function overviewPortfolioItem", 1)[0]
@@ -2129,8 +2136,15 @@ def test_overview_kpi_cards_are_compact_and_primary_only() -> None:
     assert ".kpi-card-content" in css
     assert ".kpi-card-main" in css
     assert "align-items: flex-start" in css.split(".kpi-card-content", 1)[1].split(".kpi-card--primary", 1)[0]
-    assert "gap: 0" in css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
+    kpi_main_body = css.split(".kpi-card-main", 1)[1].split(".kpi-headline", 1)[0]
+    assert "grid-template-rows: 23px 22px 13px;" in kpi_main_body
+    assert "gap: 0" in kpi_main_body
+    assert "min-height: 18px;" in css.split(".kpi-headline", 1)[1].split(".kpi-title", 1)[0]
+    assert "min-height: 18px;" in css.split(".kpi-evidence-row", 1)[1].split(".kpi-evidence-period", 1)[0]
+    assert ".kpi-evidence-row--reference {\n  min-height: 13px;" in css
     assert ".kpi-meta--delta" in css
+    assert ".kpi-meta--delta-placeholder {\n  visibility: hidden;" in css
+    assert '.kpi-meta--delta-placeholder::before {\n  content: "0";' in css
     assert ".kpi-card--primary .kpi-meta--delta" not in kpi_block
     assert ".kpi-reference" in css
     assert "gap: 5px" in css
@@ -2577,7 +2591,7 @@ def test_current_reference_and_ownership_visual_hierarchy_is_not_color_only() ->
     styles = html_or_script("styles.css")
 
     assert 'row.className = `kpi-evidence-row kpi-evidence-row--${kind}`;' in script
-    assert 'value.className = "kpi-evidence-value";' in script
+    assert 'value.className = `kpi-evidence-value${valueClassName ? ` ${valueClassName}` : ""}`;' in script
     assert 'row.appendChild(value);' in script
     assert 'if (kind === "reference") {' in script
     assert 'appendText(row, "span", `· ${kpiCompactPeriodText(period)}`).className = "kpi-evidence-period";' in script

@@ -1788,8 +1788,14 @@ function renderKpiCard(definition, model = overviewKpiModel(definition)) {
     const left = document.createElement("div");
     left.className = "kpi-card-main";
     left.appendChild(renderKpiHeadline(definition, model));
-    appendText(left, "div", "н/д").className = "kpi-na";
-    appendText(left, "div", conciseKpiUnavailableText(definition, model)).className = "kpi-unavailable-reason";
+    left.appendChild(renderKpiEvidenceRow(
+      "current",
+      "",
+      "н/д",
+      null,
+      "kpi-na"
+    ));
+    left.appendChild(renderKpiUnavailableReasonRow(conciseKpiUnavailableText(definition, model)));
     content.appendChild(left);
     card.appendChild(content);
     return card;
@@ -1848,15 +1854,20 @@ function renderKpiHeadline(definition, model) {
       className: kpiDirectionPresentationClass(comparison.delta)
     }));
     headline.appendChild(delta);
+  } else {
+    const deltaSlot = document.createElement("span");
+    deltaSlot.className = "kpi-meta kpi-meta--delta kpi-meta--delta-placeholder";
+    deltaSlot.setAttribute("aria-hidden", "true");
+    headline.appendChild(deltaSlot);
   }
   return headline;
 }
 
-function renderKpiEvidenceRow(kind, period, text, node = null) {
+function renderKpiEvidenceRow(kind, period, text, node = null, valueClassName = "") {
   const row = document.createElement("div");
   row.className = `kpi-evidence-row kpi-evidence-row--${kind}`;
   const value = document.createElement("span");
-  value.className = "kpi-evidence-value";
+  value.className = `kpi-evidence-value${valueClassName ? ` ${valueClassName}` : ""}`;
   if (node) {
     value.appendChild(node);
   } else {
@@ -1866,6 +1877,13 @@ function renderKpiEvidenceRow(kind, period, text, node = null) {
   if (kind === "reference") {
     appendText(row, "span", `· ${kpiCompactPeriodText(period)}`).className = "kpi-evidence-period";
   }
+  return row;
+}
+
+function renderKpiUnavailableReasonRow(text) {
+  const row = document.createElement("div");
+  row.className = "kpi-evidence-row kpi-evidence-row--reference";
+  appendText(row, "span", text).className = "kpi-evidence-value kpi-unavailable-reason";
   return row;
 }
 
