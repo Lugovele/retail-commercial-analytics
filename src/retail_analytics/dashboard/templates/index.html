@@ -53,23 +53,23 @@
                   <button type="button" class="mode-button" data-period-mode="AVAILABLE_MONTH_SET">Сопоставимые месяцы</button>
                   <button type="button" class="mode-button" data-period-mode="DATE_RANGE">Весь диапазон</button>
                 </div>
-                <div class="period-fields is-hidden" id="single-fields">
-                  <label>
-                    <span>Период</span>
+                <div class="period-fields period-fields--single is-hidden" id="single-fields">
+                  <label class="period-card period-card--select">
+                    <span class="period-card-label">Период</span>
                     <select id="period-single"></select>
                   </label>
                 </div>
-                <div class="period-fields" id="compare-fields">
-                  <label>
-                    <span>Период A</span>
+                <div class="period-fields period-fields--compare" id="compare-fields">
+                  <label class="period-card period-card--select">
+                    <span class="period-card-label">Период A</span>
                     <select id="period-a"></select>
                   </label>
-                  <div class="derived-field">
-                    <span>Период B</span>
+                  <div class="period-card derived-field">
+                    <span class="period-card-label">Период B</span>
                     <strong id="period-b-derived">Определяется витриной</strong>
                   </div>
-                  <label>
-                    <span>Сравнение</span>
+                  <label class="period-card period-card--select">
+                    <span class="period-card-label">Сравнение</span>
                     <select id="comparison-mode">
                       <option value="YOY">Год к году</option>
                       <option value="PREVIOUS_AVAILABLE">Предыдущий доступный период</option>
@@ -78,26 +78,27 @@
                   </label>
                 </div>
                 <div class="period-fields period-fields--available is-hidden" id="available-month-fields">
-                  <label>
-                    <span>До периода</span>
+                  <label class="period-card period-card--select period-card--available-end">
+                    <span class="period-card-label">До периода</span>
                     <select id="period-available-end"></select>
                   </label>
-                  <div class="derived-field">
-                    <span>Политика</span>
-                    <strong>MATCHED_AVAILABLE_MONTHS</strong>
-                  </div>
-                  <div class="derived-field">
-                    <span>Месяцы</span>
-                    <strong id="available-months-derived">Определяются витриной</strong>
+                  <div class="period-card period-card--months derived-field">
+                    <span class="period-card-label">Сопоставимые месяцы</span>
+                    <strong id="available-months-derived">
+                      <span id="available-months-current">Определяются витриной</span>
+                      <span class="period-months-vs" aria-hidden="true">vs</span>
+                      <span id="available-months-reference">Определяются витриной</span>
+                    </strong>
+                    <small class="period-policy">MATCHED_AVAILABLE_MONTHS</small>
                   </div>
                 </div>
                 <div class="period-fields is-hidden" id="range-fields">
-                  <label>
-                    <span>С</span>
+                  <label class="period-card period-card--select">
+                    <span class="period-card-label">С</span>
                     <select id="date-from"></select>
                   </label>
-                  <label>
-                    <span>По</span>
+                  <label class="period-card period-card--select">
+                    <span class="period-card-label">По</span>
                     <select id="date-to"></select>
                   </label>
                 </div>

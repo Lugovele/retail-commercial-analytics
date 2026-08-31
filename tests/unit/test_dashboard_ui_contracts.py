@@ -1276,18 +1276,26 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert 'aria-haspopup="dialog"' in html
     assert 'id="period-summary"' in html
     popover_body = css.split(".period-popover {", 1)[1].split(".period-mode", 1)[0]
-    assert "width: min(680px, calc(100vw - 52px));" in popover_body
-    assert "max-height: min(560px, calc(100vh - 134px));" in popover_body
-    assert "overflow: auto;" in popover_body
+    assert "width: min(600px, calc(100vw - 32px));" in popover_body
+    assert "max-height: min(520px, calc(100vh - 132px));" in popover_body
+    assert "overflow-x: hidden;" in popover_body
+    assert "overflow-y: auto;" in popover_body
     assert "padding: 10px;" in popover_body
     fields_body = css.split(".period-fields {", 1)[1].split(".period-fields--available", 1)[0]
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in fields_body
+    assert 'class="period-fields period-fields--single is-hidden" id="single-fields"' in html
+    assert 'class="period-fields period-fields--compare" id="compare-fields"' in html
     assert ".period-fields--available" in css
-    assert "grid-template-columns: minmax(150px, 190px) minmax(170px, 210px) minmax(0, 1fr);" in css
+    assert "grid-template-columns: minmax(154px, 180px) minmax(0, 1fr);" in css
+    assert 'class="period-card period-card--months derived-field"' in html
+    assert 'id="available-months-current"' in html
+    assert 'id="available-months-reference"' in html
+    assert 'class="period-policy">MATCHED_AVAILABLE_MONTHS</small>' in html
     derived_body = css.split(".derived-field strong {", 1)[1].split(".filter-count", 1)[0]
-    assert "max-height: 78px;" in derived_body
-    assert "overflow: auto;" in derived_body
+    assert "overflow: hidden;" in derived_body
     assert "overflow-wrap: anywhere;" in derived_body
+    assert ".period-policy" in css
+    assert "color: var(--text-muted);" in css.split(".period-policy {", 1)[1].split("}", 1)[0]
     assert "data-toggle-full-list-filter" not in html.split('id="period-popover"', 1)[1].split('<div class="filter-grid"', 1)[0]
     active_mode_body = css.split(".mode-button.is-active {", 1)[1].split(".period-fields", 1)[0]
     assert "var(--brand-secondary)" not in active_mode_body

@@ -4682,6 +4682,10 @@ function updatePeriodPanels() {
   document.getElementById("compare-fields").classList.toggle("is-hidden", state.periodMode !== "COMPARE");
   document.getElementById("available-month-fields").classList.toggle("is-hidden", state.periodMode !== "AVAILABLE_MONTH_SET");
   document.getElementById("range-fields").classList.toggle("is-hidden", state.periodMode !== "DATE_RANGE");
+  const comparisonTarget = document.getElementById("period-b-derived");
+  if (comparisonTarget && state.periodMode === "COMPARE") {
+    comparisonTarget.textContent = derivedComparisonPeriodLabel();
+  }
   updateAvailableMonthDisclosure();
   updatePeriodSummary();
 }
@@ -4758,12 +4762,27 @@ function updateComparisonPeriodDisplay(response) {
 
 function updateAvailableMonthDisclosure(response) {
   const target = document.getElementById("available-months-derived");
+  const currentTarget = document.getElementById("available-months-current");
+  const referenceTarget = document.getElementById("available-months-reference");
   if (!target) return;
   if (state.periodMode !== "AVAILABLE_MONTH_SET") {
-    target.textContent = "Не используется";
+    if (currentTarget && referenceTarget) {
+      currentTarget.textContent = "Не используется";
+      referenceTarget.textContent = "";
+    } else {
+      target.textContent = "Не используется";
+    }
     return;
   }
-  target.textContent = availableMonthSummaryText(response);
+  const comparisonSet = availableMonthComparisonSet(response);
+  const current = formatPeriodList(comparisonSet?.current_included_periods);
+  const reference = formatPeriodList(comparisonSet?.comparison_included_periods);
+  if (currentTarget && referenceTarget) {
+    currentTarget.textContent = current || availableMonthSummaryText(response);
+    referenceTarget.textContent = reference || "Определяются витриной";
+    return;
+  }
+  target.textContent = current && reference ? `${current} vs ${reference}` : availableMonthSummaryText(response);
 }
 
 function availableMonthSummaryText(response) {
