@@ -1003,6 +1003,7 @@ main {
 }
 
 .overview-layout {
+  position: relative;
   display: flex;
   flex: 1 1 auto;
   flex-direction: column;
@@ -1686,6 +1687,146 @@ main {
   min-height: 0;
   position: relative;
   background: var(--bg-surface);
+}
+
+.overview-refresh-progress {
+  position: absolute;
+  right: 0;
+  top: 0;
+  left: 0;
+  z-index: 6;
+  height: 2px;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--brand-menu-blue) 14%, transparent);
+  pointer-events: none;
+}
+
+.overview-refresh-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 42%;
+  background: var(--brand-menu-blue);
+  animation: overview-progress-slide 1.25s ease-in-out infinite;
+}
+
+.overview-refresh-progress.is-hidden {
+  display: none;
+}
+
+.is-overview-scope-refreshing .kpi-grid,
+.is-overview-scope-refreshing #overview-table {
+  opacity: 0.62;
+  transition: opacity 120ms ease;
+}
+
+.is-overview-scope-refreshing #chart-box .overview-chart-svg,
+.is-overview-chart-refreshing #chart-box .overview-chart-svg {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+.overview-chart-loader {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 5;
+  display: inline-flex;
+  height: 32px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  box-shadow: 0 8px 24px rgba(44, 62, 80, 0.12);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.overview-chart-loader-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid color-mix(in srgb, var(--brand-menu-blue) 22%, var(--border-default));
+  border-top-color: var(--brand-menu-blue);
+  border-radius: 50%;
+  animation: overview-loader-spin 0.9s linear infinite;
+}
+
+.overview-chart-skeleton {
+  position: absolute;
+  inset: 20px 24px 40px 48px;
+  overflow: hidden;
+  background:
+    repeating-linear-gradient(to right, transparent 0, transparent calc(8.333% - 1px), var(--chart-grid) calc(8.333% - 1px), var(--chart-grid) 8.333%),
+    repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), var(--chart-grid) calc(25% - 1px), var(--chart-grid) 25%);
+  border-bottom: 1px solid var(--chart-grid);
+  border-left: 1px solid var(--chart-grid);
+}
+
+.overview-chart-skeleton-line {
+  position: absolute;
+  right: 7%;
+  left: 4%;
+  height: 2px;
+  background: color-mix(in srgb, var(--brand-menu-blue) 18%, var(--border-default));
+  border-radius: 999px;
+  opacity: 0.74;
+}
+
+.overview-chart-skeleton-line--1 { top: 24%; transform: rotate(-3deg); }
+.overview-chart-skeleton-line--2 { top: 43%; transform: rotate(2deg); }
+.overview-chart-skeleton-line--3 { top: 61%; transform: rotate(-1deg); }
+.overview-chart-skeleton-line--4 { top: 76%; transform: rotate(1.5deg); }
+
+.kpi-card-content--skeleton {
+  min-width: 0;
+}
+
+.kpi-skeleton-line {
+  display: block;
+  align-self: center;
+  height: 9px;
+  max-width: 100%;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.76), transparent),
+    color-mix(in srgb, var(--text-muted) 14%, var(--bg-subtle));
+  background-size: 180% 100%;
+  border-radius: 999px;
+  animation: overview-skeleton-pulse 1.45s ease-in-out infinite;
+}
+
+.kpi-skeleton-line--title { width: 54%; }
+.kpi-skeleton-line--value { width: 72%; height: 13px; }
+.kpi-skeleton-line--reference { width: 64%; height: 7px; }
+
+@keyframes overview-progress-slide {
+  0% { transform: translateX(-110%); }
+  50% { transform: translateX(70%); }
+  100% { transform: translateX(240%); }
+}
+
+@keyframes overview-loader-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes overview-skeleton-pulse {
+  0% { background-position: 180% 0; opacity: 0.7; }
+  50% { opacity: 0.92; }
+  100% { background-position: -180% 0; opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .overview-refresh-progress::before,
+  .overview-chart-loader-spinner,
+  .kpi-skeleton-line {
+    animation: none;
+  }
 }
 
 .overview-chart-svg {

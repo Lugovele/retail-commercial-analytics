@@ -888,8 +888,10 @@ def test_diagnostics_uses_backend_query_and_shared_selected_kpi_state() -> None:
     sales_driver_query = script.split("async function runSalesDriversQuery()", 1)[1].split("function salesDriverConcepts", 1)[0]
     assert "state.chartMetric = state.salesDriverMetric;" not in sales_driver_query
     chart_metric_handler = script.split('document.getElementById("chart-metric")?.addEventListener', 1)[1].split('document.getElementById("preview-grain")', 1)[0]
-    assert "state.salesDriverMetric = event.target.value;" in chart_metric_handler
-    assert "state.loadedViews.sales_drivers = false;" in chart_metric_handler
+    assert "await selectOverviewTrendMetric(event.target.value);" in chart_metric_handler
+    overview_select = script.split("async function selectOverviewTrendMetric(concept)", 1)[1].split("async function runOverviewChartRefresh()", 1)[0]
+    assert "state.salesDriverMetric = concept;" in overview_select
+    assert "state.loadedViews.sales_drivers = false;" in overview_select
     overview_select = script.split("async function selectOverviewTrendMetric(concept)", 1)[1].split("function renderSkeletons", 1)[0]
     assert "state.salesDriverMetric = concept;" in overview_select
     assert "state.loadedViews.sales_drivers = false;" in overview_select
@@ -1853,7 +1855,7 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "chartResponse: null" in script
     assert "buildChartQueryPayload()" in script
     assert 'const chartPromise = postJson("/api/dashboard/query", chartPayload);' in script
-    assert "const [summaryResponse, chartResponse] = await Promise.all([summaryPromise, chartPromise]);" in script
+    assert "const [summaryResponse, chartResponse, finalResponses] = await Promise.all([summaryPromise, chartPromise, finalResponsesPromise]);" in script
     assert "const finalResponsesPromise = Promise.all([overviewPortfolioPromise, contributionPromise, tablePromise]);" in script
     assert "state.chartResponse = chartResponse;" in script
     assert "period_mode: \"DATE_RANGE\"" in script
@@ -1905,6 +1907,96 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "Для выбранного показателя вклад в изменение не рассчитывается." in script
     assert "Вклад в изменение не рассчитывается для дополнительного фильтра" in script
     assert "Для этой пары уровней вклад пока недоступен." in script
+
+
+def test_overview_loading_states_preserve_existing_snapshot() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    assert 'overviewLoadMode: "initial"' in script
+    assert "function overviewHasRenderedSnapshot()" in script
+    assert "state.loadedViews.overview && state.summaryResponse" not in script
+    assert "const hasRenderedKpis = Boolean" in script
+    assert "const hasRenderedChart = Boolean" in script
+    assert 'setOverviewLoadMode("scope")' in script
+    assert 'setOverviewLoadMode("initial")' in script
+    assert 'setOverviewLoadMode("chart")' in script
+    assert "function invalidateSectionRequest(view)" in script
+    assert 'invalidateSectionRequest("overview_chart")' in script
+    assert 'renderOverviewScopeProgress(mode === "scope")' in script
+    assert "renderOverviewChartLoader(mode)" in script
+    assert 'overview?.setAttribute("aria-busy", mode === "initial" || mode === "scope" ? "true" : "false")' in script
+    assert 'chartBox?.setAttribute("aria-busy", mode === "initial" || mode === "scope" || mode === "chart" ? "true" : "false")' in script
+
+    overview_query = script.split("async function runOverviewQuery()", 1)[1].split("async function runSalesDriversQuery()", 1)[0]
+    assert "const hadSnapshot = overviewHasRenderedSnapshot();" in overview_query
+    assert 'invalidateSectionRequest("overview_chart")' in overview_query
+    assert "const chartRequestSequence = state.sectionRequests.overview_chart || 0;" in overview_query
+    assert "const chartRequestMetric = state.chartMetric;" in overview_query
+    assert "const chartRequestStillCurrent = state.sectionRequests.overview_chart === chartRequestSequence" in overview_query
+    assert "if (chartRequestStillCurrent) state.chartResponse = chartResponse;" in overview_query
+    assert "renderOverview({ includeChart: chartRequestStillCurrent });" in overview_query
+    assert 'if (chartRequestStillCurrent || state.overviewLoadMode !== "chart") setOverviewLoadMode("ready");' in overview_query
+    assert "if (hadSnapshot)" in overview_query
+    assert "renderSkeletons();" in overview_query
+    assert overview_query.index('setOverviewLoadMode("scope")') < overview_query.index('renderSkeletons();')
+    assert "renderOverview({ includeChart: chartRequestStillCurrent });" in overview_query
+    assert 'document.getElementById("chart-footnote").textContent = "Не удалось обновить данные. Предыдущий срез сохранён.";' in overview_query
+
+    assert ".overview-refresh-progress" in styles
+    assert ".is-overview-scope-refreshing .kpi-grid" in styles
+    assert ".overview-chart-loader" in styles
+    assert "@media (prefers-reduced-motion: reduce)" in styles
+
+
+def test_overview_kpi_switch_uses_chart_only_refresh() -> None:
+    script = html_or_script("app.js")
+
+    chart_select_handler = script.split('document.getElementById("chart-metric")?.addEventListener("change", async (event) => {', 1)[1].split("});", 1)[0]
+    assert "await selectOverviewTrendMetric(event.target.value);" in chart_select_handler
+    assert "await runOverviewQuery();" not in chart_select_handler
+
+    overview_select = script.split("async function selectOverviewTrendMetric(concept)", 1)[1].split("async function runOverviewChartRefresh()", 1)[0]
+    assert "state.chartMetric = concept;" in overview_select
+    assert "renderKpis();" in overview_select
+    assert "renderOverviewChartHeading();" in overview_select
+    assert "await runOverviewChartRefresh();" in overview_select
+    assert "await runOverviewQuery();" not in overview_select
+    assert 'setOverviewLoadMode("scope")' not in overview_select
+    assert "renderSkeletons();" not in overview_select
+
+    chart_refresh = script.split("async function runOverviewChartRefresh()", 1)[1].split("function renderSkeletons()", 1)[0]
+    assert 'const token = sectionRequestToken("overview_chart");' in chart_refresh
+    assert 'setOverviewLoadMode("chart")' in chart_refresh
+    assert 'postJson("/api/dashboard/portfolio-market", buildOverviewPortfolioPayload())' in chart_refresh
+    assert 'postJson("/api/dashboard/query", buildChartQueryPayload())' in chart_refresh
+    assert "if (!isCurrentSectionRequest(token)) return;" in chart_refresh
+    assert "state.summaryResponse" not in chart_refresh
+    assert "state.tableResponse" not in chart_refresh
+    assert "state.contributionResponse" not in chart_refresh
+
+
+def test_overview_initial_loading_uses_final_geometry_skeletons() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+    skeleton = script.split("function renderSkeletons()", 1)[1].split("function attentionItems()", 1)[0]
+
+    assert "renderKpiGroup(group, (definition) =>" in skeleton
+    assert "kpi-card--${definition.visualTier} is-loading" in skeleton
+    assert "kpi-card-content--skeleton" in skeleton
+    assert '["title", "value", "reference"].forEach((part) =>' in skeleton
+    assert "kpi-skeleton-line--${part}" in skeleton
+    assert "overview-chart-skeleton" in skeleton
+    assert "Загрузка динамики" not in skeleton
+    assert ".overview-chart-skeleton" in styles
+    assert ".kpi-skeleton-line" in styles
+
+    template = _template_text("index.html")
+    assert "is-overview-initial-loading" in template
+    assert "aria-busy=\"true\"" in template
+    assert template.count("data-kpi-slot=") >= 11
+    assert "overview-chart-skeleton" in template
+
 
 
 def test_overview_uses_ordered_business_kpi_surface() -> None:
@@ -2353,7 +2445,8 @@ def test_overview_comparative_trend_chart_uses_kpi_contract_and_local_limitation
     assert "function chronologicalMetricPoints" in script
     assert "chronologicalMetricPoints(rows, \"backend-trend-series\")" in script
     assert "recentChronologicalMetricPoints" not in script
-    assert 'document.getElementById("chart-title").textContent = definition.label;' in script
+    assert "function renderOverviewChartHeading" in script
+    assert "renderOverviewChartHeading(definition);" in script
     assert 'document.getElementById("chart-context").textContent = "· по месяцам · сравнение лет";' in script
     assert "backend-trend-series" in script
     assert "линии выровнены по месяцу" in script
@@ -2422,7 +2515,7 @@ def test_overview_decision_layout_uses_contribution_and_driver_guardrails() -> N
     assert "!excludedConcepts.has(concept)" in script
     assert ".slice(0, 3).map" in script
     assert "Есть показатели только по периодам" not in script
-    overview_block = script.split("function renderOverview()", 1)[1].split("function renderSalesDrivers()", 1)[0]
+    overview_block = script.split("function renderOverview({ includeChart = true } = {})", 1)[1].split("function renderSalesDrivers()", 1)[0]
     assert "Изменение оборота" not in overview_block
 
 

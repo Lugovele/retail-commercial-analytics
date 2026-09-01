@@ -27,6 +27,7 @@ const state = {
   loadedViews: {},
   scopeVersion: 0,
   sectionRequests: {},
+  overviewLoadMode: "initial",
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
@@ -894,8 +895,75 @@ function sectionRequestToken(view) {
   return token;
 }
 
+function invalidateSectionRequest(view) {
+  state.sectionRequests[view] = (state.sectionRequests[view] || 0) + 1;
+}
+
 function isCurrentSectionRequest(token) {
   return state.scopeVersion === token.scopeVersion && state.sectionRequests[token.view] === token.sequence;
+}
+
+function overviewHasRenderedSnapshot() {
+  const kpiGrid = document.getElementById("kpi-grid");
+  const chartBox = document.getElementById("chart-box");
+  const hasRenderedKpis = Boolean(kpiGrid?.querySelector(".kpi-card:not(.is-loading)"));
+  const hasRenderedChart = Boolean(
+    chartBox?.querySelector(".overview-chart-svg")
+      || chartBox?.querySelector(".empty-state")
+      || chartBox?.querySelector(".limitation-state"),
+  );
+  return Boolean(state.summaryResponse && state.chartResponse && hasRenderedKpis && hasRenderedChart);
+}
+
+function setOverviewLoadMode(mode) {
+  state.overviewLoadMode = mode;
+  const overview = document.getElementById("overview");
+  const kpiGrid = document.getElementById("kpi-grid");
+  const chartBox = document.getElementById("chart-box");
+  overview?.classList.toggle("is-overview-initial-loading", mode === "initial");
+  overview?.classList.toggle("is-overview-scope-refreshing", mode === "scope");
+  overview?.classList.toggle("is-overview-chart-refreshing", mode === "chart");
+  overview?.setAttribute("aria-busy", mode === "initial" || mode === "scope" ? "true" : "false");
+  kpiGrid?.setAttribute("aria-busy", mode === "initial" || mode === "scope" ? "true" : "false");
+  chartBox?.setAttribute("aria-busy", mode === "initial" || mode === "scope" || mode === "chart" ? "true" : "false");
+  renderOverviewScopeProgress(mode === "scope");
+  renderOverviewChartLoader(mode);
+}
+
+function renderOverviewScopeProgress(isVisible) {
+  const overview = document.getElementById("overview");
+  if (!overview) return;
+  let progress = document.getElementById("overview-refresh-progress");
+  if (!progress) {
+    progress = document.createElement("div");
+    progress.id = "overview-refresh-progress";
+    progress.className = "overview-refresh-progress is-hidden";
+    progress.setAttribute("aria-hidden", "true");
+    overview.prepend(progress);
+  }
+  progress.classList.toggle("is-hidden", !isVisible);
+}
+
+function renderOverviewChartLoader(mode) {
+  const chartBox = document.getElementById("chart-box");
+  if (!chartBox) return;
+  chartBox.querySelector(".overview-chart-loader")?.remove();
+  if (mode !== "scope" && mode !== "chart") return;
+  const loader = document.createElement("div");
+  loader.className = `overview-chart-loader overview-chart-loader--${mode}`;
+  loader.setAttribute("role", "status");
+  loader.setAttribute("aria-live", "polite");
+  const spinner = document.createElement("span");
+  spinner.className = "overview-chart-loader-spinner";
+  spinner.setAttribute("aria-hidden", "true");
+  loader.appendChild(spinner);
+  appendText(loader, "span", mode === "scope" ? "Пересчитываем срез" : "Обновляем график");
+  chartBox.appendChild(loader);
+}
+
+function renderOverviewChartHeading(definition = overviewTrendDefinition(state.chartMetric)) {
+  document.getElementById("chart-title").textContent = definition?.label || "Динамика";
+  document.getElementById("chart-context").textContent = "· по месяцам · сравнение лет";
 }
 
 function markInactiveSectionsPending() {
@@ -1054,11 +1122,7 @@ function bindDynamicControls() {
     });
   });
   document.getElementById("chart-metric")?.addEventListener("change", async (event) => {
-    state.chartMetric = event.target.value;
-    state.salesDriverMetric = event.target.value;
-    state.activeProvenanceConcept = event.target.value;
-    state.loadedViews.sales_drivers = false;
-    await runOverviewQuery();
+    await selectOverviewTrendMetric(event.target.value);
   });
   document.getElementById("preview-grain").addEventListener("change", async (event) => {
     state.previewGrain = event.target.value;
@@ -1262,8 +1326,17 @@ async function runActiveViewQuery() {
 
 async function runOverviewQuery() {
   const token = sectionRequestToken("overview");
-  setLoading(true, "Запрос к витрине");
-  renderSkeletons();
+  invalidateSectionRequest("overview_chart");
+  const chartRequestSequence = state.sectionRequests.overview_chart || 0;
+  const chartRequestMetric = state.chartMetric;
+  const hadSnapshot = overviewHasRenderedSnapshot();
+  setLoading(true, hadSnapshot ? "Обновляем данные" : "Запрос к витрине");
+  if (hadSnapshot) {
+    setOverviewLoadMode("scope");
+  } else {
+    renderSkeletons();
+    setOverviewLoadMode("initial");
+  }
   try {
     const summaryPayload = buildQueryPayload(state.currentGrain, entityIdsForSummary(), overviewConcepts());
     const chartPayload = buildChartQueryPayload();
@@ -1274,28 +1347,29 @@ async function runOverviewQuery() {
     const tablePromise = postJson("/api/dashboard/query", previewPayload);
     const contributionPromise = summaryPromise.then((summaryResponse) => loadContributionRows(summaryResponse));
     const finalResponsesPromise = Promise.all([overviewPortfolioPromise, contributionPromise, tablePromise]);
-    const [summaryResponse, chartResponse] = await Promise.all([summaryPromise, chartPromise]);
+    const [summaryResponse, chartResponse, finalResponses] = await Promise.all([summaryPromise, chartPromise, finalResponsesPromise]);
     if (!isCurrentSectionRequest(token)) return;
-    state.summaryResponse = summaryResponse;
-    state.chartResponse = chartResponse;
-    renderContextStrip();
-    renderBreadcrumb();
-    renderChartMetricOptions();
-    renderKpis();
-    renderChart();
-    const [overviewPortfolioResponse, contributionResponse, tableResponse] = await finalResponsesPromise;
-    if (!isCurrentSectionRequest(token)) return;
+    const [overviewPortfolioResponse, contributionResponse, tableResponse] = finalResponses;
+    const chartRequestStillCurrent = state.sectionRequests.overview_chart === chartRequestSequence
+      && state.chartMetric === chartRequestMetric;
     state.summaryResponse = summaryResponse;
     state.overviewPortfolioResponse = overviewPortfolioResponse;
-    state.chartResponse = chartResponse;
+    if (chartRequestStillCurrent) state.chartResponse = chartResponse;
     state.contributionResponse = contributionResponse;
     state.tableResponse = tableResponse;
-    renderOverview();
     state.loadedViews.overview = true;
+    renderOverview({ includeChart: chartRequestStillCurrent });
+    if (chartRequestStillCurrent || state.overviewLoadMode !== "chart") setOverviewLoadMode("ready");
     setLoading(false, "Данные обновлены");
   } catch (error) {
     if (!isCurrentSectionRequest(token)) return;
+    setOverviewLoadMode("ready");
     setLoading(false, "Не удалось загрузить данные.");
+    if (hadSnapshot) {
+      document.getElementById("chart-footnote").textContent = "Не удалось обновить данные. Предыдущий срез сохранён.";
+      showToast("Не удалось обновить данные. Предыдущий срез сохранён.");
+      return;
+    }
     showPageError(error);
   }
 }
@@ -1738,12 +1812,12 @@ function diagnosticsDetailConcepts() {
     .filter((concept) => metricEntryForGrain(concept, grain));
 }
 
-function renderOverview() {
+function renderOverview({ includeChart = true } = {}) {
   renderContextStrip();
   renderBreadcrumb();
   renderChartMetricOptions();
   renderKpis();
-  renderChart();
+  if (includeChart) renderChart();
   renderDiagnosis();
   renderAttention();
   renderOverviewTable();
@@ -2652,8 +2726,7 @@ function renderChart() {
     footnote.textContent = "";
     return;
   }
-  document.getElementById("chart-title").textContent = definition.label;
-  document.getElementById("chart-context").textContent = "· по месяцам · сравнение лет";
+  renderOverviewChartHeading(definition);
   const unsupported = overviewTrendUnsupportedText(definition, model);
   if (unsupported) {
     replaceWithMessage(box, "empty-state", unsupported);
@@ -5198,17 +5271,67 @@ async function selectOverviewTrendMetric(concept) {
   state.loadedViews.sales_drivers = false;
   renderKpis();
   renderChartMetricOptions();
-  await runOverviewQuery();
+  renderOverviewChartHeading();
+  await runOverviewChartRefresh();
+}
+
+async function runOverviewChartRefresh() {
+  const token = sectionRequestToken("overview_chart");
+  const definition = overviewTrendDefinition(state.chartMetric);
+  if (!definition) return;
+  setOverviewLoadMode("chart");
+  try {
+    if (definition.source === "portfolio") {
+      const overviewPortfolioResponse = await postJson("/api/dashboard/portfolio-market", buildOverviewPortfolioPayload());
+      if (!isCurrentSectionRequest(token)) return;
+      state.overviewPortfolioResponse = overviewPortfolioResponse;
+    } else {
+      const chartResponse = await postJson("/api/dashboard/query", buildChartQueryPayload());
+      if (!isCurrentSectionRequest(token)) return;
+      state.chartResponse = chartResponse;
+    }
+    renderChart();
+    setOverviewLoadMode("ready");
+    setLoading(false, "Данные обновлены");
+  } catch (error) {
+    if (!isCurrentSectionRequest(token)) return;
+    setOverviewLoadMode("ready");
+    document.getElementById("chart-footnote").textContent = "Не удалось обновить график. Предыдущая динамика сохранена.";
+    showToast("Не удалось обновить график.");
+  }
 }
 
 function renderSkeletons() {
-  document.getElementById("kpi-grid").replaceChildren(...overviewKpiGroups.map((group) => renderKpiGroup(group, () => {
+  document.getElementById("kpi-grid").replaceChildren(...overviewKpiGroups.map((group) => renderKpiGroup(group, (definition) => {
     const card = document.createElement("article");
-    card.className = "kpi-card is-loading";
+    card.className = `kpi-card kpi-card--${definition.visualTier} is-loading`;
+    card.dataset.kpiSlot = String(definition.slot);
+    card.dataset.kpiGroup = definition.group;
+    const content = document.createElement("div");
+    content.className = "kpi-card-content kpi-card-content--skeleton";
+    const main = document.createElement("div");
+    main.className = "kpi-card-main";
+    ["title", "value", "reference"].forEach((part) => {
+      const line = document.createElement("span");
+      line.className = `kpi-skeleton-line kpi-skeleton-line--${part}`;
+      main.appendChild(line);
+    });
+    content.appendChild(main);
+    card.appendChild(content);
     return card;
   })));
   document.getElementById("kpi-secondary")?.replaceChildren();
-  replaceWithMessage(document.getElementById("chart-box"), "loading-state", "Загрузка динамики...");
+  renderOverviewChartHeading();
+  const chartBox = document.getElementById("chart-box");
+  const skeleton = document.createElement("div");
+  skeleton.className = "overview-chart-skeleton";
+  for (let index = 0; index < 4; index += 1) {
+    const line = document.createElement("span");
+    line.className = `overview-chart-skeleton-line overview-chart-skeleton-line--${index + 1}`;
+    skeleton.appendChild(line);
+  }
+  chartBox.replaceChildren(skeleton);
+  document.getElementById("chart-footnote").textContent = "";
 }
 
 function attentionItems() {

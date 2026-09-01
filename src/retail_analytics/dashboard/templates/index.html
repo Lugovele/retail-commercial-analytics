@@ -244,17 +244,38 @@
 
         <nav class="breadcrumb-row" id="breadcrumb-row" aria-label="Путь разбора"></nav>
 
-        <section class="overview-layout dashboard-view report-section" id="overview" data-view-panel="overview" aria-labelledby="overview-title">
+        <section class="overview-layout dashboard-view report-section is-overview-initial-loading" id="overview" data-view-panel="overview" aria-labelledby="overview-title" aria-busy="true">
           <div class="screen-heading visually-hidden">
             <h2 id="overview-title">Обзор</h2>
           </div>
-          <section class="kpi-grid" id="kpi-grid" aria-label="Ключевые показатели">
-            <article class="kpi-card is-loading"></article>
-            <article class="kpi-card is-loading"></article>
-            <article class="kpi-card is-loading"></article>
-            <article class="kpi-card is-loading"></article>
+          <section class="kpi-grid" id="kpi-grid" aria-label="Ключевые показатели" aria-busy="true">
+            <section class="kpi-group kpi-group--result kpi-group--primary" data-kpi-group="result">
+              <h3 class="kpi-group-label">РЕЗУЛЬТАТ</h3>
+              <div class="kpi-group-cards">
+                <article class="kpi-card kpi-card--primary is-loading" data-kpi-slot="1" data-kpi-group="result"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--primary is-loading" data-kpi-slot="2" data-kpi-group="result"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--primary is-loading" data-kpi-slot="3" data-kpi-group="result"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--primary is-loading" data-kpi-slot="4" data-kpi-group="result"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--primary is-loading" data-kpi-slot="5" data-kpi-group="result"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+              </div>
+            </section>
+            <section class="kpi-group kpi-group--coverage kpi-group--secondary" data-kpi-group="coverage">
+              <h3 class="kpi-group-label">ПРИСУТСТВИЕ</h3>
+              <div class="kpi-group-cards">
+                <article class="kpi-card kpi-card--secondary is-loading" data-kpi-slot="6" data-kpi-group="coverage"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--secondary is-loading" data-kpi-slot="7" data-kpi-group="coverage"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--secondary is-loading" data-kpi-slot="8" data-kpi-group="coverage"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+              </div>
+            </section>
+            <section class="kpi-group kpi-group--price kpi-group--secondary" data-kpi-group="price">
+              <h3 class="kpi-group-label">ЦЕНА</h3>
+              <div class="kpi-group-cards">
+                <article class="kpi-card kpi-card--secondary is-loading" data-kpi-slot="9" data-kpi-group="price"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--secondary is-loading" data-kpi-slot="10" data-kpi-group="price"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+                <article class="kpi-card kpi-card--secondary is-loading" data-kpi-slot="11" data-kpi-group="price"><div class="kpi-card-content kpi-card-content--skeleton"><div class="kpi-card-main"><span class="kpi-skeleton-line kpi-skeleton-line--title"></span><span class="kpi-skeleton-line kpi-skeleton-line--value"></span><span class="kpi-skeleton-line kpi-skeleton-line--reference"></span></div></div></article>
+              </div>
+            </section>
           </section>
-
           <section class="overview-main">
             <article class="surface chart-panel">
               <div class="panel-heading">
@@ -264,7 +285,7 @@
                 </div>
                 <p class="chart-note">● данные · пунктир — пропуск</p>
               </div>
-              <div class="chart-box" id="chart-box" role="img" aria-label="Динамика выбранного показателя"></div>
+              <div class="chart-box" id="chart-box" role="img" aria-label="Динамика выбранного показателя" aria-busy="true"><div class="overview-chart-skeleton"><span class="overview-chart-skeleton-line overview-chart-skeleton-line--1"></span><span class="overview-chart-skeleton-line overview-chart-skeleton-line--2"></span><span class="overview-chart-skeleton-line overview-chart-skeleton-line--3"></span><span class="overview-chart-skeleton-line overview-chart-skeleton-line--4"></span></div></div>
               <div class="chart-footnote" id="chart-footnote"></div>
             </article>
           </section>
