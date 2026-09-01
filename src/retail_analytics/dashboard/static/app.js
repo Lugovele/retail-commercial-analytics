@@ -2933,7 +2933,8 @@ function overviewTrendPoints(definition, model) {
     ? model.item?.rows || []
     : model.result?.period_values || [];
   return chronologicalMetricPoints(rows, "backend-trend-series")
-    .map((point) => ({ period: point.period, value: point.value }));
+    .map((point) => ({ period: point.period, value: point.value }))
+    .filter((point) => Number.isFinite(Number(point.value)));
 }
 
 function overviewTrendContextText(definition) {
@@ -2954,22 +2955,28 @@ function overviewTrendContextText(definition) {
 function buildOverviewSvgChart(points, entry) {
   const width = 720;
   const height = 360;
-  const pad = { left: 48, right: 24, top: 20, bottom: 40 };
-  const svg = svgEl("svg", { class: "chart-svg overview-chart-svg", viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": `${entry.display_label}: динамика` });
-  const values = points.map((point) => point.value);
-  const max = Math.max(...values, 1);
-  const min = Math.min(0, ...values);
-  const range = max - min || 1;
+  const pad = { left: 72, right: 24, top: 20, bottom: 40 };
+  const realPoints = points.filter((point) => Number.isFinite(Number(point.value)));
+  const yScale = computeOverviewChartYScale(realPoints, entry);
+  const svg = svgEl("svg", {
+    class: "chart-svg overview-chart-svg",
+    viewBox: `0 0 ${width} ${height}`,
+    role: "img",
+    "aria-label": `${entry.display_label}: динамика`,
+    "data-y-min": String(yScale.min),
+    "data-y-max": String(yScale.max),
+    "data-observed-min": String(yScale.observedMin),
+    "data-observed-max": String(yScale.observedMax)
+  });
   const x = (monthIndex) => pad.left + (monthIndex * (width - pad.left - pad.right)) / 11;
-  const y = (value) => pad.top + (max - value) * (height - pad.top - pad.bottom) / range;
-  const series = chartYearSeries(points);
+  const y = (value) => pad.top + (yScale.max - value) * (height - pad.top - pad.bottom) / yScale.range;
+  const series = chartYearSeries(realPoints);
 
-  for (let tick = 0; tick <= 4; tick += 1) {
-    const value = min + (range * tick) / 4;
+  yScale.ticks.forEach((value) => {
     const yy = y(value);
     svg.appendChild(svgEl("line", { class: "grid-line", x1: pad.left, y1: yy, x2: width - pad.right, y2: yy }));
     svg.appendChild(svgText(pad.left - 10, yy + 4, formatValue(value, entry.format), "end", "axis-label"));
-  }
+  });
   svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: height - pad.bottom, x2: width - pad.right, y2: height - pad.bottom }));
   svg.appendChild(svgEl("line", { class: "axis-line", x1: pad.left, y1: pad.top, x2: pad.left, y2: height - pad.bottom }));
 
@@ -3050,6 +3057,116 @@ function buildOverviewSvgChart(points, entry) {
     svg.appendChild(group);
   });
   return svg;
+}
+
+function computeOverviewChartYScale(points, entry = {}) {
+  const values = points
+    .map((point) => Number(point.value))
+    .filter((value) => Number.isFinite(value));
+  if (!values.length) {
+    return { min: 0, max: 1, range: 1, ticks: [0, 0.25, 0.5, 0.75, 1], observedMin: null, observedMax: null };
+  }
+  const observedMin = Math.min(...values);
+  const observedMax = Math.max(...values);
+  const bounds = overviewChartValueBounds(entry);
+  const observedRange = observedMax - observedMin;
+  const paddedSpan = observedRange > 0 ? observedRange * 1.24 : 0;
+  const minimumSpan = overviewChartMinimumSpan(observedMin, observedMax, entry);
+  const targetSpan = Math.max(paddedSpan, minimumSpan);
+  let rawMin = (observedMin + observedMax - targetSpan) / 2;
+  let rawMax = (observedMin + observedMax + targetSpan) / 2;
+  if (bounds.min !== null && rawMin < bounds.min) {
+    rawMax += bounds.min - rawMin;
+    rawMin = bounds.min;
+  }
+  if (bounds.max !== null && rawMax > bounds.max) {
+    rawMin -= rawMax - bounds.max;
+    rawMax = bounds.max;
+  }
+  if (bounds.min !== null) rawMin = Math.max(bounds.min, rawMin);
+  if (bounds.max !== null) rawMax = Math.min(bounds.max, rawMax);
+  const ticks = niceOverviewChartTicks(rawMin, rawMax, bounds);
+  const min = ticks[0];
+  const max = ticks[ticks.length - 1];
+  return {
+    min,
+    max,
+    range: max - min || 1,
+    ticks,
+    observedMin,
+    observedMax
+  };
+}
+
+function overviewChartValueBounds(entry = {}) {
+  const metricConcept = overviewChartMetricConcept(entry);
+  const boundedPercentMetrics = new Set(["distribution", "weighted_distribution", "retailer_margin_pct"]);
+  const nonNegativeMetrics = new Set([
+    "units",
+    "revenue_vat",
+    "revenue",
+    "velocity",
+    "active_sku_count",
+    "average_price_per_liter",
+    "weighted_shelf_price_vat",
+    "weighted_input_price_vat"
+  ]);
+  if (boundedPercentMetrics.has(metricConcept)) return { min: 0, max: 1 };
+  if (nonNegativeMetrics.has(metricConcept)) return { min: 0, max: null };
+  return { min: null, max: null };
+}
+
+function overviewChartMinimumSpan(observedMin, observedMax, entry = {}) {
+  const metricConcept = overviewChartMetricConcept(entry);
+  const largestMagnitude = Math.max(Math.abs(observedMin), Math.abs(observedMax));
+  const unitPriceMetrics = new Set(["average_price_per_liter", "weighted_shelf_price_vat", "weighted_input_price_vat"]);
+  if (entry.format === "percent") return 0.08;
+  if (entry.format === "integer") return Math.max(1, largestMagnitude * 0.18);
+  if (unitPriceMetrics.has(metricConcept)) return Math.max(1, largestMagnitude * 0.18);
+  if (entry.format === "currency") return Math.max(100, largestMagnitude * 0.18);
+  return Math.max(1, largestMagnitude * 0.18);
+}
+
+function overviewChartMetricConcept(entry = {}) {
+  return entry.metric_concept || entry.concept || entry.concept_id || "";
+}
+
+function niceOverviewChartTicks(rawMin, rawMax, bounds = { min: null, max: null }) {
+  let step = niceOverviewChartStep(Math.max(rawMax - rawMin, Number.EPSILON), 4);
+  let min = Math.floor(rawMin / step) * step;
+  let max = Math.ceil(rawMax / step) * step;
+  if (bounds.min !== null) min = Math.max(bounds.min, min);
+  if (bounds.max !== null) max = Math.min(bounds.max, max);
+  if (max <= min) {
+    step = niceOverviewChartStep(Math.max(Math.abs(max), 1), 4);
+    max = min + step * 4;
+    if (bounds.max !== null && max > bounds.max) {
+      max = bounds.max;
+      min = Math.max(bounds.min ?? min, max - step * 4);
+    }
+  }
+  const ticks = [];
+  const precision = overviewChartStepPrecision(step);
+  for (let value = min; value <= max + step / 2 && ticks.length < 8; value += step) {
+    const rounded = Number(value.toFixed(precision));
+    if ((bounds.min === null || rounded >= bounds.min) && (bounds.max === null || rounded <= bounds.max)) ticks.push(rounded);
+  }
+  if (ticks.length < 2) return [min, max];
+  if (ticks[ticks.length - 1] < max) ticks.push(Number(max.toFixed(precision)));
+  return ticks;
+}
+
+function niceOverviewChartStep(span, intervals) {
+  const raw = Math.max(span / intervals, Number.EPSILON);
+  const magnitude = 10 ** Math.floor(Math.log10(raw));
+  const normalized = raw / magnitude;
+  const nice = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 2.5 ? 2.5 : normalized <= 5 ? 5 : 10;
+  return nice * magnitude;
+}
+
+function overviewChartStepPrecision(step) {
+  if (step >= 1) return 0;
+  return Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
 }
 
 function alignOverviewChartShell() {

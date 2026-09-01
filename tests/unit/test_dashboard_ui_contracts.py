@@ -2276,6 +2276,69 @@ def test_overview_loading_states_preserve_existing_snapshot() -> None:
     assert "@media (prefers-reduced-motion: reduce)" in styles
 
 
+
+def test_overview_chart_uses_adaptive_y_axis_without_synthetic_points() -> None:
+    script = html_or_script("app.js")
+    styles = html_or_script("styles.css")
+
+    chart_body = script.split("function buildOverviewSvgChart(points, entry)", 1)[1].split("function alignOverviewChartShell", 1)[0]
+    helper_body = script.split("function computeOverviewChartYScale(points, entry = {})", 1)[1].split("function alignOverviewChartShell", 1)[0]
+
+    assert "const realPoints = points.filter((point) => Number.isFinite(Number(point.value)));" in chart_body
+    assert "const yScale = computeOverviewChartYScale(realPoints, entry);" in chart_body
+    assert "const pad = { left: 72, right: 24, top: 20, bottom: 40 };" in chart_body
+    assert "const max = Math.max(...values, 1);" not in chart_body
+    assert "const min = Math.min(0, ...values);" not in chart_body
+    assert '"data-y-min": String(yScale.min)' in chart_body
+    assert '"data-y-max": String(yScale.max)' in chart_body
+    assert '"data-observed-min": String(yScale.observedMin)' in chart_body
+    assert '"data-observed-max": String(yScale.observedMax)' in chart_body
+    assert "yScale.ticks.forEach" in chart_body
+    assert "monthLabelsShort().forEach" in chart_body
+    assert "(monthIndex * (width - pad.left - pad.right)) / 11" in chart_body
+
+    assert "const paddedSpan = observedRange > 0 ? observedRange * 1.24 : 0;" in helper_body
+    assert "const minimumSpan = overviewChartMinimumSpan(observedMin, observedMax, entry);" in helper_body
+    assert "const targetSpan = Math.max(paddedSpan, minimumSpan);" in helper_body
+    assert "const metricConcept = overviewChartMetricConcept(entry);" in helper_body
+    assert 'new Set(["distribution", "weighted_distribution", "retailer_margin_pct"])' in helper_body
+    assert "return { min: 0, max: 1 };" in helper_body
+    assert "if (entry.format === \"percent\") return 0.08;" in helper_body
+    assert 'new Set(["average_price_per_liter", "weighted_shelf_price_vat", "weighted_input_price_vat"])' in helper_body
+    assert "if (unitPriceMetrics.has(metricConcept)) return Math.max(1, largestMagnitude * 0.18);" in helper_body
+    assert "return { min: 0, max: 1, range: 1, ticks: [0, 0.25, 0.5, 0.75, 1], observedMin: null, observedMax: null };" in helper_body
+    assert "niceOverviewChartTicks(rawMin, rawMax, bounds)" in helper_body
+    assert "niceOverviewChartStep(Math.max(rawMax - rawMin, Number.EPSILON), 4)" in helper_body
+    assert 'return entry.metric_concept || entry.concept || entry.concept_id || "";' in helper_body
+
+    gap_style = styles.split(".overview-chart-gap-bridge {", 1)[1].split("}", 1)[0]
+    solid_style = styles.split(".overview-chart-line {", 1)[1].split("}", 1)[0]
+    assert "stroke-width: 3;" in solid_style
+    assert "stroke-width: 1.15;" in gap_style
+    assert "opacity: 0.28;" in gap_style
+    assert "stroke-dasharray: 4 8;" in gap_style
+
+
+def test_overview_chart_sparse_segments_keep_real_markers_dominant() -> None:
+    script = html_or_script("app.js")
+
+    path_segments = script.split("function chartPathSegments(points)", 1)[1].split("function chartGapBridgeSegments", 1)[0]
+    gap_segments = script.split("function chartGapBridgeSegments(points)", 1)[1].split("function overviewMonthTooltip", 1)[0]
+    chart_body = script.split("function buildOverviewSvgChart(points, entry)", 1)[1].split("function alignOverviewChartShell", 1)[0]
+
+    assert "point.monthIndex !== previous.monthIndex + 1" in path_segments
+    assert "point.monthIndex > previous.monthIndex + 1" in gap_segments
+    assert "bridges.push([previous, point]);" in gap_segments
+    assert "class: `overview-chart-gap-bridge ${chartYearClass(yearSeries.year)}`" in chart_body
+    assert "data-gap-start" in chart_body
+    assert "data-gap-end" in chart_body
+    assert "yearSeries.points.forEach((point) =>" in chart_body
+    assert "class: `overview-chart-point ${chartYearClass(yearSeries.year)}`" in chart_body
+    assert "data-month-index" in chart_body
+    assert "data-value" in chart_body
+    assert "overview-chart-point" in chart_body.split("yearSeries.points.forEach((point) =>", 1)[1]
+    assert "overview-chart-point" not in gap_segments
+
 def test_overview_kpi_switch_uses_chart_only_refresh() -> None:
     script = html_or_script("app.js")
 
@@ -2726,8 +2789,8 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "flex: 0 1 760px;" in css
     assert "width: min(760px, 100%);" in css
     assert "aspect-ratio: 1.72 / 1;" in css
-    assert "stroke-dasharray: 7 6" in css
-    assert "opacity: 0.38" in css
+    assert "stroke-dasharray: 4 8" in css
+    assert "opacity: 0.28" in css
     assert ".overview-chart-point {" in css
     assert "fill: var(--chart-primary)" in css
     assert "cursor: crosshair" in css
@@ -2738,7 +2801,7 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     overview_chart = script.split("function buildOverviewSvgChart", 1)[1].split("function buildSvgChart", 1)[0]
     assert "const width = 720;" in overview_chart
     assert "const height = 360;" in overview_chart
-    assert "const pad = { left: 48, right: 24, top: 20, bottom: 40 };" in overview_chart
+    assert "const pad = { left: 72, right: 24, top: 20, bottom: 40 };" in overview_chart
     assert "value || 0" not in overview_chart
     assert "comparison-point-marker" not in overview_chart
     assert "marker-label" not in overview_chart

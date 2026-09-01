@@ -1924,10 +1924,10 @@ main {
 .overview-chart-gap-bridge {
   fill: none;
   stroke: var(--chart-primary);
-  stroke-dasharray: 7 6;
-  stroke-linecap: round;
-  stroke-width: 1.7;
-  opacity: 0.38;
+  stroke-dasharray: 4 8;
+  stroke-linecap: butt;
+  stroke-width: 1.15;
+  opacity: 0.28;
 }
 
 .overview-chart-point {
