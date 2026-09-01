@@ -332,11 +332,13 @@ class SignalFeedService:
             if categories:
                 scoped = scoped.filter(pl.col("category").is_in(list(categories)))
         if request.entity_filters:
-            for filter_key in ("manufacturer", "brand", "sku", "store"):
+            for filter_key in ("manufacturer", "brand", "package", "volume", "sku", "store"):
                 values = request.entity_filters.get(filter_key) or ()
                 if not values:
                     continue
-                if filter_key in scoped.columns:
+                if filter_key == "volume" and "volume_l" in scoped.columns:
+                    scoped = scoped.filter(pl.col("volume_l").round(6).is_in([round(float(value), 6) for value in values]))
+                elif filter_key in scoped.columns:
                     scoped = scoped.filter(pl.col(filter_key).is_in(list(values)))
                 elif request.grain_id == filter_key and {"entity_type", "entity_id"} <= set(scoped.columns):
                     scoped = scoped.filter(
@@ -600,10 +602,10 @@ def _blocking_scope_limitations(frame: pl.DataFrame, request: SignalFeedRequest)
         limitations.append("event_entity_scope_not_materialized")
     if request.entity_ids and not {"entity_type", "entity_id"} <= columns:
         limitations.append("event_entity_scope_not_materialized")
-    for filter_key in ("manufacturer", "brand", "sku", "store"):
+    for filter_key in ("manufacturer", "brand", "package", "volume", "sku", "store"):
         if not filters.get(filter_key):
             continue
-        can_filter_named_column = filter_key in columns
+        can_filter_named_column = filter_key in columns or (filter_key == "volume" and "volume_l" in columns)
         can_filter_entity_identity = request.grain_id == filter_key and {"entity_type", "entity_id"} <= columns
         if not can_filter_named_column and not can_filter_entity_identity:
             limitations.append(f"event_{filter_key}_scope_not_materialized")

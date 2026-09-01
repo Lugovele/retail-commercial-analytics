@@ -1171,6 +1171,46 @@ def test_active_sku_selected_selling_sku_store_scope_returns_one(tmp_path) -> No
     )
 
 
+def test_active_sku_respects_package_and_volume_constraints(tmp_path) -> None:
+    source_like_rows = _source_like_rows_with_period(
+        ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False, date(2026, 1, 1)),
+        ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_a", False, date(2026, 1, 1)),
+        ("category_a", "manufacturer_a", "brand_a", "sku_c", "store_a", False, date(2026, 1, 1)),
+    ).with_columns(
+        pl.when(pl.col("canonical_product_id") == "sku_a")
+        .then(pl.lit("пэт"))
+        .when(pl.col("canonical_product_id") == "sku_b")
+        .then(pl.lit("пэт"))
+        .otherwise(pl.lit("ж/б"))
+        .alias("package"),
+        pl.when(pl.col("canonical_product_id") == "sku_a")
+        .then(pl.lit(1.0))
+        .when(pl.col("canonical_product_id") == "sku_b")
+        .then(pl.lit(1.5))
+        .otherwise(pl.lit(1.0))
+        .alias("volume_l"),
+    )
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=source_like_rows,
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            entity_filters={"category": ("category_a",), "package": ("пэт",), "volume": ("1",)},
+            user_entity_filters={"category": ("category_a",), "package": ("пэт",), "volume": ("1",)},
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 1
+    assert item.current_value == 1
+    assert item.limitations == ()
+
+
 def test_active_sku_store_scope_counts_distinct_stable_sku_identities(tmp_path) -> None:
     service = _service(
         tmp_path,
@@ -1367,6 +1407,40 @@ def test_brand_category_delta_preserves_store_scope(tmp_path) -> None:
         "category": ("category_a",),
         "brand": ("brand_a",),
         "store": ("store_a",),
+    }
+
+
+def test_projection_filters_preserve_package_and_volume_scope(tmp_path) -> None:
+    request = _request(
+        grain_id="brand",
+        concept_ids=("brand_delta_pct",),
+        entity_filters={
+            "category": ("category_a",),
+            "brand": ("brand_a",),
+            "store": ("store_a",),
+            "package": ("pet",),
+            "volume": ("1.5",),
+        },
+        user_entity_filters={
+            "category": ("category_a",),
+            "brand": ("brand_a",),
+            "store": ("store_a",),
+            "package": ("pet",),
+            "volume": ("1.5",),
+        },
+    )
+
+    assert portfolio_market_module._projection_entity_filters(request, category="category_a") == {
+        "category": ("category_a",),
+        "store": ("store_a",),
+        "package": ("pet",),
+        "volume": ("1.5",),
+    }
+    assert portfolio_market_module._rank_universe_filters(request, "manufacturer", "category_a") == {
+        "category": ("category_a",),
+        "store": ("store_a",),
+        "package": ("pet",),
+        "volume": ("1.5",),
     }
 
 def test_brand_category_delta_is_not_range_safe(tmp_path) -> None:

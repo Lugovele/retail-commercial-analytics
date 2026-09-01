@@ -43,9 +43,12 @@ ACTIVE_SKU_FILTER_COLUMNS: Final = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
+VOLUME_FILTER_DECIMALS: Final = 6
 NO_MATCHING_ACTIVE_SKU_FILTER: Final = "__NO_MATCHING_ACTIVE_SKU_FILTER__"
 
 
@@ -319,7 +322,7 @@ class PortfolioMarketService:
         category, category_limitation = _share_category_scope(request, share_grain)
         if category_limitation:
             return _not_applicable(request, concept_id, "category_position", category_limitation)
-        filters = _rank_universe_filters(share_grain, category)
+        filters = _rank_universe_filters(request, share_grain, category)
         current_response = self.query_service.query(
             _metric_request(
                 request,
@@ -459,7 +462,7 @@ class PortfolioMarketService:
             return _not_applicable(request, concept_id, "category_position", category_limitation)
         if not category:
             return _not_applicable(request, concept_id, "category_position", "abc_requires_single_category_scope")
-        filters = _rank_universe_filters(abc_grain, category)
+        filters = _rank_universe_filters(request, abc_grain, category)
         response = self.query_service.query(
             _metric_request(
                 request,
@@ -569,7 +572,7 @@ class PortfolioMarketService:
         category, category_limitation = _rank_category_scope(request, rank_grain)
         if category_limitation:
             return _not_applicable(request, concept_id, "category_position", category_limitation)
-        filters = _rank_universe_filters(rank_grain, category)
+        filters = _rank_universe_filters(request, rank_grain, category)
         current_response = self.query_service.query(
             _metric_request(
                 request,
@@ -869,7 +872,7 @@ class PortfolioMarketService:
         history_end: date | None,
     ) -> ActiveSkuRollup | None:
         semantic_filters = _semantic_entity_filters(request)
-        if not semantic_filters.get("store"):
+        if not any(semantic_filters.get(key) for key in ("store", "package", "volume")):
             return None
         if self.query_service.source_like_rows_path is None or not self.query_service.source_like_rows_path.exists():
             return None
@@ -901,7 +904,12 @@ class PortfolioMarketService:
             column = ACTIVE_SKU_FILTER_COLUMNS[key]
             if column not in available_columns:
                 return None
-            frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
+            if key == "volume":
+                frame = frame.filter(
+                    pl.col(column).cast(pl.Float64).round(VOLUME_FILTER_DECIMALS).is_in(_volume_filter_values(values))
+                )
+            else:
+                frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
         if "units" in available_columns:
             frame = frame.filter(pl.col("units").fill_null(0) > 0)
         selected_columns = ["period", "canonical_product_id"]
@@ -990,7 +998,7 @@ class PortfolioMarketService:
             clauses.append("period_start <= CAST(? AS DATE)")
             params.append(history_end.isoformat())
         for column, values in (entity_filters or {}).items():
-            if column in {"category", "manufacturer", "brand", "sku", "store"}:
+            if column in {"category", "manufacturer", "brand", "package", "volume", "sku", "store"}:
                 _add_portfolio_parent_filter(clauses, params, column, values)
                 continue
             if column not in {"entity_id", "metric_concept", "metric_definition_id", "quality_status"}:
@@ -1091,7 +1099,7 @@ class PortfolioMarketService:
         filters = {
             key: values
             for key, values in (request.entity_filters or {}).items()
-            if key not in {"manufacturer", "brand", "sku"} and values
+            if key not in {"manufacturer", "brand", "package", "volume", "sku"} and values
         }
         filters["sku"] = resolved_skus or (NO_MATCHING_ACTIVE_SKU_FILTER,)
         return filters
@@ -1558,12 +1566,17 @@ def _abc_ownership_universe(request: PortfolioMarketQueryRequest) -> tuple[str |
     return None, "abc_ownership_universe_required"
 
 
-def _rank_universe_filters(rank_grain: str, category: str | None) -> dict[str, tuple[str, ...]] | None:
+def _rank_universe_filters(
+    request: PortfolioMarketQueryRequest,
+    rank_grain: str,
+    category: str | None,
+) -> dict[str, tuple[str, ...]] | None:
     if rank_grain == "category":
-        return None
+        filters = _projection_scope_filters(request)
+        return filters or None
     if category is None:
         return None
-    return {"category": (category,)}
+    return _projection_entity_filters(request, category=category)
 
 
 def _rank_focal_entities(request: PortfolioMarketQueryRequest, rank_grain: str) -> tuple[str, ...]:
@@ -1849,9 +1862,17 @@ def _not_available(
 
 def _projection_entity_filters(request: PortfolioMarketQueryRequest, *, category: str) -> dict[str, tuple[str, ...]]:
     filters: dict[str, tuple[str, ...]] = {"category": (category,)}
-    store_values = (request.entity_filters or {}).get("store") or _semantic_entity_filters(request).get("store") or ()
-    if store_values:
-        filters["store"] = tuple(store_values)
+    filters.update(_projection_scope_filters(request))
+    return filters
+
+
+def _projection_scope_filters(request: PortfolioMarketQueryRequest) -> dict[str, tuple[str, ...]]:
+    semantic_filters = _semantic_entity_filters(request)
+    filters: dict[str, tuple[str, ...]] = {}
+    for key in ("store", "package", "volume"):
+        values = (request.entity_filters or {}).get(key) or semantic_filters.get(key) or ()
+        if values:
+            filters[key] = tuple(values)
     return filters
 
 def _category_filter(request: PortfolioMarketQueryRequest) -> str | None:
@@ -1927,11 +1948,20 @@ def _resolve_active_sku_filter_skus(
         column = ACTIVE_SKU_FILTER_COLUMNS[key]
         if column not in available_columns:
             return None
-        frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
+        if key == "volume":
+            frame = frame.filter(
+                pl.col(column).cast(pl.Float64).round(VOLUME_FILTER_DECIMALS).is_in(_volume_filter_values(values))
+            )
+        else:
+            frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
     return tuple(
         str(value)
         for value in frame.select(pl.col("canonical_product_id").cast(pl.Utf8).unique().sort()).collect().to_series()
     )
+
+
+def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
+    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
 
 
 def _active_sku_source_revision_ids(

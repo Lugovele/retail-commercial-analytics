@@ -34,6 +34,8 @@ PRODUCT_STORE_FACT_SCHEMA = {
     "canonical_product_id": pl.Utf8,
     "canonical_store_id": pl.Utf8,
     "sku_name": pl.Utf8,
+    "package": pl.Utf8,
+    "volume_l": pl.Float64,
     "store_format": pl.Utf8,
     "region": pl.Utf8,
     "serving_fact_grain": pl.Utf8,
@@ -116,6 +118,11 @@ def build_product_store_metric_facts(
         "canonical_store_id",
         "sku_name",
     ]
+    if "package" not in with_periods.columns:
+        with_periods = with_periods.with_columns(pl.lit(None, dtype=pl.Utf8).alias("package"))
+    if "volume_l" not in with_periods.columns:
+        with_periods = with_periods.with_columns(pl.lit(None, dtype=pl.Float64).alias("volume_l"))
+    dimension_columns.extend(["package", "volume_l"])
     for optional in ("store_format", "region"):
         if optional not in with_periods.columns:
             with_periods = with_periods.with_columns(pl.lit(None, dtype=pl.Utf8).alias(optional))
@@ -148,7 +155,11 @@ def write_product_store_metric_facts(frame: pl.DataFrame, path: str | Path) -> P
 def read_product_store_metric_facts(path: str | Path) -> pl.DataFrame:
     """Read product-store serving facts with deterministic column order."""
 
-    return pl.read_parquet(Path(path)).select([pl.col(column).cast(dtype) for column, dtype in PRODUCT_STORE_FACT_SCHEMA.items()])
+    frame = pl.read_parquet(Path(path))
+    for column, dtype in PRODUCT_STORE_FACT_SCHEMA.items():
+        if column not in frame.columns:
+            frame = frame.with_columns(pl.lit(None, dtype=dtype).alias(column))
+    return frame.select([pl.col(column).cast(dtype) for column, dtype in PRODUCT_STORE_FACT_SCHEMA.items()])
 
 
 def _metric_rows(
@@ -199,6 +210,8 @@ def _metric_rows(
             "brand": row.get("brand"),
             "canonical_product_id": row.get("canonical_product_id"),
             "canonical_store_id": row.get("canonical_store_id"),
+            "package": row.get("package"),
+            "volume_l": row.get("volume_l"),
         },
         ensure_ascii=False,
         sort_keys=True,
@@ -249,6 +262,8 @@ def _metric_rows(
                 "canonical_product_id": row.get("canonical_product_id"),
                 "canonical_store_id": row.get("canonical_store_id"),
                 "sku_name": row.get("sku_name"),
+                "package": row.get("package"),
+                "volume_l": _optional_float(row.get("volume_l")),
                 "store_format": row.get("store_format"),
                 "region": row.get("region"),
                 "serving_fact_grain": PRODUCT_STORE_SERVING_FACT_GRAIN,
@@ -270,6 +285,12 @@ def _float(value: object) -> float:
     if isinstance(value, (int, float)):
         return float(value)
     return float(str(value))
+
+
+def _optional_float(value: object) -> float | None:
+    if value is None:
+        return None
+    return _float(value)
 
 
 def _period_end(value: date, period_grain: str) -> date:

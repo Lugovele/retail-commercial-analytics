@@ -348,7 +348,7 @@ def _optional_date(value: str | None) -> date | None:
 
 def _parent_filters(params: dict[str, list[str]]) -> dict[str, tuple[str, ...]]:
     filters: dict[str, tuple[str, ...]] = {}
-    for key in ("category", "manufacturer", "brand", "sku", "store"):
+    for key in ("category", "manufacturer", "brand", "package", "volume", "sku", "store"):
         values = tuple(value for value in params.get(key, ()) if value)
         if values:
             filters[key] = values

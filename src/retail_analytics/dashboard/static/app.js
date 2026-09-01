@@ -33,9 +33,9 @@ const state = {
   comparisonMode: "YOY",
   currentGrain: "network",
   drilldownPath: [],
-  filters: { category: [], manufacturer: [], brand: [], sku: [], store: [] },
+  filters: { category: [], manufacturer: [], brand: [], package: [], volume: [], sku: [], store: [] },
   pendingFilters: {},
-  filterQueries: { category: "", manufacturer: "", brand: "", sku: "", store: "" },
+  filterQueries: { category: "", manufacturer: "", brand: "", package: "", volume: "", sku: "", store: "" },
   expandedFilters: {},
   openFilterId: null,
   scopeEditView: null,
@@ -494,9 +494,11 @@ const comparisonLabels = {
   NONE: "Без сравнения"
 };
 const filterConfig = {
-  category: { label: "Все", title: "Категория", searchPlaceholder: "Найти категорию", childFilters: ["manufacturer", "brand", "sku"] },
-  manufacturer: { label: "Все", title: "Производитель", searchPlaceholder: "Найти производителя", childFilters: ["brand", "sku"] },
-  brand: { label: "Все", title: "Бренд", searchPlaceholder: "Найти бренд", childFilters: ["sku"] },
+  category: { label: "Все", title: "Категория", searchPlaceholder: "Найти категорию", childFilters: ["manufacturer", "brand", "package", "volume", "sku"] },
+  manufacturer: { label: "Все", title: "Производитель", searchPlaceholder: "Найти производителя", childFilters: ["brand", "package", "volume", "sku"] },
+  brand: { label: "Все", title: "Бренд", searchPlaceholder: "Найти бренд", childFilters: ["package", "volume", "sku"] },
+  package: { label: "Все", title: "Тара", searchPlaceholder: "Найти тару", childFilters: ["volume", "sku"] },
+  volume: { label: "Все", title: "Объём", searchPlaceholder: "Найти объём", childFilters: ["sku"] },
   sku: { label: "Все", title: "SKU", searchPlaceholder: "Найти SKU", childFilters: [] },
   store: {
     label: "Все",
@@ -505,8 +507,8 @@ const filterConfig = {
     childFilters: []
   }
 };
-const multiFilterIds = ["category", "manufacturer", "brand", "sku", "store"];
-const searchFilterIds = ["category", "manufacturer", "brand", "sku", "store"];
+const multiFilterIds = ["category", "manufacturer", "brand", "package", "volume", "sku", "store"];
+const searchFilterIds = ["category", "manufacturer", "brand", "package", "volume", "sku", "store"];
 const drilldownOrder = ["network", "category", "manufacturer", "brand", "sku", "store"];
 const maxComboboxOptions = 20;
 const sectionIdByView = {
@@ -5531,6 +5533,15 @@ function compareEntityLabels(left, right) {
   return String(left.label).localeCompare(String(right.label), "ru-RU", { numeric: true, sensitivity: "base" });
 }
 
+function compareVolumeOptions(left, right) {
+  const leftValue = Number.parseFloat(left.value);
+  const rightValue = Number.parseFloat(right.value);
+  if (Number.isFinite(leftValue) && Number.isFinite(rightValue) && leftValue !== rightValue) {
+    return leftValue - rightValue;
+  }
+  return compareEntityLabels(left, right);
+}
+
 function renderFilterOptions(id) {
   const input = document.getElementById(`${id}-search`);
   const list = document.getElementById(`${id}-options`);
@@ -5586,6 +5597,7 @@ function renderFilterOptions(id) {
 
 function visibleEntityOptions(id) {
   const values = rankedEntityOptions(state.options.entities?.[id] || [], state.filterQueries[id] || "");
+  if (id === "volume" && !(state.filterQueries[id] || "").trim()) values.sort(compareVolumeOptions);
   return state.expandedFilters[id] ? values : values.slice(0, maxComboboxOptions);
 }
 
@@ -6147,7 +6159,7 @@ function portfolioItemDetailText(item) {
 function selectedFilterValuesForPortfolio() {
   const selected = selectedFilterValues();
   return Object.fromEntries(
-    ["category", "manufacturer", "brand", "sku", "store"]
+    ["category", "manufacturer", "brand", "package", "volume", "sku", "store"]
       .filter((key) => selected[key])
       .map((key) => [key, selected[key]])
   );
@@ -6157,6 +6169,8 @@ function selectedPortfolioExecutionFilters(grain) {
   const selected = selectedFilterValuesForPortfolio();
   const executionFilters = Object.create(null);
   if (selected.category?.length) executionFilters.category = selected.category;
+  if (selected.package?.length) executionFilters.package = selected.package;
+  if (selected.volume?.length) executionFilters.volume = selected.volume;
   if (selected.store?.length) executionFilters.store = selected.store;
   const focalGrains = ["manufacturer", "brand", "sku"];
   focalGrains.forEach((candidate) => {

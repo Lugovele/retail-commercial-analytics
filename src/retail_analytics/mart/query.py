@@ -28,6 +28,7 @@ from retail_analytics.mart.store_universe import MONTHLY_STORE_FORMAT_UNIVERSE
 
 FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
 SOURCE_LIKE_APPROVED_KPI_FILTER_PRECEDENCE = ("sku", "brand", "category")
+VOLUME_FILTER_DECIMALS = 6
 STORE_FORMAT_DISTRIBUTION_CONCEPT = "numeric_distribution_store_format"
 STORE_FORMAT_DISTRIBUTION_RULE_ID = "BR-009B"
 STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS = frozenset({"category", "manufacturer", "brand", "sku"})
@@ -46,6 +47,8 @@ SOURCE_LIKE_ENTITY_COLUMNS = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
@@ -75,6 +78,7 @@ SOURCE_LIKE_SOURCE_COLUMNS = (
     "category",
     "manufacturer",
     "brand",
+    "package",
     "units",
     "revenue_vat",
     "volume_l",
@@ -93,6 +97,8 @@ PARENT_ENTITY_JSON_KEYS = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
@@ -681,13 +687,15 @@ class DashboardMartQueryService:
         for key, values in (request.entity_filters or {}).items():
             column = SOURCE_LIKE_ENTITY_COLUMNS.get(key)
             if column is not None:
+                if values and column not in result.columns:
+                    raise ValueError(f"Unsupported query filter column for approved KPI recomposition: {key}")
                 continue
             if key in {"store_format", "territory", "fo", "fo2", "region"}:
                 if key in result.columns and values:
                     result = result.filter(pl.col(key).cast(pl.Utf8).is_in([str(value) for value in values]))
                 continue
             raise ValueError(f"Unsupported query filter column for approved KPI recomposition: {key}")
-        return result.select(list(SOURCE_LIKE_SOURCE_COLUMNS))
+        return result.select([column for column in SOURCE_LIKE_SOURCE_COLUMNS if column in result.columns])
 
     def _apply_source_like_approved_kpi_range_values(
         self,
@@ -780,7 +788,7 @@ class DashboardMartQueryService:
         for column, values in (request.entity_filters or {}).items():
             if column not in PARENT_ENTITY_JSON_KEYS:
                 raise ValueError(f"Unsupported query filter column: {column}")
-            _add_in_filter(clauses, params, _product_store_filter_column(column), values)
+            _add_product_store_filter(clauses, params, column, values)
         _add_product_store_entity_id_filter(clauses, params, request.grain_id, request.entity_ids)
         if request.quality_policy == QualityPolicy.VALID_ONLY:
             clauses.append("quality_status = ?")
@@ -917,7 +925,7 @@ class DashboardMartQueryService:
         for column, values in (request.entity_filters or {}).items():
             if column == "store_format":
                 continue
-            _add_in_filter(clauses, params, _product_store_filter_column(column), values)
+            _add_product_store_filter(clauses, params, column, values)
         _add_product_store_entity_id_filter(clauses, params, request.grain_id, request.entity_ids)
         if request.quality_policy == QualityPolicy.VALID_ONLY:
             clauses.append("quality_status = ?")
@@ -1885,6 +1893,7 @@ def _source_like_approved_kpi_rows(
     for period in sorted(source.get_column("period").unique().to_list()):
         period_source = source.filter(pl.col("period") == period)
         period_scoped = scoped.filter(pl.col("period") == period)
+        groups: list[tuple[str, pl.DataFrame, dict[str, str]]]
         if request.grain_id == "network":
             groups = [(request.entity_ids[0] if request.entity_ids else request.grain_id, period_scoped, {})]
         else:
@@ -2010,7 +2019,12 @@ def _source_like_product_scoped_rows(source: pl.DataFrame, request: DashboardMet
     for key, values in (request.entity_filters or {}).items():
         column = SOURCE_LIKE_ENTITY_COLUMNS.get(key)
         if column is not None and values:
-            result = result.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
+            if key == "volume":
+                result = result.filter(
+                    pl.col(column).cast(pl.Float64).round(VOLUME_FILTER_DECIMALS).is_in(_volume_filter_values(values))
+                )
+            else:
+                result = result.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
     entity_column = SOURCE_LIKE_ENTITY_COLUMNS.get(request.grain_id)
     if request.entity_ids and entity_column is not None:
         result = result.filter(pl.col(entity_column).cast(pl.Utf8).is_in([str(value) for value in request.entity_ids]))
@@ -2264,7 +2278,7 @@ def _cached_source_like_rows(path: Path) -> pl.DataFrame:
 @lru_cache(maxsize=4)
 def _cached_source_like_rows_for_version(path: str, mtime_ns: int, size: int) -> pl.DataFrame:
     del mtime_ns, size
-    available = set(pl.read_parquet_schema(path).names())
+    available = set(pl.read_parquet_schema(path).keys())
     columns = [
         column
         for column in (*SOURCE_LIKE_SOURCE_COLUMNS, "private_label_flag", *SOURCE_LIKE_OPTIONAL_FILTER_COLUMNS)
@@ -2393,7 +2407,7 @@ def _store_format_distribution_request_limitations(
                 metric_concept=STORE_FORMAT_DISTRIBUTION_CONCEPT,
             )
         )
-    unsupported = sorted(set(filters) - {"category", "manufacturer", "brand", "sku", "store_format", "store"})
+    unsupported = sorted(set(filters) - {"category", "manufacturer", "brand", "package", "volume", "sku", "store_format", "store"})
     for column in unsupported:
         limitations.append(
             QueryLimitation(
@@ -2574,7 +2588,10 @@ def _has_product_store_intersection(request: DashboardMetricQueryRequest) -> boo
     product_scope_requested = request.grain_id in {"category", "manufacturer", "brand", "sku"}
     store_scope_requested = request.grain_id == "store"
     product_scope_filtered = any(selected.get(key) for key in ("category", "manufacturer", "brand", "sku"))
+    attribute_scope_filtered = any(selected.get(key) for key in ("package", "volume"))
     store_scope_filtered = bool(selected.get("store"))
+    if attribute_scope_filtered:
+        return True
     return (store_scope_filtered and (product_scope_requested or product_scope_filtered)) or (
         store_scope_requested and product_scope_filtered
     )
@@ -3149,6 +3166,18 @@ def _add_in_filter(clauses: list[str], params: list[Any], column: str, values: t
     params.extend(values)
 
 
+def _add_product_store_filter(clauses: list[str], params: list[Any], filter_name: str, values: tuple[str, ...]) -> None:
+    if not values:
+        return
+    column = _product_store_filter_column(filter_name)
+    if filter_name == "volume":
+        placeholders = ", ".join("?" for _ in values)
+        clauses.append(f"ROUND(CAST({column} AS DOUBLE), {VOLUME_FILTER_DECIMALS}) IN ({placeholders})")
+        params.extend(_volume_filter_values(values))
+        return
+    _add_in_filter(clauses, params, column, values)
+
+
 def _add_json_parent_filter(clauses: list[str], params: list[Any], key: str, values: tuple[str, ...]) -> None:
     if not values:
         return
@@ -3156,6 +3185,10 @@ def _add_json_parent_filter(clauses: list[str], params: list[Any], key: str, val
     json_key = PARENT_ENTITY_JSON_KEYS.get(key, key)
     clauses.append(f"json_extract_string(parent_entity_ids, '$.{json_key}') IN ({placeholders})")
     params.extend(values)
+
+
+def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
+    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
 
 
 def _dedupe_limitations(limitations: list[QueryLimitation]) -> tuple[QueryLimitation, ...]:

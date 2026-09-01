@@ -1399,7 +1399,7 @@ def test_overview_large_filters_use_runtime_backed_comboboxes() -> None:
     html = html_or_script("index.html")
     script = html_or_script("app.js")
 
-    for filter_id in ("category", "manufacturer", "brand", "sku", "store"):
+    for filter_id in ("category", "manufacturer", "brand", "package", "volume", "sku", "store"):
         assert f'data-filter-trigger="{filter_id}"' in html
         assert f'id="{filter_id}-search"' in html
         assert 'role="combobox"' in html
@@ -1486,6 +1486,8 @@ def test_scope_toolbar_uses_single_row_multiselect_contract() -> None:
         'data-filter-trigger="category"',
         'data-filter-trigger="manufacturer"',
         'data-filter-trigger="brand"',
+        'data-filter-trigger="package"',
+        'data-filter-trigger="volume"',
         'data-filter-trigger="sku"',
         'data-filter-trigger="store"',
         'id="private-label-scope"',
@@ -1495,9 +1497,9 @@ def test_scope_toolbar_uses_single_row_multiselect_contract() -> None:
     assert "filter-grid" in scope_body
     filter_grid_body = css.split(".filter-grid", 1)[1].split(".native-filter-select", 1)[0]
     assert "display: flex;" in filter_grid_body
-    assert "gap: 7px;" in filter_grid_body
+    assert "gap: 5px;" in filter_grid_body
     assert "align-items: center;" in filter_grid_body
-    assert scope_body.count("native-filter-select") == 5
+    assert scope_body.count("native-filter-select") == 7
     assert scope_body.count('id="private-label-scope"') == 1
     assert "filter-chip" not in html
     assert "data-combobox" not in html
@@ -1603,7 +1605,7 @@ def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> 
 def test_browser_filter_state_is_staged_multi_value_and_applied_once() -> None:
     script = html_or_script("app.js")
 
-    assert "filters: { category: [], manufacturer: [], brand: [], sku: [], store: [] }" in script
+    assert "filters: { category: [], manufacturer: [], brand: [], package: [], volume: [], sku: [], store: [] }" in script
     assert "pendingFilters: {}" in script
     assert "values.forEach((value) => params.append(key, value));" in script
     assert "state.filters[id] = next;" in script
@@ -1621,11 +1623,15 @@ def test_dashboard_options_parent_filters_preserve_multi_values() -> None:
         "category": ["water", "juice", ""],
         "manufacturer": ["maker_a", "maker_b"],
         "brand": [""],
+        "package": ["пэт"],
+        "volume": ["1.5"],
     }
 
     assert _parent_filters(params) == {
         "category": ("water", "juice"),
         "manufacturer": ("maker_a", "maker_b"),
+        "package": ("пэт",),
+        "volume": ("1.5",),
     }
 
 
@@ -1706,6 +1712,127 @@ def test_source_like_filter_options_use_active_mart_source_revisions(tmp_path) -
     assert "SKU_ACTIVE" in entities["sku"][0]["search_aliases"]
     assert [item["value"] for item in entities["store"]] == ["STORE_ACTIVE"]
     assert [item["label"] for item in entities["store"]] == ["Store Active Label"]
+
+
+def test_source_like_filter_options_include_package_and_numeric_volume_cascade(tmp_path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    source_like_path = tmp_path / "source_like_rows.parquet"
+    pl.DataFrame(
+        [
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "package": "пэт",
+                "volume_l": 1.5,
+                "canonical_product_id": "SKU_15",
+                "sku_name": "SKU 1.5L",
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "package": "пэт",
+                "volume_l": 0.5,
+                "canonical_product_id": "SKU_05",
+                "sku_name": "SKU 0.5L",
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_OTHER",
+                "package": "ж/б",
+                "volume_l": 0.33,
+                "canonical_product_id": "SKU_CAN",
+                "sku_name": "SKU can",
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+        ]
+    ).write_parquet(source_like_path)
+    runtime = replace(runtime, source_like_rows_path=source_like_path)
+
+    entities = runtime.options_metadata(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        parent_filters={"brand": ("BRAND_ACTIVE",), "package": ("пэт",)},
+    )["entities"]
+
+    assert [item["value"] for item in entities["package"]] == ["пэт"]
+    assert [item["value"] for item in entities["volume"]] == ["0.5", "1.5"]
+    assert [item["label"] for item in entities["volume"]] == ["0,5 л", "1,5 л"]
+    assert [item["value"] for item in entities["sku"]] == ["SKU_05", "SKU_15"]
+
+
+def test_volume_filter_options_normalize_source_float_artifacts(tmp_path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    source_like_path = tmp_path / "source_like_rows.parquet"
+    pl.DataFrame(
+        [
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "package": "пэт",
+                "volume_l": volume,
+                "canonical_product_id": sku,
+                "sku_name": sku,
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            }
+            for sku, volume in (("SKU_A", 0.344999999999999), ("SKU_B", 0.345))
+        ]
+    ).write_parquet(source_like_path)
+    runtime = replace(runtime, source_like_rows_path=source_like_path)
+
+    entities = runtime.options_metadata(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        parent_filters={"volume": ("0.345",)},
+    )["entities"]
+
+    assert [item["value"] for item in entities["volume"]] == ["0.345"]
+    assert [item["label"] for item in entities["volume"]] == ["0,345 л"]
+    assert [item["value"] for item in entities["sku"]] == ["SKU_A", "SKU_B"]
+
+
+def test_volume_filter_uses_numeric_frontend_sorting() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "function compareVolumeOptions" in script
+    assert "Number.parseFloat(left.value)" in script
+    assert 'id === "volume"' in script
+    assert "values.sort(compareVolumeOptions)" in script
 
 
 def test_sku_filter_options_are_name_first_but_identity_stable(tmp_path) -> None:
@@ -2541,9 +2668,13 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert "nearestSelectedGrain" not in script
     assert "await refreshRuntimeOptions();" in script
     assert 'category: {' in script
-    assert 'childFilters: ["manufacturer", "brand", "sku"]' in script
+    assert 'childFilters: ["manufacturer", "brand", "package", "volume", "sku"]' in script
     assert 'manufacturer: {' in script
-    assert 'childFilters: ["brand", "sku"]' in script
+    assert 'childFilters: ["brand", "package", "volume", "sku"]' in script
+    assert 'package: {' in script
+    assert 'childFilters: ["volume", "sku"]' in script
+    assert 'volume: {' in script
+    assert 'childFilters: ["sku"]' in script
     assert "contextFilterText()" in script
     assert "grainLabels[state.currentGrain]" in script
     assert "manufacturer-search" in html_or_script("index.html")

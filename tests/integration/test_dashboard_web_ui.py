@@ -795,6 +795,115 @@ def test_dashboard_query_route_uses_product_store_serving_for_store_and_product_
     }
 
 
+def test_dashboard_routes_apply_package_and_volume_global_filters(tmp_path: Path) -> None:
+    source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
+    runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")
+    build = runtime.query_service.mart_builds[0]
+    product_store_path = tmp_path / "product_store.parquet"
+    write_product_store_metric_facts(
+        build_product_store_metric_facts(
+            pl.read_parquet(source_rows_path),
+            build_metadata=build,
+            source_revision_id=build.source_revision_ids[0],
+            created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        ),
+        product_store_path,
+    )
+    runtime = replace(
+        runtime,
+        source_like_rows_path=source_rows_path,
+        product_store_facts_path=product_store_path,
+        query_service=DashboardMartQueryService(
+            runtime.query_service.metric_facts_path,
+            catalog=runtime.query_service.catalog,
+            mart_builds=runtime.query_service.mart_builds,
+            source_ledger=runtime.query_service.source_ledger,
+            source_like_rows_path=source_rows_path,
+            product_store_facts_path=product_store_path,
+        ),
+    )
+    app = create_dashboard_wsgi_app(runtime)
+
+    options_status, _, options_body = _call(
+        app,
+        "GET",
+        "/api/dashboard/options",
+        query=(
+            "retailer_id=retailer_a&source_id=source_a&private_label_scope=INCLUDE"
+            "&category=CATEGORY_STANDARD&brand=Brand%20A&package=PACK_A"
+        ),
+    )
+    options = json.loads(options_body)
+
+    assert options_status.startswith("200")
+    assert [item["value"] for item in options["entities"]["package"]] == ["PACK_A"]
+    assert [(item["value"], item["label"], item["display_name"]) for item in options["entities"]["volume"]] == [
+        ("0.5", "0,5 л", "0,5 л")
+    ]
+    assert [item["value"] for item in options["entities"]["sku"]] == ["SKU_A_001"]
+
+    filters = {"category": ["CATEGORY_STANDARD"], "package": ["PACK_A"], "volume": ["0.5"]}
+    query_status, _, query_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/query",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": ["network"],
+            "entity_filters": filters,
+            "metric_concepts": ["revenue", "units"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    query_response = json.loads(query_body)
+
+    assert query_status.startswith("200")
+    values = {item["metric_concept"]: item["value"] for item in query_response["metric_results"]}
+    assert values == {"revenue": 80.0, "units": 8.0}
+    assert query_response["request_scope"]["user_entity_filters"] == filters
+    assert query_response["request_scope"]["entity_filters"] == filters
+    assert query_response["metric_results"][0]["provenance"]["current_analytical_scope"][
+        "execution_entity_filters"
+    ] == filters
+
+    portfolio_status, _, portfolio_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/portfolio-market",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": ["network"],
+            "entity_filters": filters,
+            "concept_ids": ["active_sku_count"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    portfolio_response = json.loads(portfolio_body)
+
+    assert portfolio_status.startswith("200")
+    active_sku = portfolio_response["items"][0]
+    assert active_sku["current_value"] == 1
+    assert active_sku["reference_value"] == 1
+    assert active_sku["provenance"]["current_analytical_scope"]["user_entity_filters"] == filters
+    assert active_sku["provenance"]["current_analytical_scope"]["execution_entity_filters"] == filters
+
+
 def test_dashboard_geography_route_returns_region_grouping_from_product_store_serving(tmp_path: Path) -> None:
     source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
     runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")

@@ -435,8 +435,12 @@ def _source_like_scope_clauses(
         filter_column = _SOURCE_FILTER_COLUMNS.get(key)
         if filter_column is not None and filter_column in columns and values:
             placeholders = ", ".join("?" for _ in values)
-            clauses.append(f"{filter_column} IN ({placeholders})")
-            params.extend(values)
+            if key == "volume":
+                clauses.append(f"ROUND(CAST({filter_column} AS DOUBLE), 6) IN ({placeholders})")
+                params.extend(float(str(value)) for value in values)
+            else:
+                clauses.append(f"{filter_column} IN ({placeholders})")
+                params.extend(values)
     if request.grain_id in _SOURCE_FILTER_COLUMNS and request.entity_ids:
         grain_column = _SOURCE_FILTER_COLUMNS[request.grain_id]
         if grain_column in columns:
@@ -453,6 +457,8 @@ _SOURCE_FILTER_COLUMNS = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }

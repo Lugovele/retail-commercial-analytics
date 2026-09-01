@@ -702,7 +702,7 @@ input {
 .filter-grid {
   display: flex;
   flex: 1 1 auto;
-  gap: 7px;
+  gap: 5px;
   align-items: center;
   min-width: 0;
 }
@@ -718,23 +718,29 @@ input {
 }
 
 .multi-filter[data-filter="category"] {
-  flex-basis: 114px;
-  max-width: 150px;
+  flex-basis: 104px;
+  max-width: 140px;
 }
 
 .multi-filter[data-filter="manufacturer"] {
-  flex-basis: 156px;
-  max-width: 220px;
+  flex-basis: 142px;
+  max-width: 200px;
 }
 
 .multi-filter[data-filter="brand"] {
-  flex-basis: 136px;
-  max-width: 180px;
+  flex-basis: 122px;
+  max-width: 170px;
+}
+
+.multi-filter[data-filter="package"],
+.multi-filter[data-filter="volume"] {
+  flex: 0.72 1 82px;
+  max-width: 112px;
 }
 
 .multi-filter[data-filter="sku"] {
-  flex-basis: 146px;
-  max-width: 210px;
+  flex-basis: 132px;
+  max-width: 190px;
 }
 
 .multi-filter[data-filter="store"] {

@@ -18,6 +18,8 @@ _FILTER_COLUMNS = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
@@ -582,8 +584,12 @@ def _add_scope_filters(clauses: list[str], params: list[Any], filters: dict[str,
         if column is None or not values:
             continue
         placeholders = ", ".join("?" for _ in values)
-        clauses.append(f"{column} IN ({placeholders})")
-        params.extend(values)
+        if key == "volume":
+            clauses.append(f"ROUND(CAST({column} AS DOUBLE), 6) IN ({placeholders})")
+            params.extend(float(str(value)) for value in values)
+        else:
+            clauses.append(f"{column} IN ({placeholders})")
+            params.extend(values)
 
 
 def _date_or_none(value: date | str | None) -> date | None:

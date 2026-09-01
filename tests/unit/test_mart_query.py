@@ -904,6 +904,68 @@ def test_product_store_intersection_rolls_up_category_and_store_filters(tmp_path
     }
 
 
+def test_product_store_intersection_respects_package_and_volume_filters(tmp_path) -> None:
+    facts_path = tmp_path / "facts.parquet"
+    product_store_path = tmp_path / "product_store.parquet"
+    source_rows = _product_store_source_rows().with_columns(
+        pl.when(pl.col("canonical_product_id") == "SKU_A")
+        .then(pl.lit("пэт"))
+        .when(pl.col("canonical_product_id") == "SKU_B")
+        .then(pl.lit("ж/б"))
+        .otherwise(pl.lit("ст/б"))
+        .alias("package"),
+        pl.when(pl.col("canonical_product_id") == "SKU_A")
+        .then(pl.lit(1.0))
+        .when(pl.col("canonical_product_id") == "SKU_B")
+        .then(pl.lit(0.5))
+        .otherwise(pl.lit(1.5))
+        .alias("volume_l"),
+    )
+    write_mart_metric_facts(_filtered_scope_facts(), facts_path)
+    write_product_store_metric_facts(
+        build_product_store_metric_facts(
+            source_rows,
+            build_metadata=_build(period_end=date(2026, 1, 31)),
+            source_revision_id="revision_a",
+            created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        ),
+        product_store_path,
+    )
+    service = DashboardMartQueryService(
+        facts_path,
+        mart_builds=(_build(period_end=date(2026, 1, 31)),),
+        product_store_facts_path=product_store_path,
+    )
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_ids=("ALL",),
+            entity_filters={"category": ("CATEGORY_A",), "package": ("пэт",), "volume": ("1",)},
+            metric_concepts=("revenue", "units", "weighted_shelf_price_vat"),
+            mart_build_id="build_a",
+        )
+    )
+
+    values = {result.metric_concept: result for result in response.metric_results}
+    assert values["revenue"].value == pytest.approx(50.0)
+    assert values["units"].value == pytest.approx(5.0)
+    assert values["weighted_shelf_price_vat"].value == pytest.approx(12.0)
+    provenance = _require_provenance(values["revenue"]).payload
+    assert provenance["scoped_rollup"]["status"] == "DERIVED_FROM_PRODUCT_STORE_FACTS"
+    assert provenance["current_analytical_scope"]["entity_filters"] == {
+        "category": ("CATEGORY_A",),
+        "package": ("пэт",),
+        "volume": ("1",),
+    }
+
+
 def test_product_store_intersection_supports_sku_grain_with_store_filter(tmp_path) -> None:
     facts_path, product_store_path = _write_product_store_query_inputs(tmp_path)
     service = DashboardMartQueryService(

@@ -40,6 +40,8 @@ from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA
 
 APP_TITLE = "Аналитика продаж"
 SUPPORTED_GRAINS = ("network", "category", "manufacturer", "brand", "sku", "store")
+FILTER_ENTITY_KEYS = ("network", "category", "manufacturer", "brand", "package", "volume", "sku", "store")
+VOLUME_FILTER_DECIMALS = 6
 SUPPORTED_PERIOD_MODES = (
     "SINGLE_PERIOD",
     "DATE_RANGE",
@@ -54,6 +56,8 @@ SOURCE_LIKE_ENTITY_COLUMNS = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
@@ -66,8 +70,10 @@ ENTITY_PARENT_FILTERS = {
     "category": (),
     "manufacturer": ("category",),
     "brand": ("category", "manufacturer"),
-    "sku": ("category", "manufacturer", "brand", "store"),
-    "store": ("category", "manufacturer", "brand", "sku"),
+    "package": ("category", "manufacturer", "brand"),
+    "volume": ("category", "manufacturer", "brand", "package"),
+    "sku": ("category", "manufacturer", "brand", "package", "volume", "store"),
+    "store": ("category", "manufacturer", "brand", "package", "volume", "sku"),
 }
 PRODUCT_FILTERS = ("category", "manufacturer", "brand", "sku")
 MART_PARENT_FILTER_SUPPORT = {
@@ -642,7 +648,7 @@ def _entity_options(
                 date_to=date_to,
             )
             return source_like_entities
-    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in SUPPORTED_GRAINS}
+    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in FILTER_ENTITY_KEYS}
     for grain in SUPPORTED_GRAINS:
         clauses = ["retailer_id = ?", "source_id = ?", "grain_id = ?"]
         params: list[Any] = [retailer_id, source_id, grain]
@@ -734,13 +740,15 @@ def _source_like_entity_options(
     parent_filters: dict[str, tuple[str, ...]],
     source_revision_ids: tuple[str, ...],
 ) -> dict[str, list[dict[str, Any]]]:
-    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in SUPPORTED_GRAINS}
+    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in FILTER_ENTITY_KEYS}
     available_columns = _source_columns(source_like_rows_path)
     for grain, entity_column in SOURCE_LIKE_ENTITY_COLUMNS.items():
         if entity_column not in available_columns:
             continue
         label_column = _source_like_label_column(grain, entity_column, available_columns)
-        clauses = ["retailer_id = ?", "source_id = ?", f"{entity_column} IS NOT NULL", f"{entity_column} <> ''"]
+        clauses = ["retailer_id = ?", "source_id = ?", f"{entity_column} IS NOT NULL"]
+        if grain != "volume":
+            clauses.append(f"{entity_column} <> ''")
         params: list[Any] = [retailer_id, source_id]
         if "source_revision_id" in available_columns and source_revision_ids:
             placeholders = ", ".join("?" for _ in source_revision_ids)
@@ -760,18 +768,22 @@ def _source_like_entity_options(
             parent_values = tuple(value for value in parent_filters.get(parent_key, ()) if value)
             if parent_column and parent_column in available_columns and parent_values:
                 placeholders = ", ".join("?" for _ in parent_values)
-                clauses.append(f"{parent_column} IN ({placeholders})")
-                params.extend(parent_values)
+                if parent_key == "volume":
+                    clauses.append(f"ROUND(CAST({parent_column} AS DOUBLE), {VOLUME_FILTER_DECIMALS}) IN ({placeholders})")
+                    params.extend(_volume_filter_values(parent_values))
+                else:
+                    clauses.append(f"CAST({parent_column} AS VARCHAR) IN ({placeholders})")
+                    params.extend(parent_values)
         rows = duckdb.sql(
             f"""
                 SELECT
-                    {entity_column},
+                    {_source_like_entity_select(grain, entity_column)} AS entity_id,
                     MIN(NULLIF(TRIM(CAST({label_column} AS VARCHAR)), '')) AS display_label,
                     COUNT(DISTINCT period) AS period_count
                     {_source_like_option_extra_selects(grain, available_columns)}
                 FROM read_parquet(?)
                 WHERE {" AND ".join(clauses)}
-                GROUP BY {entity_column}
+                GROUP BY entity_id
                 ORDER BY display_label
             """,
             params=[_duckdb_path(source_like_rows_path), *params],
@@ -784,6 +796,12 @@ def _source_like_label_column(grain: str, entity_column: str, available_columns:
     for candidate in SOURCE_LIKE_LABEL_COLUMNS.get(grain, (entity_column,)):
         if candidate in available_columns:
             return candidate
+    return entity_column
+
+
+def _source_like_entity_select(grain: str, entity_column: str) -> str:
+    if grain == "volume":
+        return f"ROUND(CAST({entity_column} AS DOUBLE), {VOLUME_FILTER_DECIMALS})"
     return entity_column
 
 
@@ -803,6 +821,20 @@ def _source_like_option_extra_selects(grain: str, available_columns: set[str]) -
 
 
 def _source_like_options_from_rows(grain: str, rows: list[tuple[Any, ...]]) -> list[dict[str, Any]]:
+    if grain == "volume":
+        return [
+            {
+                "value": _volume_option_value(entity_id),
+                "label": _volume_option_label(entity_id),
+                "display_name": _volume_option_label(entity_id),
+                "period_count": int(period_count),
+                "search_aliases": (_volume_option_value(entity_id), _volume_option_label(entity_id)),
+            }
+            for entity_id, _display_label, period_count, *_ in sorted(
+                rows,
+                key=lambda row: (float(row[0]) if row[0] is not None else float("inf")),
+            )
+        ]
     if grain != "sku":
         return [
             {
@@ -844,6 +876,20 @@ def _source_like_options_from_rows(grain: str, rows: list[tuple[Any, ...]]) -> l
             option["fallback_reason"] = "missing_sku_name"
         options.append(option)
     return sorted(options, key=lambda item: (str(item["display_name"]).lower(), str(item["value"]).lower()))
+
+
+def _volume_option_value(value: object) -> str:
+    numeric = float(str(value))
+    return f"{numeric:.12g}"
+
+
+def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
+    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
+
+
+def _volume_option_label(value: object) -> str:
+    text = _volume_option_value(value).replace(".", ",")
+    return f"{text} л"
 
 
 def _sku_display_name(display_label: object) -> str:

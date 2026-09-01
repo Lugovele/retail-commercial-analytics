@@ -204,6 +204,33 @@ def test_signal_feed_can_honor_filter_matching_requested_object_grain(tmp_path: 
     assert "event_sku_scope_not_materialized" not in response.limitations
 
 
+def test_signal_feed_volume_filter_uses_numeric_identity(tmp_path: Path) -> None:
+    events = _events(
+        (
+            {**_event("event_1l", "MATERIAL_REVENUE_DECLINE", "GROWTH_DECLINE", entity_id="sku_1l"), "volume_l": 1.0},
+            {**_event("event_15l", "MATERIAL_REVENUE_DECLINE", "GROWTH_DECLINE", entity_id="sku_15l"), "volume_l": 1.5},
+        )
+    )
+    service = _service(tmp_path, events)
+
+    response = service.feed(
+        SignalFeedRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            entity_filters={"volume": ("1",)},
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    assert [row.object_id for row in response.signals] == ["sku_1l"]
+    assert "event_volume_scope_not_materialized" not in response.limitations
+
+
 def test_signal_feed_empty_confirmed_events_is_valid_state(tmp_path: Path) -> None:
     events_path = tmp_path / "empty_events.parquet"
     pl.DataFrame().write_parquet(events_path)

@@ -214,6 +214,22 @@ def test_manufacturer_is_not_approved_kpi_grain(tmp_path: Path) -> None:
             {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
         ),
         (
+            {"category": ("WATER",), "package": ("пэт",), "volume": ("1",)},
+            "category",
+            {"velocity", "distribution", "average_price_per_liter"},
+        ),
+        (
+            {
+                "category": ("WATER",),
+                "manufacturer": ("MFR_A",),
+                "brand": ("BRAND_A",),
+                "package": ("пэт",),
+                "volume": ("1",),
+            },
+            "brand",
+            {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
+        ),
+        (
             {"sku": ("SKU_A",), "manufacturer": ("MFR_A",)},
             "sku",
             {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"},
@@ -236,6 +252,7 @@ def test_source_like_kpis_use_supported_product_scope_precedence(
                 category="WATER",
                 manufacturer="MFR_A",
                 brand="BRAND_A",
+                package="пэт",
                 units=10,
                 revenue_vat=100,
                 volume_l=1,
@@ -247,6 +264,7 @@ def test_source_like_kpis_use_supported_product_scope_precedence(
                 category="WATER",
                 manufacturer="MFR_B",
                 brand="BRAND_B",
+                package="ж/б",
                 units=5,
                 revenue_vat=50,
                 volume_l=1,
@@ -397,6 +415,7 @@ def _source_row(
     units: float = 1,
     revenue_vat: float = 10,
     volume_l: float | None = 1,
+    package: str = "пэт",
 ) -> dict[str, object]:
     return {
         "retailer_id": "globus",
@@ -408,6 +427,7 @@ def _source_row(
         "category": category,
         "manufacturer": manufacturer,
         "brand": brand,
+        "package": package,
         "units": units,
         "revenue_vat": revenue_vat,
         "volume_l": volume_l,

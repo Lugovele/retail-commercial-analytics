@@ -13,12 +13,15 @@ from retail_analytics.history import SourceLedgerEntry
 from retail_analytics.mart import MartBuildMetadata, PrivateLabelScope
 
 SUPPORTED_GROUPINGS = frozenset({"package", "volume", "package_volume"})
+VOLUME_FILTER_DECIMALS = 6
 SUPPORTED_METRICS = ("revenue", "revenue_vat", "units", "retailer_margin_abs", "retailer_margin_pct")
 SUPPORTED_BASIS_METRICS = frozenset({"revenue", "units", "retailer_margin_abs"})
 _FILTER_COLUMNS = {
     "category": "category",
     "manufacturer": "manufacturer",
     "brand": "brand",
+    "package": "package",
+    "volume": "volume_l",
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
@@ -640,8 +643,12 @@ def _add_scope_filters(
         if column is None or not values:
             continue
         placeholders = ", ".join("?" for _ in values)
-        clauses.append(f"{alias}.{column} IN ({placeholders})")
-        params.extend(values)
+        if key == "volume":
+            clauses.append(f"ROUND(CAST({alias}.{column} AS DOUBLE), {VOLUME_FILTER_DECIMALS}) IN ({placeholders})")
+            params.extend(_volume_filter_values(values))
+        else:
+            clauses.append(f"{alias}.{column} IN ({placeholders})")
+            params.extend(values)
 
 
 def _date_or_none(value: date | str | None) -> date | None:
@@ -650,6 +657,10 @@ def _date_or_none(value: date | str | None) -> date | None:
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value))
+
+
+def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
+    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
 
 
 def _duckdb_path(path: Path | None) -> str:

@@ -178,6 +178,54 @@
                   </div>
                 </div>
               </div>
+              <div class="scope-field multi-filter" data-filter="package">
+                <span class="scope-label">Тара</span>
+                <button type="button" class="scope-control filter-trigger" id="package-filter-trigger" data-filter-trigger="package" aria-haspopup="dialog" aria-expanded="false" aria-controls="package-filter-popover">
+                  <span class="scope-value filter-summary is-default" id="package-filter-summary">Все</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="package" aria-label="Очистить тару" title="Очистить тару">×</button>
+                <select id="package-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="package-filter-popover" role="dialog" aria-label="Тара">
+                  <h3>Тара</h3>
+                  <input class="filter-search" id="package-search" type="search" placeholder="Найти тару" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="package-options" />
+                  <label class="select-all-row"><input type="checkbox" id="package-select-all" data-select-all="package" /> Выбрать показанные</label>
+                  <div class="filter-options" id="package-options" role="group" aria-label="Варианты тары"></div>
+                  <div class="filter-popover-footer">
+                    <div class="filter-footer-left">
+                      <button type="button" class="filter-full-list-action" data-toggle-full-list-filter="package" aria-expanded="false" aria-controls="package-options">Показать весь список</button>
+                      <span id="package-selected-count">Выбрано: 0</span>
+                    </div>
+                    <div class="filter-footer-right">
+                      <button type="button" class="filter-clear-action" data-clear-pending-filter="package">Очистить</button>
+                      <button type="button" class="filter-apply-action" data-apply-filter="package">Применить</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="scope-field multi-filter" data-filter="volume">
+                <span class="scope-label">Объём</span>
+                <button type="button" class="scope-control filter-trigger" id="volume-filter-trigger" data-filter-trigger="volume" aria-haspopup="dialog" aria-expanded="false" aria-controls="volume-filter-popover">
+                  <span class="scope-value filter-summary is-default" id="volume-filter-summary">Все</span>
+                </button>
+                <button type="button" class="filter-inline-clear is-hidden" data-inline-clear-filter="volume" aria-label="Очистить объём" title="Очистить объём">×</button>
+                <select id="volume-filter" class="native-filter-select" multiple aria-hidden="true" tabindex="-1"></select>
+                <div class="filter-popover is-hidden" id="volume-filter-popover" role="dialog" aria-label="Объём">
+                  <h3>Объём</h3>
+                  <input class="filter-search" id="volume-search" type="search" placeholder="Найти объём" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="volume-options" />
+                  <label class="select-all-row"><input type="checkbox" id="volume-select-all" data-select-all="volume" /> Выбрать показанные</label>
+                  <div class="filter-options" id="volume-options" role="group" aria-label="Варианты объёма"></div>
+                  <div class="filter-popover-footer">
+                    <div class="filter-footer-left">
+                      <button type="button" class="filter-full-list-action" data-toggle-full-list-filter="volume" aria-expanded="false" aria-controls="volume-options">Показать весь список</button>
+                      <span id="volume-selected-count">Выбрано: 0</span>
+                    </div>
+                    <div class="filter-footer-right">
+                      <button type="button" class="filter-clear-action" data-clear-pending-filter="volume">Очистить</button>
+                      <button type="button" class="filter-apply-action" data-apply-filter="volume">Применить</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
               <div class="scope-field multi-filter" data-filter="sku">
                 <span class="scope-label">SKU</span>
                 <button type="button" class="scope-control filter-trigger" id="sku-filter-trigger" data-filter-trigger="sku" aria-haspopup="dialog" aria-expanded="false" aria-controls="sku-filter-popover">
