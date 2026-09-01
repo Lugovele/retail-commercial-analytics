@@ -2501,7 +2501,7 @@ def test_overview_kpi_cards_use_compact_matrix_without_comparator_or_sparklines(
     assert 'appendText(headline, "span", "выбран").className = "visually-hidden";' in script
     assert "kpiCurrentPeriodText(comparison)" in kpi_renderer
     assert "kpiReferencePeriodText(comparison)" in kpi_renderer
-    assert "kpiCompactPeriodText(period)" in kpi_renderer
+    assert "kpiReferenceEvidencePeriodText(period)" in kpi_renderer
     assert "content.appendChild(left)" in kpi_renderer
     assert "card.dataset.kpiState = model.state" in kpi_renderer
     assert 'if (definition?.concept === "active_sku_count") return text;' in script
@@ -2611,6 +2611,9 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert "function kpiCompactPeriodText" in reference_helpers
     assert "monthLabelsShort()[date.getMonth()]" in reference_helpers
     assert 'String(date.getFullYear()).slice(-2)' in reference_helpers
+    assert "function kpiReferenceYearText(comparison)" in reference_helpers
+    assert "comparison.comparison_included_periods?.[0]" in reference_helpers
+    assert "return year ? `${year} г.` : \"\";" in reference_helpers
     assert "formatValue(comparison.comparison_value, model.entry.format)" in kpi_renderer
     assert 'return Number(comparison.delta) === 0 ? "ZERO_CHANGE" : "COMPLETE_COMPARE";' in state_helpers
     assert 'if (!isComparisonDisplayMode()) return "CURRENT_ONLY";' in state_helpers
@@ -2631,6 +2634,23 @@ def test_overview_kpi_cards_show_reference_value_and_state_context() -> None:
     assert ".at(-1) || \"\";" in reference_helpers
     assert "function offsetPeriodMonth(period, monthOffset)" in reference_helpers
     assert "toISOString()" not in reference_helpers
+
+
+def test_matched_month_kpi_reference_uses_year_suffix_without_month_list() -> None:
+    script = html_or_script("app.js")
+
+    reference_helpers = script.split("function kpiReferencePeriodText", 1)[1].split("function overviewPortfolioItem", 1)[0]
+    evidence_row = script.split("function renderKpiEvidenceRow", 1)[1].split("function renderKpiUnavailableReasonRow", 1)[0]
+    kpi_renderer = script.split("function renderKpiCard", 1)[1].split("function renderKpiEvidenceRow", 1)[0]
+
+    assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") {' in reference_helpers
+    assert "return kpiReferenceYearText(comparison);" in reference_helpers
+    assert "formatPeriodList(comparison.comparison_included_periods)" not in reference_helpers.split("function kpiCurrentPeriodText", 1)[0]
+    assert "function kpiReferenceEvidencePeriodText(period)" in reference_helpers
+    assert 'return state.periodMode === "AVAILABLE_MONTH_SET" ? ` ${compactPeriod}` : `· ${compactPeriod}`;' in reference_helpers
+    assert 'appendText(row, "span", kpiReferenceEvidencePeriodText(period)).className = "kpi-evidence-period";' in evidence_row
+    assert '`· ${kpiCompactPeriodText(period)}`' not in evidence_row
+    assert "kpiValueWithUnit(formatValue(comparison.comparison_value, model.entry.format), definition)" in kpi_renderer
 
 
 def test_overview_kpi_partial_comparison_notice_is_missing_reference_specific() -> None:
@@ -3241,7 +3261,7 @@ def test_current_reference_and_ownership_visual_hierarchy_is_not_color_only() ->
     assert 'value.className = `kpi-evidence-value${valueClassName ? ` ${valueClassName}` : ""}`;' in script
     assert 'row.appendChild(value);' in script
     assert 'if (kind === "reference") {' in script
-    assert 'appendText(row, "span", `· ${kpiCompactPeriodText(period)}`).className = "kpi-evidence-period";' in script
+    assert 'appendText(row, "span", kpiReferenceEvidencePeriodText(period)).className = "kpi-evidence-period";' in script
     assert 'left.appendChild(renderKpiEvidenceRow(' in script
     assert 'metric-current' in styles
     assert 'metric-reference' in styles

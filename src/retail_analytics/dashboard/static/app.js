@@ -2597,7 +2597,7 @@ function renderKpiEvidenceRow(kind, period, text, node = null, valueClassName = 
   }
   row.appendChild(value);
   if (kind === "reference") {
-    appendText(row, "span", `· ${kpiCompactPeriodText(period)}`).className = "kpi-evidence-period";
+    appendText(row, "span", kpiReferenceEvidencePeriodText(period)).className = "kpi-evidence-period";
   }
   return row;
 }
@@ -2700,11 +2700,23 @@ function renderKpiReferenceLine(definition, model) {
 
 function kpiReferencePeriodText(comparison) {
   if (state.periodMode === "AVAILABLE_MONTH_SET") {
-    return comparison.comparison_included_periods?.length
-      ? formatPeriodList(comparison.comparison_included_periods)
-      : formatCompactPeriod(comparison.comparison_period_start);
+    return kpiReferenceYearText(comparison);
   }
   return comparison.comparison_period_start ? formatCompactPeriod(comparison.comparison_period_start) : "";
+}
+
+function kpiReferenceEvidencePeriodText(period) {
+  const compactPeriod = kpiCompactPeriodText(period);
+  if (!compactPeriod) return "";
+  return state.periodMode === "AVAILABLE_MONTH_SET" ? ` ${compactPeriod}` : `· ${compactPeriod}`;
+}
+
+function kpiReferenceYearText(comparison) {
+  const referencePeriod = comparison.comparison_included_periods?.[0]
+    || comparison.comparison_period_start
+    || selectedComparisonPeriod();
+  const { year } = periodParts(referencePeriod);
+  return year ? `${year} г.` : "";
 }
 
 function kpiCurrentPeriodText(comparison = null) {
