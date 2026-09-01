@@ -1183,6 +1183,18 @@ function bindDynamicControls() {
     });
     document.getElementById(`${id}-search`)?.addEventListener("keydown", (event) => handleFilterSearchKeydown(event, id));
     document.querySelector(`[data-select-all="${id}"]`)?.addEventListener("change", (event) => {
+      if (id === "volume" && state.volumeDrillRange) {
+        const range = volumeRangeByToken(state.volumeDrillRange.value);
+        const available = visibleVolumeExactOptions(range);
+        const next = new Set(pendingValuesForFilter(id).filter((value) => !isVolumeRangeToken(value)));
+        available.forEach((item) => {
+          if (event.target.checked) next.add(item.value);
+          else next.delete(item.value);
+        });
+        state.pendingFilters[id] = Array.from(next);
+        renderFilterOptions(id);
+        return;
+      }
       const available = visibleEntityOptions(id);
       const next = new Set(pendingValuesForFilter(id));
       available.forEach((item) => {
@@ -5860,6 +5872,26 @@ function volumeExactOption(value) {
     || null;
 }
 
+function visibleVolumeExactOptions(range) {
+  if (!range) return [];
+  const query = (state.filterQueries.volume || "").trim().toLocaleLowerCase("ru-RU");
+  return [...(range.exact_values || [])]
+    .filter((item) => !query || searchRank(item, query) < 4)
+    .sort(compareVolumeOptions);
+}
+
+function syncVolumeSelectAllState(visibleExactValues, pending) {
+  const selectAll = document.querySelector(`[data-select-all="volume"]`);
+  if (!selectAll) return;
+  const visibleValues = visibleExactValues.map((item) => item.value);
+  const hasVisible = visibleValues.length > 0;
+  const allSelected = hasVisible && visibleValues.every((value) => pending.has(value));
+  const someSelected = visibleValues.some((value) => pending.has(value));
+  selectAll.checked = allSelected;
+  selectAll.indeterminate = someSelected && !allSelected;
+  selectAll.setAttribute("aria-checked", selectAll.indeterminate ? "mixed" : String(selectAll.checked));
+}
+
 function renderFilterOptions(id) {
   if (id === "volume" && volumeFacetRanges().length) {
     renderVolumeFilterOptions();
@@ -5925,6 +5957,7 @@ function renderVolumeFilterOptions() {
   if (!list) return;
   const range = state.volumeDrillRange ? volumeRangeByToken(state.volumeDrillRange.value) : null;
   const pending = new Set(pendingValuesForFilter("volume"));
+  const selectAllRow = document.querySelector(`[data-select-all="volume"]`)?.closest(".select-all-row");
   list.replaceChildren();
   if (input) {
     input.classList.toggle("is-hidden", !range);
@@ -5932,11 +5965,14 @@ function renderVolumeFilterOptions() {
     input.placeholder = range ? "Найти объём" : "Диапазоны объёма";
     input.setAttribute("aria-expanded", state.openFilterId === "volume" ? "true" : "false");
   }
-  document.querySelector(`[data-select-all="volume"]`)?.closest(".select-all-row")?.classList.add("is-hidden");
+  selectAllRow?.classList.toggle("is-hidden", !range);
   document.querySelector(`[data-toggle-full-list-filter="volume"]`)?.classList.add("is-hidden");
   document.getElementById("volume-filter-popover")?.classList.remove("is-expanded");
   if (range) renderVolumeExactList(list, range, pending);
-  else renderVolumeRangeList(list, pending);
+  else {
+    syncVolumeSelectAllState([], pending);
+    renderVolumeRangeList(list, pending);
+  }
   updateFilterPopoverFooter("volume");
 }
 
@@ -6014,10 +6050,8 @@ function renderVolumeExactList(list, range, pending) {
   heading.append(summary);
   list.appendChild(heading);
 
-  const query = (state.filterQueries.volume || "").trim().toLocaleLowerCase("ru-RU");
-  const exactValues = [...(range.exact_values || [])]
-    .filter((item) => !query || searchRank(item, query) < 4)
-    .sort(compareVolumeOptions);
+  const exactValues = visibleVolumeExactOptions(range);
+  syncVolumeSelectAllState(exactValues, pending);
   if (!exactValues.length) {
     const empty = document.createElement("div");
     empty.className = "filter-empty";
@@ -6248,12 +6282,15 @@ function updateFilterPopoverFooter(id) {
     fullList.setAttribute("aria-expanded", expanded ? "true" : "false");
   }
   const selected = new Set(pendingValuesForFilter(id));
-  const visible = visibleEntityOptions(id);
+  const visible = id === "volume" && state.volumeDrillRange
+    ? visibleVolumeExactOptions(volumeRangeByToken(state.volumeDrillRange.value))
+    : visibleEntityOptions(id);
   const selectAll = document.querySelector(`[data-select-all="${id}"]`);
   if (selectAll) {
     const visibleValues = visible.map((item) => item.value);
     selectAll.checked = visibleValues.length > 0 && visibleValues.every((value) => selected.has(value));
     selectAll.indeterminate = visibleValues.some((value) => selected.has(value)) && !selectAll.checked;
+    selectAll.setAttribute("aria-checked", selectAll.indeterminate ? "mixed" : String(selectAll.checked));
   }
 }
 

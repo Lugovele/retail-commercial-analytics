@@ -2102,12 +2102,19 @@ def test_volume_filter_uses_grouped_two_level_frontend_contract() -> None:
     assert "function renderVolumeFilterOptions" in script
     assert "function renderVolumeRangeList" in script
     assert "function renderVolumeExactList" in script
+    assert "function visibleVolumeExactOptions" in script
+    assert "function syncVolumeSelectAllState" in script
     assert "volume_range:" in script
     assert "volumeFacetRanges()" in script
     assert "volumeDrillRange" in script
     assert "Выбрать объёмы" in script
     assert "Открыть точные объёмы в диапазоне" in script
     assert "‹ Назад" in script
+    assert 'if (id === "volume" && state.volumeDrillRange)' in script
+    assert "pendingValuesForFilter(id).filter((value) => !isVolumeRangeToken(value))" in script
+    assert 'selectAllRow?.classList.toggle("is-hidden", !range)' in script
+    assert "syncVolumeSelectAllState(exactValues, pending)" in script
+    assert 'selectAll.setAttribute("aria-checked", selectAll.indeterminate ? "mixed" : String(selectAll.checked))' in script
     assert "pluralRu(rangeCount" in script
     assert "function selectedFilterValuesForDiagnostics" in script
     assert "volumeExactValuesForSelection(selected.volume)" in script
