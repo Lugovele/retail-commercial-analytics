@@ -25,10 +25,14 @@ from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA, RangeAgg
 from retail_analytics.mart.product_store_facts import PRODUCT_STORE_SUPPORTED_CONCEPTS
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
 from retail_analytics.mart.store_universe import MONTHLY_STORE_FORMAT_UNIVERSE
+from retail_analytics.volume_filter import (
+    volume_exact_values,
+    volume_polars_filter,
+    volume_sql_predicate,
+)
 
 FILTER_GRAIN_ORDER = ("category", "manufacturer", "brand", "sku", "store")
 SOURCE_LIKE_APPROVED_KPI_FILTER_PRECEDENCE = ("sku", "brand", "category")
-VOLUME_FILTER_DECIMALS = 6
 STORE_FORMAT_DISTRIBUTION_CONCEPT = "numeric_distribution_store_format"
 STORE_FORMAT_DISTRIBUTION_RULE_ID = "BR-009B"
 STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS = frozenset({"category", "manufacturer", "brand", "sku"})
@@ -2018,9 +2022,9 @@ def _source_like_product_scoped_rows(source: pl.DataFrame, request: DashboardMet
         column = SOURCE_LIKE_ENTITY_COLUMNS.get(key)
         if column is not None and values:
             if key == "volume":
-                result = result.filter(
-                    pl.col(column).cast(pl.Float64).round(VOLUME_FILTER_DECIMALS).is_in(_volume_filter_values(values))
-                )
+                predicate = volume_polars_filter(column, values)
+                if predicate is not None:
+                    result = result.filter(predicate)
             else:
                 result = result.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
     entity_column = SOURCE_LIKE_ENTITY_COLUMNS.get(request.grain_id)
@@ -3446,9 +3450,10 @@ def _add_product_store_filter(clauses: list[str], params: list[Any], filter_name
         return
     column = _product_store_filter_column(filter_name)
     if filter_name == "volume":
-        placeholders = ", ".join("?" for _ in values)
-        clauses.append(f"ROUND(CAST({column} AS DOUBLE), {VOLUME_FILTER_DECIMALS}) IN ({placeholders})")
-        params.extend(_volume_filter_values(values))
+        predicate, predicate_params = volume_sql_predicate(column, values)
+        if predicate is not None:
+            clauses.append(predicate)
+            params.extend(predicate_params)
         return
     _add_in_filter(clauses, params, column, values)
 
@@ -3463,7 +3468,7 @@ def _add_json_parent_filter(clauses: list[str], params: list[Any], key: str, val
 
 
 def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
-    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
+    return volume_exact_values(values)
 
 
 def _dedupe_limitations(limitations: list[QueryLimitation]) -> tuple[QueryLimitation, ...]:

@@ -1934,6 +1934,36 @@ def test_source_like_filter_options_include_package_and_numeric_volume_cascade(t
                 "manufacturer": "MANUFACTURER_ACTIVE",
                 "brand": "BRAND_ACTIVE",
                 "package": "пэт",
+                "volume_l": 0.0,
+                "canonical_product_id": "SKU_ZERO",
+                "sku_name": "SKU zero",
+                "canonical_store_id": "STORE_ACTIVE",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "package": "пэт",
+                "volume_l": 0.5,
+                "canonical_product_id": "SKU_05",
+                "sku_name": "Duplicate row must not inflate count",
+                "canonical_store_id": "STORE_OTHER",
+                "private_label_flag": False,
+            },
+            {
+                "retailer_id": "retailer_a",
+                "source_id": "source_a",
+                "source_revision_id": "revision_dashboard_synthetic",
+                "period": date(2026, 6, 1),
+                "category": "CATEGORY_ACTIVE",
+                "manufacturer": "MANUFACTURER_ACTIVE",
+                "brand": "BRAND_ACTIVE",
+                "package": "пэт",
                 "volume_l": 0.5,
                 "canonical_product_id": "SKU_05",
                 "sku_name": "SKU 0.5L",
@@ -1971,7 +2001,38 @@ def test_source_like_filter_options_include_package_and_numeric_volume_cascade(t
     assert [item["value"] for item in entities["package"]] == ["пэт"]
     assert [item["value"] for item in entities["volume"]] == ["0.5", "1.5"]
     assert [item["label"] for item in entities["volume"]] == ["0,5 л", "1,5 л"]
-    assert [item["value"] for item in entities["sku"]] == ["SKU_05", "SKU_15"]
+    assert [item["value"] for item in entities["sku"]] == ["SKU_05", "SKU_15", "SKU_ZERO"]
+
+    volume_ranges = runtime.options_metadata(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        parent_filters={"brand": ("BRAND_ACTIVE",), "package": ("пэт",)},
+    )["facets"]["volume"]["ranges"]
+    range_counts = {item["id"]: item["sku_count"] for item in volume_ranges}
+    exact_counts = {
+        item["value"]: item["sku_count"]
+        for range_item in volume_ranges
+        for item in range_item["exact_values"]
+    }
+
+    assert [item["id"] for item in volume_ranges] == ["gt_0_25_le_0_50", "gt_1_00_le_1_50"]
+    assert range_counts == {"gt_0_25_le_0_50": 1, "gt_1_00_le_1_50": 1}
+    assert exact_counts == {"0.5": 1, "1.5": 1}
+    assert "0" not in [item["value"] for item in entities["volume"]]
+
+    scoped = runtime.options_metadata(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 6, 1),
+        date_to=date(2026, 6, 1),
+        parent_filters={"brand": ("BRAND_ACTIVE",), "package": ("пэт",), "volume": ("volume_range:gt_0_25_le_0_50",)},
+    )["entities"]
+
+    assert [item["value"] for item in scoped["sku"]] == ["SKU_05"]
 
 
 def test_volume_filter_options_normalize_source_float_artifacts(tmp_path) -> None:
@@ -2024,6 +2085,36 @@ def test_volume_filter_uses_numeric_frontend_sorting() -> None:
     assert "Number.parseFloat(left.value)" in script
     assert 'id === "volume"' in script
     assert "values.sort(compareVolumeOptions)" in script
+
+
+def test_volume_filter_uses_grouped_two_level_frontend_contract() -> None:
+    script = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("app.js")
+        .read_text(encoding="utf-8")
+    )
+    styles = (
+        resources.files("retail_analytics.dashboard.static")
+        .joinpath("styles.css")
+        .read_text(encoding="utf-8")
+    )
+
+    assert "function renderVolumeFilterOptions" in script
+    assert "function renderVolumeRangeList" in script
+    assert "function renderVolumeExactList" in script
+    assert "volume_range:" in script
+    assert "volumeFacetRanges()" in script
+    assert "volumeDrillRange" in script
+    assert "Выбрать объёмы" in script
+    assert "Открыть точные объёмы в диапазоне" in script
+    assert "‹ Назад" in script
+    assert "pluralRu(rangeCount" in script
+    assert "function selectedFilterValuesForDiagnostics" in script
+    assert "volumeExactValuesForSelection(selected.volume)" in script
+    diagnostics_payload = script.split("function buildDiagnosticsPayload()", 1)[1].split("function buildPortfolioMixPayload()", 1)[0]
+    assert "entity_filters: selectedFilterValuesForDiagnostics()" in diagnostics_payload
+    assert ".volume-range-row" in styles
+    assert ".volume-option-count" in styles
 
 
 def test_sku_filter_options_are_name_first_but_identity_stable(tmp_path) -> None:

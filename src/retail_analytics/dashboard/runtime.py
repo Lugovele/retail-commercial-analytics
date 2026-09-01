@@ -37,11 +37,19 @@ from retail_analytics.mart import (
     write_mart_metric_facts,
 )
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA
+from retail_analytics.volume_filter import (
+    VOLUME_FILTER_DECIMALS,
+    VOLUME_RANGES,
+    volume_exact_values,
+    volume_option_label,
+    volume_option_value,
+    volume_range_for_value,
+    volume_sql_predicate,
+)
 
 APP_TITLE = "Аналитика продаж"
 SUPPORTED_GRAINS = ("network", "category", "manufacturer", "brand", "sku", "store")
 FILTER_ENTITY_KEYS = ("network", "category", "manufacturer", "brand", "package", "volume", "sku", "store")
-VOLUME_FILTER_DECIMALS = 6
 SUPPORTED_PERIOD_MODES = (
     "SINGLE_PERIOD",
     "DATE_RANGE",
@@ -227,24 +235,28 @@ class DashboardRuntime:
 
         scope = PrivateLabelScope(private_label_scope)
         runtime_retailer = _runtime_retailer_for_scope(self.retailers, retailer_id, source_id)
-        return {
-            "periods": _period_options(self.query_service.metric_facts_path, retailer_id, source_id, scope),
-            "entities": _entity_options(
-                self.query_service.metric_facts_path,
+        entities = _entity_options(
+            self.query_service.metric_facts_path,
+            retailer_id,
+            source_id,
+            scope,
+            date_from=date_from,
+            date_to=date_to,
+            parent_filters=parent_filters or {},
+            source_like_rows_path=self.source_like_rows_path,
+            source_revision_ids=_source_revision_ids_for_options(
+                self.query_service.mart_builds,
                 retailer_id,
                 source_id,
-                scope,
-                date_from=date_from,
-                date_to=date_to,
-                parent_filters=parent_filters or {},
-                source_like_rows_path=self.source_like_rows_path,
-                source_revision_ids=_source_revision_ids_for_options(
-                    self.query_service.mart_builds,
-                    retailer_id,
-                    source_id,
-                    runtime_retailer.default_mart_build_id if runtime_retailer else None,
-                ),
+                runtime_retailer.default_mart_build_id if runtime_retailer else None,
             ),
+        )
+        return {
+            "periods": _period_options(self.query_service.metric_facts_path, retailer_id, source_id, scope),
+            "entities": entities,
+            "facets": {
+                "volume": entities.pop("_volume_facet", {"ranges": []}),
+            },
         }
 
     def query_entity_filters(
@@ -349,9 +361,16 @@ class DashboardRuntime:
             column = SOURCE_LIKE_ENTITY_COLUMNS[key]
             if column not in available_columns:
                 return None
-            placeholders = ", ".join("?" for _ in values)
-            clauses.append(f"{column} IN ({placeholders})")
-            params.extend(values)
+            if key == "volume":
+                predicate, predicate_params = volume_sql_predicate(column, values)
+                if predicate is None:
+                    continue
+                clauses.append(predicate)
+                params.extend(predicate_params)
+            else:
+                placeholders = ", ".join("?" for _ in values)
+                clauses.append(f"{column} IN ({placeholders})")
+                params.extend(values)
         rows = duckdb.sql(
             f"""
                 SELECT DISTINCT canonical_product_id
@@ -633,7 +652,7 @@ def _entity_options(
     parent_filters: dict[str, tuple[str, ...]],
     source_like_rows_path: Path | None = None,
     source_revision_ids: tuple[str, ...] = (),
-) -> dict[str, list[dict[str, Any]]]:
+) -> dict[str, Any]:
     if source_like_rows_path is not None and source_like_rows_path.exists():
         source_like_entities = _source_like_entity_options(
             source_like_rows_path,
@@ -656,7 +675,7 @@ def _entity_options(
                 date_to=date_to,
             )
             return source_like_entities
-    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in FILTER_ENTITY_KEYS}
+    entities: dict[str, Any] = {grain: [] for grain in FILTER_ENTITY_KEYS}
     for grain in SUPPORTED_GRAINS:
         clauses = ["retailer_id = ?", "source_id = ?", "grain_id = ?"]
         params: list[Any] = [retailer_id, source_id, grain]
@@ -747,8 +766,8 @@ def _source_like_entity_options(
     date_to: date | None,
     parent_filters: dict[str, tuple[str, ...]],
     source_revision_ids: tuple[str, ...],
-) -> dict[str, list[dict[str, Any]]]:
-    entities: dict[str, list[dict[str, Any]]] = {grain: [] for grain in FILTER_ENTITY_KEYS}
+) -> dict[str, Any]:
+    entities: dict[str, Any] = {grain: [] for grain in FILTER_ENTITY_KEYS}
     available_columns = _source_columns(source_like_rows_path)
     for grain, entity_column in SOURCE_LIKE_ENTITY_COLUMNS.items():
         if entity_column not in available_columns:
@@ -775,11 +794,14 @@ def _source_like_entity_options(
             parent_column = SOURCE_LIKE_ENTITY_COLUMNS.get(parent_key)
             parent_values = tuple(value for value in parent_filters.get(parent_key, ()) if value)
             if parent_column and parent_column in available_columns and parent_values:
-                placeholders = ", ".join("?" for _ in parent_values)
                 if parent_key == "volume":
-                    clauses.append(f"ROUND(CAST({parent_column} AS DOUBLE), {VOLUME_FILTER_DECIMALS}) IN ({placeholders})")
-                    params.extend(_volume_filter_values(parent_values))
+                    predicate, predicate_params = volume_sql_predicate(parent_column, parent_values)
+                    if predicate is None:
+                        continue
+                    clauses.append(predicate)
+                    params.extend(predicate_params)
                 else:
+                    placeholders = ", ".join("?" for _ in parent_values)
                     clauses.append(f"CAST({parent_column} AS VARCHAR) IN ({placeholders})")
                     params.extend(parent_values)
         rows = duckdb.sql(
@@ -797,7 +819,120 @@ def _source_like_entity_options(
             params=[_duckdb_path(source_like_rows_path), *params],
         ).fetchall()
         entities[grain] = _source_like_options_from_rows(grain, rows)
+    entities["_volume_facet"] = _source_like_volume_facet(
+        source_like_rows_path,
+        retailer_id,
+        source_id,
+        scope,
+        date_from=date_from,
+        date_to=date_to,
+        parent_filters=parent_filters,
+        source_revision_ids=source_revision_ids,
+        available_columns=available_columns,
+    )
     return entities
+
+
+def _source_like_volume_facet(
+    source_like_rows_path: Path,
+    retailer_id: str,
+    source_id: str,
+    scope: PrivateLabelScope,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    parent_filters: dict[str, tuple[str, ...]],
+    source_revision_ids: tuple[str, ...],
+    available_columns: set[str],
+) -> dict[str, list[dict[str, Any]]]:
+    if "volume_l" not in available_columns or "canonical_product_id" not in available_columns:
+        return {"ranges": []}
+    clauses = [
+        "retailer_id = ?",
+        "source_id = ?",
+        "volume_l IS NOT NULL",
+        "CAST(volume_l AS DOUBLE) > 0",
+        "canonical_product_id IS NOT NULL",
+        "canonical_product_id <> ''",
+    ]
+    params: list[Any] = [retailer_id, source_id]
+    if "source_revision_id" in available_columns and source_revision_ids:
+        placeholders = ", ".join("?" for _ in source_revision_ids)
+        clauses.append(f"source_revision_id IN ({placeholders})")
+        params.extend(source_revision_ids)
+    if "private_label_flag" in available_columns and scope != PrivateLabelScope.INCLUDE:
+        clauses.append("private_label_flag = ?")
+        params.append(scope == PrivateLabelScope.ONLY)
+    if date_from is not None and "period" in available_columns:
+        clauses.append("period >= CAST(? AS DATE)")
+        params.append(date_from.isoformat())
+    if date_to is not None and "period" in available_columns:
+        clauses.append("period <= CAST(? AS DATE)")
+        params.append(date_to.isoformat())
+    for parent_key in ENTITY_PARENT_FILTERS["volume"]:
+        parent_column = SOURCE_LIKE_ENTITY_COLUMNS.get(parent_key)
+        parent_values = tuple(value for value in parent_filters.get(parent_key, ()) if value)
+        if parent_column and parent_column in available_columns and parent_values:
+            placeholders = ", ".join("?" for _ in parent_values)
+            clauses.append(f"CAST({parent_column} AS VARCHAR) IN ({placeholders})")
+            params.extend(parent_values)
+    rows = duckdb.sql(
+        f"""
+            SELECT
+                ROUND(CAST(volume_l AS DOUBLE), {VOLUME_FILTER_DECIMALS}) AS volume_value,
+                canonical_product_id
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            GROUP BY volume_value, canonical_product_id
+            ORDER BY volume_value, canonical_product_id
+        """,
+        params=[_duckdb_path(source_like_rows_path), *params],
+    ).fetchall()
+    range_skus: dict[str, set[str]] = {item.id: set() for item in VOLUME_RANGES}
+    exact_skus: dict[float, set[str]] = {}
+    for raw_volume, raw_sku in rows:
+        if raw_volume is None or raw_sku in (None, ""):
+            continue
+        volume = round(float(raw_volume), VOLUME_FILTER_DECIMALS)
+        range_item = volume_range_for_value(volume)
+        if range_item is None:
+            continue
+        sku = str(raw_sku)
+        range_skus[range_item.id].add(sku)
+        exact_skus.setdefault(volume, set()).add(sku)
+    exact_rows_by_range: dict[str, list[dict[str, Any]]] = {item.id: [] for item in VOLUME_RANGES}
+    for volume in sorted(exact_skus):
+        range_item = volume_range_for_value(volume)
+        if range_item is None:
+            continue
+        exact_rows_by_range[range_item.id].append(
+            {
+                "value": volume_option_value(volume),
+                "label": volume_option_label(volume),
+                "display_name": volume_option_label(volume),
+                "sku_count": len(exact_skus[volume]),
+                "search_aliases": (volume_option_value(volume), volume_option_label(volume)),
+            }
+        )
+    ranges = []
+    for item in VOLUME_RANGES:
+        sku_count = len(range_skus[item.id])
+        if sku_count == 0:
+            continue
+        ranges.append(
+            {
+                "id": item.id,
+                "value": item.token,
+                "label": item.label,
+                "display_name": item.label,
+                "min_exclusive": item.min_exclusive,
+                "max_inclusive": item.max_inclusive,
+                "sku_count": sku_count,
+                "exact_value_count": len(exact_rows_by_range[item.id]),
+                "exact_values": exact_rows_by_range[item.id],
+            }
+        )
+    return {"ranges": ranges}
 
 
 def _source_like_label_column(grain: str, entity_column: str, available_columns: set[str]) -> str:
@@ -842,6 +977,7 @@ def _source_like_options_from_rows(grain: str, rows: list[tuple[Any, ...]]) -> l
                 rows,
                 key=lambda row: (float(row[0]) if row[0] is not None else float("inf")),
             )
+            if entity_id is not None and float(entity_id) > 0
         ]
     if grain != "sku":
         return [
@@ -887,17 +1023,15 @@ def _source_like_options_from_rows(grain: str, rows: list[tuple[Any, ...]]) -> l
 
 
 def _volume_option_value(value: object) -> str:
-    numeric = float(str(value))
-    return f"{numeric:.12g}"
+    return volume_option_value(value)
 
 
 def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
-    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
+    return volume_exact_values(values)
 
 
 def _volume_option_label(value: object) -> str:
-    text = _volume_option_value(value).replace(".", ",")
-    return f"{text} л"
+    return volume_option_label(value)
 
 
 def _sku_display_name(display_label: object) -> str:

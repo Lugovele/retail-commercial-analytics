@@ -11,6 +11,7 @@ import duckdb
 
 from retail_analytics.history import SourceLedgerEntry
 from retail_analytics.mart import MartBuildMetadata, PrivateLabelScope
+from retail_analytics.volume_filter import volume_sql_predicate
 
 SUPPORTED_GROUPINGS = frozenset({"region", "store_format", "region_store_format"})
 SUPPORTED_METRICS = ("revenue", "revenue_vat", "units", "retailer_margin_abs", "retailer_margin_pct")
@@ -595,11 +596,13 @@ def _add_scope_filters(clauses: list[str], params: list[Any], filters: dict[str,
         column = _FILTER_COLUMNS.get(key)
         if column is None or not values:
             continue
-        placeholders = ", ".join("?" for _ in values)
         if key == "volume":
-            clauses.append(f"ROUND(CAST({column} AS DOUBLE), 6) IN ({placeholders})")
-            params.extend(float(str(value)) for value in values)
+            predicate, predicate_params = volume_sql_predicate(column, values)
+            if predicate is not None:
+                clauses.append(predicate)
+                params.extend(predicate_params)
         else:
+            placeholders = ", ".join("?" for _ in values)
             clauses.append(f"{column} IN ({placeholders})")
             params.extend(values)
 

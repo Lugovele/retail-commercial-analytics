@@ -972,6 +972,10 @@ def test_dashboard_routes_apply_package_and_volume_global_filters(tmp_path: Path
     assert [(item["value"], item["label"], item["display_name"]) for item in options["entities"]["volume"]] == [
         ("0.5", "0,5 л", "0,5 л")
     ]
+    assert [
+        (item["value"], item["label"], item["sku_count"], item["exact_value_count"])
+        for item in options["facets"]["volume"]["ranges"]
+    ] == [("volume_range:gt_0_25_le_0_50", "> 0,25–0,50 л", 1, 1)]
     assert [item["value"] for item in options["entities"]["sku"]] == ["SKU_A_001"]
 
     filters = {"category": ["CATEGORY_STANDARD"], "package": ["PACK_A"], "volume": ["0.5"]}
@@ -1035,6 +1039,58 @@ def test_dashboard_routes_apply_package_and_volume_global_filters(tmp_path: Path
     assert active_sku["provenance"]["current_analytical_scope"]["user_entity_filters"] == filters
     assert active_sku["provenance"]["current_analytical_scope"]["execution_entity_filters"] == filters
 
+    range_filters = {"category": ["CATEGORY_STANDARD"], "package": ["PACK_A"], "volume": ["volume_range:gt_0_25_le_0_50"]}
+    range_status, _, range_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/query",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": ["network"],
+            "entity_filters": range_filters,
+            "metric_concepts": ["revenue", "units"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    range_response = json.loads(range_body)
+
+    assert range_status.startswith("200")
+    assert {item["metric_concept"]: item["value"] for item in range_response["metric_results"]} == values
+
+    range_portfolio_status, _, range_portfolio_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/portfolio-market",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "network",
+            "entity_ids": ["network"],
+            "entity_filters": range_filters,
+            "concept_ids": ["active_sku_count"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    range_portfolio_response = json.loads(range_portfolio_body)
+
+    assert range_portfolio_status.startswith("200")
+    assert range_portfolio_response["items"][0]["current_value"] == active_sku["current_value"]
+    assert range_portfolio_response["items"][0]["reference_value"] == active_sku["reference_value"]
+
 
 def test_dashboard_geography_route_returns_region_grouping_from_product_store_serving(tmp_path: Path) -> None:
     source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
@@ -1094,6 +1150,34 @@ def test_dashboard_geography_route_returns_region_grouping_from_product_store_se
     assert response["request_scope"]["execution_entity_filters"] == {"category": ["CATEGORY_STANDARD"]}
     assert response["metric_results"][0]["provenance"]["guardrails"]["fo2_exposed"] is False
     assert response["metric_results"][0]["provenance"]["guardrails"]["territory_exposed"] is False
+
+    range_status, _, range_body = _call(
+        app,
+        "POST",
+        "/api/dashboard/geography",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grouping": "region",
+            "entity_filters": {"category": ["CATEGORY_STANDARD"], "volume": ["volume_range:gt_0_25_le_0_50"]},
+            "metric_concepts": ["revenue", "units"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    range_response = json.loads(range_body)
+
+    assert range_status.startswith("200")
+    range_values = {
+        (item["entity_id"], item["metric_concept"]): item["value"]
+        for item in range_response["metric_results"]
+    }
+    assert range_values == {("region_a", "revenue"): 80.0, ("region_a", "units"): 8.0}
 
 
 def test_dashboard_package_volume_route_returns_mix_from_canonical_attributes(tmp_path: Path) -> None:

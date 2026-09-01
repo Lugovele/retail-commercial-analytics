@@ -19,6 +19,7 @@ from retail_analytics.mart.builds import MartBuildMetadata, MartBuildStatus
 from retail_analytics.mart.query import ComparisonMode, PeriodMode
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
 from retail_analytics.pipeline.context import AnalysisContext
+from retail_analytics.volume_filter import volume_polars_filter
 
 COMMERCIAL_SIGNAL_FAMILIES = frozenset(
     {
@@ -338,7 +339,9 @@ class SignalFeedService:
                 if not values:
                     continue
                 if filter_key == "volume" and "volume_l" in scoped.columns:
-                    scoped = scoped.filter(pl.col("volume_l").round(6).is_in([round(float(value), 6) for value in values]))
+                    predicate = volume_polars_filter("volume_l", values)
+                    if predicate is not None:
+                        scoped = scoped.filter(predicate)
                 elif filter_key in scoped.columns:
                     scoped = scoped.filter(pl.col(filter_key).is_in(list(values)))
                 elif request.grain_id == filter_key and {"entity_type", "entity_id"} <= set(scoped.columns):

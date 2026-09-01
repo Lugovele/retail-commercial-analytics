@@ -28,6 +28,10 @@ from retail_analytics.mart.query import (
     _reject_source_revision_ambiguity,
 )
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
+from retail_analytics.volume_filter import (
+    volume_exact_values,
+    volume_polars_filter,
+)
 
 
 class PortfolioConceptStatus(StrEnum):
@@ -48,7 +52,6 @@ ACTIVE_SKU_FILTER_COLUMNS: Final = {
     "sku": "canonical_product_id",
     "store": "canonical_store_id",
 }
-VOLUME_FILTER_DECIMALS: Final = 6
 NO_MATCHING_ACTIVE_SKU_FILTER: Final = "__NO_MATCHING_ACTIVE_SKU_FILTER__"
 
 
@@ -912,9 +915,9 @@ class PortfolioMarketService:
             if column not in available_columns:
                 return None
             if key == "volume":
-                frame = frame.filter(
-                    pl.col(column).cast(pl.Float64).round(VOLUME_FILTER_DECIMALS).is_in(_volume_filter_values(values))
-                )
+                predicate = volume_polars_filter(column, values)
+                if predicate is not None:
+                    frame = frame.filter(predicate)
             else:
                 frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
         if "units" in available_columns:
@@ -1965,9 +1968,9 @@ def _resolve_active_sku_filter_skus(
         if column not in available_columns:
             return None
         if key == "volume":
-            frame = frame.filter(
-                pl.col(column).cast(pl.Float64).round(VOLUME_FILTER_DECIMALS).is_in(_volume_filter_values(values))
-            )
+            predicate = volume_polars_filter(column, values)
+            if predicate is not None:
+                frame = frame.filter(predicate)
         else:
             frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
     return tuple(
@@ -1977,7 +1980,7 @@ def _resolve_active_sku_filter_skus(
 
 
 def _volume_filter_values(values: tuple[str, ...]) -> tuple[float, ...]:
-    return tuple(round(float(value), VOLUME_FILTER_DECIMALS) for value in values)
+    return volume_exact_values(values)
 
 
 def _active_sku_source_revision_ids(

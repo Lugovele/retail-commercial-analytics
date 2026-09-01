@@ -887,6 +887,101 @@ input {
   line-height: 1.2;
 }
 
+.volume-range-row,
+.volume-exact-option {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 6px;
+}
+
+.volume-range-choice,
+.volume-exact-option {
+  min-height: 32px;
+  padding: 5px 6px;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.volume-range-choice,
+.volume-exact-option {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.volume-option-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.volume-option-count {
+  color: var(--text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.volume-drill-button,
+.volume-back-button {
+  min-height: 28px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+}
+
+.volume-drill-button {
+  width: 28px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  font-size: 18px;
+  line-height: 1;
+}
+
+.volume-back-button {
+  justify-self: start;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.volume-range-choice:hover,
+.volume-range-choice:focus-within,
+.volume-exact-option:hover,
+.volume-exact-option:focus-within,
+.volume-drill-button:hover,
+.volume-drill-button:focus-visible,
+.volume-back-button:hover,
+.volume-back-button:focus-visible {
+  background: rgba(42, 125, 225, 0.08);
+  outline: none;
+}
+
+.volume-drill-heading {
+  display: grid;
+  gap: 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.volume-drill-summary {
+  display: flex;
+  min-width: 0;
+  gap: 8px;
+  align-items: center;
+  justify-content: space-between;
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.volume-drill-summary span {
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
 .filter-option:hover,
 .filter-option:focus-within {
   background: rgba(42, 125, 225, 0.08);

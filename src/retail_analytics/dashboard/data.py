@@ -12,6 +12,7 @@ import duckdb
 
 from retail_analytics.history import SourceLedgerEntry, active_revisions
 from retail_analytics.mart import MartBuildMetadata, PrivateLabelScope
+from retail_analytics.volume_filter import volume_sql_predicate
 
 
 @dataclass(frozen=True)
@@ -436,11 +437,13 @@ def _source_like_scope_clauses(
     for key, values in (request.entity_filters or {}).items():
         filter_column = _SOURCE_FILTER_COLUMNS.get(key)
         if filter_column is not None and filter_column in columns and values:
-            placeholders = ", ".join("?" for _ in values)
             if key == "volume":
-                clauses.append(f"ROUND(CAST({filter_column} AS DOUBLE), 6) IN ({placeholders})")
-                params.extend(float(str(value)) for value in values)
+                predicate, predicate_params = volume_sql_predicate(filter_column, values)
+                if predicate is not None:
+                    clauses.append(predicate)
+                    params.extend(predicate_params)
             else:
+                placeholders = ", ".join("?" for _ in values)
                 clauses.append(f"{filter_column} IN ({placeholders})")
                 params.extend(values)
     if request.grain_id in _SOURCE_FILTER_COLUMNS and request.entity_ids:
