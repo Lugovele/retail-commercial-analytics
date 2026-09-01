@@ -7,6 +7,7 @@ from collections import defaultdict
 from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +34,7 @@ STORE_FORMAT_DISTRIBUTION_SUPPORTED_GRAINS = frozenset({"category", "manufacture
 SOURCE_LIKE_APPROVED_KPI_CONCEPTS = frozenset(
     {"velocity", "distribution", "weighted_distribution", "average_price_per_liter"}
 )
+SOURCE_LIKE_VECTORIZED_KPI_CONCEPTS = frozenset({"velocity", "distribution", "average_price_per_liter"})
 SOURCE_LIKE_APPROVED_KPI_SUPPORT = {
     "velocity": frozenset({"category", "brand", "sku"}),
     "distribution": frozenset({"category", "brand", "sku"}),
@@ -63,6 +65,21 @@ SOURCE_LIKE_REQUIRED_COLUMNS = frozenset(
         "volume_l",
     }
 )
+SOURCE_LIKE_SOURCE_COLUMNS = (
+    "retailer_id",
+    "source_id",
+    "analysis_run_id",
+    "period",
+    "canonical_store_id",
+    "canonical_product_id",
+    "category",
+    "manufacturer",
+    "brand",
+    "units",
+    "revenue_vat",
+    "volume_l",
+)
+SOURCE_LIKE_OPTIONAL_FILTER_COLUMNS = ("store_format", "territory", "fo", "fo2", "region")
 SCOPED_ROLLUP_SAFE_CONCEPTS = {
     "revenue_vat",
     "revenue",
@@ -628,8 +645,11 @@ class DashboardMartQueryService:
                     ),
                 ),
             )
+        vectorized = tuple(concept for concept in supported if concept in SOURCE_LIKE_VECTORIZED_KPI_CONCEPTS)
+        fallback = tuple(concept for concept in supported if concept not in SOURCE_LIKE_VECTORIZED_KPI_CONCEPTS)
         rows: list[dict[str, Any]] = []
-        for concept in supported:
+        rows.extend(_source_like_vectorized_approved_kpi_rows(source, request, build, vectorized))
+        for concept in fallback:
             rows.extend(_source_like_approved_kpi_rows(source, request, build, concept))
         if not rows:
             return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA), tuple(limitations)
@@ -643,44 +663,31 @@ class DashboardMartQueryService:
     ) -> pl.DataFrame:
         if self.source_like_rows_path is None:
             raise ValueError("source-like rows path is not configured")
-        clauses = ["retailer_id = ?", "source_id = ?"]
-        params: list[Any] = [request.retailer_id, request.source_id]
+        source = _cached_source_like_rows(self.source_like_rows_path)
+        result = source.filter(
+            (pl.col("retailer_id").cast(pl.Utf8) == request.retailer_id)
+            & (pl.col("source_id").cast(pl.Utf8) == request.source_id)
+        )
         if period_start is not None:
-            clauses.append("CAST(period AS DATE) >= CAST(? AS DATE)")
-            params.append(period_start.isoformat())
+            result = result.filter(pl.col("period") >= period_start)
         if request.date_to is not None:
-            clauses.append("CAST(period AS DATE) <= CAST(? AS DATE)")
-            params.append(request.date_to.isoformat())
+            result = result.filter(pl.col("period") <= request.date_to)
         if request.private_label_scope == PrivateLabelScope.ONLY:
-            clauses.append("private_label_flag = true")
+            result = result.filter(pl.col("private_label_flag") == True)
         elif request.private_label_scope == PrivateLabelScope.EXCLUDE:
-            clauses.append("(private_label_flag = false OR private_label_flag IS NULL)")
+            result = result.filter(
+                (pl.col("private_label_flag") == False) | pl.col("private_label_flag").is_null()
+            )
         for key, values in (request.entity_filters or {}).items():
             column = SOURCE_LIKE_ENTITY_COLUMNS.get(key)
             if column is not None:
                 continue
             if key in {"store_format", "territory", "fo", "fo2", "region"}:
-                _add_source_like_filter(clauses, params, key, values)
+                if key in result.columns and values:
+                    result = result.filter(pl.col(key).cast(pl.Utf8).is_in([str(value) for value in values]))
                 continue
             raise ValueError(f"Unsupported query filter column for approved KPI recomposition: {key}")
-        sql = f"""
-            SELECT
-                retailer_id,
-                source_id,
-                analysis_run_id,
-                CAST(period AS DATE) AS period,
-                canonical_store_id,
-                canonical_product_id,
-                category,
-                manufacturer,
-                brand,
-                CAST(units AS DOUBLE) AS units,
-                CAST(revenue_vat AS DOUBLE) AS revenue_vat,
-                CAST(volume_l AS DOUBLE) AS volume_l
-            FROM read_parquet(?)
-            WHERE {" AND ".join(clauses)}
-        """
-        return duckdb.sql(sql, params=[_duckdb_path(self.source_like_rows_path), *params]).pl()
+        return result.select(list(SOURCE_LIKE_SOURCE_COLUMNS))
 
     def _apply_source_like_approved_kpi_range_values(
         self,
@@ -1911,6 +1918,93 @@ def _source_like_approved_kpi_rows(
     return rows
 
 
+def _source_like_vectorized_approved_kpi_rows(
+    source: pl.DataFrame,
+    request: DashboardMetricQueryRequest,
+    build: MartBuildMetadata,
+    concepts: tuple[str, ...],
+) -> list[dict[str, Any]]:
+    if not concepts:
+        return []
+    scoped = _source_like_product_scoped_rows(source, request)
+    if scoped.is_empty() and request.grain_id != "network":
+        return []
+    active_universe = _active_store_universe_by_period(source)
+    if request.grain_id == "network":
+        group_keys = ["period"]
+        entity_column = None
+    else:
+        entity_column = SOURCE_LIKE_ENTITY_COLUMNS[request.grain_id]
+        assert entity_column is not None
+        group_keys = ["period", entity_column]
+    has_velocity = "velocity" in concepts
+    has_distribution = "distribution" in concepts
+    has_price_per_liter = "average_price_per_liter" in concepts
+    selling_store_expr = pl.col("canonical_store_id").filter(
+        (pl.col("units") > 0) & pl.col("canonical_store_id").is_not_null()
+    )
+    price_liter_valid = (
+        pl.col("volume_l").is_not_null()
+        & (pl.col("volume_l") > 0)
+        & pl.col("units").is_not_null()
+        & pl.col("revenue_vat").is_not_null()
+    )
+    aggregations: list[pl.Expr] = []
+    if has_velocity:
+        aggregations.append(pl.col("units").sum().alias("velocity_numerator"))
+    if has_velocity or has_distribution:
+        aggregations.append(selling_store_expr.n_unique().alias("selling_store_count"))
+    if has_price_per_liter:
+        aggregations.extend(
+            [
+                pl.col("revenue_vat").filter(price_liter_valid).sum().alias("price_liter_numerator"),
+                (pl.col("units") * pl.col("volume_l"))
+                .filter(price_liter_valid)
+                .sum()
+                .alias("price_liter_denominator"),
+            ]
+        )
+    if not aggregations:
+        return []
+    grouped = scoped.group_by(group_keys).agg(aggregations).sort(group_keys)
+    rows: list[dict[str, Any]] = []
+    for item in grouped.to_dicts():
+        period = item["period"]
+        entity_id = request.entity_ids[0] if request.grain_id == "network" and request.entity_ids else request.grain_id
+        parent_ids: dict[str, Any] = {}
+        if entity_column is not None:
+            entity_id = str(item[entity_column])
+            group_filter = (pl.col("period") == period) & (pl.col(entity_column).cast(pl.Utf8) == entity_id)
+            parent_ids = _source_like_parent_ids(scoped.filter(group_filter), request.grain_id, entity_id)
+        for concept in concepts:
+            if request.grain_id not in SOURCE_LIKE_APPROVED_KPI_SUPPORT.get(concept, frozenset()):
+                continue
+            if concept == "velocity":
+                numerator = item.get("velocity_numerator")
+                denominator = item.get("selling_store_count")
+            elif concept == "distribution":
+                numerator = item.get("selling_store_count")
+                denominator = active_universe.get(period, 0.0)
+            elif concept == "average_price_per_liter":
+                numerator = item.get("price_liter_numerator")
+                denominator = item.get("price_liter_denominator")
+            else:
+                continue
+            rows.append(
+                _source_like_metric_fact_row(
+                    request=request,
+                    build=build,
+                    period=period,
+                    entity_id=str(entity_id),
+                    parent_entity_ids=parent_ids,
+                    concept=concept,
+                    numerator=float(numerator or 0.0) if numerator is not None else None,
+                    denominator=float(denominator or 0.0) if denominator is not None else None,
+                )
+            )
+    return rows
+
+
 def _source_like_product_scoped_rows(source: pl.DataFrame, request: DashboardMetricQueryRequest) -> pl.DataFrame:
     result = source
     for key, values in (request.entity_filters or {}).items():
@@ -2160,6 +2254,30 @@ def _sum_expr(frame: pl.DataFrame, expr: pl.Expr) -> float:
         return 0.0
     value = frame.select(expr.sum()).item()
     return 0.0 if value is None else float(value)
+
+
+def _cached_source_like_rows(path: Path) -> pl.DataFrame:
+    stat = path.stat()
+    return _cached_source_like_rows_for_version(str(path.resolve()), stat.st_mtime_ns, stat.st_size)
+
+
+@lru_cache(maxsize=4)
+def _cached_source_like_rows_for_version(path: str, mtime_ns: int, size: int) -> pl.DataFrame:
+    del mtime_ns, size
+    available = set(pl.read_parquet_schema(path).names())
+    columns = [
+        column
+        for column in (*SOURCE_LIKE_SOURCE_COLUMNS, "private_label_flag", *SOURCE_LIKE_OPTIONAL_FILTER_COLUMNS)
+        if column in available
+    ]
+    return pl.read_parquet(path, columns=columns).with_columns(
+        [
+            pl.col("period").cast(pl.Date),
+            pl.col("units").cast(pl.Float64),
+            pl.col("revenue_vat").cast(pl.Float64),
+            pl.col("volume_l").cast(pl.Float64),
+        ]
+    )
 
 
 def _add_source_like_filter(clauses: list[str], params: list[Any], column: str, values: tuple[str, ...]) -> None:
