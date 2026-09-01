@@ -1852,7 +1852,9 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "state.options.periods" in script
     assert "chartResponse: null" in script
     assert "buildChartQueryPayload()" in script
-    assert "const chartResponse = await postJson(\"/api/dashboard/query\", chartPayload);" in script
+    assert 'const chartPromise = postJson("/api/dashboard/query", chartPayload);' in script
+    assert "const [summaryResponse, chartResponse] = await Promise.all([summaryPromise, chartPromise]);" in script
+    assert "const finalResponsesPromise = Promise.all([overviewPortfolioPromise, contributionPromise, tablePromise]);" in script
     assert "state.chartResponse = chartResponse;" in script
     assert "period_mode: \"DATE_RANGE\"" in script
     assert "comparison_mode: \"NONE\"" in script
