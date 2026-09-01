@@ -769,8 +769,18 @@ class PortfolioMarketService:
             return _not_applicable(request, concept_id, "assortment", "active_sku_requires_current_period")
         history_start = request.date_from if request.period_mode == PeriodMode.DATE_RANGE else None
         history_end = request.date_to or request.date_from
+        source_like_rollup = self._active_sku_source_like_rollup(
+            request,
+            history_start=history_start,
+            history_end=history_end,
+        )
         entity_filters = self._active_sku_entity_filters(request, history_end=history_end)
-        rollup = self._active_sku_rollup(request, entity_filters, history_start=history_start, history_end=history_end)
+        rollup = source_like_rollup or self._active_sku_rollup(
+            request,
+            entity_filters,
+            history_start=history_start,
+            history_end=history_end,
+        )
         if rollup is None:
             response = self.query_service.query(
                 _metric_request(
@@ -849,6 +859,89 @@ class PortfolioMarketService:
                 peak_period=peak_period,
                 reference_period=reference_period,
             ),
+        )
+
+    def _active_sku_source_like_rollup(
+        self,
+        request: PortfolioMarketQueryRequest,
+        *,
+        history_start: date | None,
+        history_end: date | None,
+    ) -> ActiveSkuRollup | None:
+        semantic_filters = _semantic_entity_filters(request)
+        if not semantic_filters.get("store"):
+            return None
+        if self.query_service.source_like_rows_path is None or not self.query_service.source_like_rows_path.exists():
+            return None
+        source_like_rows_path = self.query_service.source_like_rows_path
+        available_columns = set(pl.read_parquet_schema(source_like_rows_path))
+        required_columns = {"retailer_id", "source_id", "period", "canonical_product_id"}
+        if not required_columns.issubset(available_columns):
+            return None
+        frame = pl.scan_parquet(source_like_rows_path).filter(
+            (pl.col("retailer_id") == request.retailer_id)
+            & (pl.col("source_id") == request.source_id)
+            & pl.col("canonical_product_id").is_not_null()
+            & (pl.col("canonical_product_id").cast(pl.Utf8) != "")
+        )
+        source_revision_ids = _active_sku_source_revision_ids(self.query_service.mart_builds, request)
+        if source_revision_ids and "source_revision_id" in available_columns:
+            frame = frame.filter(
+                pl.col("source_revision_id").cast(pl.Utf8).is_in([str(value) for value in source_revision_ids])
+            )
+        if history_start is not None:
+            frame = frame.filter(pl.col("period") >= history_start)
+        if history_end is not None:
+            frame = frame.filter(pl.col("period") <= history_end)
+        if "private_label_flag" in available_columns and request.private_label_scope != PrivateLabelScope.INCLUDE:
+            frame = frame.filter(pl.col("private_label_flag") == (request.private_label_scope == PrivateLabelScope.ONLY))
+        for key, values in semantic_filters.items():
+            if key not in ACTIVE_SKU_FILTER_COLUMNS:
+                continue
+            column = ACTIVE_SKU_FILTER_COLUMNS[key]
+            if column not in available_columns:
+                return None
+            frame = frame.filter(pl.col(column).cast(pl.Utf8).is_in([str(value) for value in values]))
+        if "units" in available_columns:
+            frame = frame.filter(pl.col("units").fill_null(0) > 0)
+        selected_columns = ["period", "canonical_product_id"]
+        if "source_revision_id" in available_columns:
+            selected_columns.append("source_revision_id")
+        if "analysis_run_id" in available_columns:
+            selected_columns.append("analysis_run_id")
+        scoped = frame.select(selected_columns).collect()
+        if scoped.is_empty():
+            return ActiveSkuRollup(
+                counts={},
+                fact_count=0,
+                source_revision_ids=(),
+                analysis_run_ids=(),
+                metric_definition_ids=(),
+                quality_statuses=(),
+            )
+        count_rows = (
+            scoped.group_by("period")
+            .agg(pl.col("canonical_product_id").cast(pl.Utf8).n_unique().alias("active_sku_count"))
+            .sort("period")
+            .iter_rows(named=True)
+        )
+        source_revision_values = (
+            tuple(sorted(str(value) for value in scoped["source_revision_id"].drop_nulls().unique()))
+            if "source_revision_id" in scoped.columns
+            else source_revision_ids
+        )
+        analysis_run_values = (
+            tuple(sorted(str(value) for value in scoped["analysis_run_id"].drop_nulls().unique()))
+            if "analysis_run_id" in scoped.columns
+            else ()
+        )
+        return ActiveSkuRollup(
+            counts={row["period"]: int(row["active_sku_count"] or 0) for row in count_rows},
+            fact_count=scoped.height,
+            source_revision_ids=source_revision_values,
+            analysis_run_ids=analysis_run_values,
+            metric_definition_ids=(),
+            quality_statuses=("valid",),
         )
 
     def _active_sku_rollup(

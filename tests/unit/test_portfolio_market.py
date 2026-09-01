@@ -1132,6 +1132,124 @@ def test_active_sku_preserves_route_resolved_execution_sku_scope(tmp_path) -> No
     assert response.items[0].limitations == ()
 
 
+def test_active_sku_selected_selling_sku_store_scope_returns_one(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows_with_period(
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False, date(2025, 1, 1)),
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False, date(2026, 1, 1)),
+            ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_b", False, date(2026, 1, 1)),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            grain_id="manufacturer",
+            entity_filters={"sku": ("sku_a",), "store": ("store_a",)},
+            user_entity_filters={
+                "category": ("category_a",),
+                "manufacturer": ("manufacturer_a",),
+                "brand": ("brand_a",),
+                "sku": ("sku_a",),
+                "store": ("store_a",),
+            },
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 1
+    assert item.current_value == 1
+    assert item.reference_value == 1
+    assert item.limitations == ()
+    assert item.rows == (
+        {"period_start": date(2025, 1, 1), "value": 1, "source": "backend_active_sku_count"},
+        {"period_start": date(2026, 1, 1), "value": 1, "source": "backend_active_sku_count"},
+    )
+
+
+def test_active_sku_store_scope_counts_distinct_stable_sku_identities(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows_with_period(
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False, date(2026, 1, 1)),
+            ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_a", False, date(2026, 1, 1)),
+            ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_a", False, date(2026, 1, 1)),
+            ("category_a", "manufacturer_a", "brand_a", "sku_c", "store_b", False, date(2026, 1, 1)),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            entity_filters={"category": ("category_a",), "store": ("store_a",)},
+            user_entity_filters={"category": ("category_a",), "store": ("store_a",)},
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 2
+    assert item.current_value == 2
+
+
+def test_active_sku_store_scope_preserves_honest_empty_scope(tmp_path) -> None:
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=_source_like_rows_with_period(
+            ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False, date(2026, 1, 1)),
+        ),
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            entity_filters={"category": ("category_a",), "sku": ("sku_missing",), "store": ("store_a",)},
+            user_entity_filters={
+                "category": ("category_a",),
+                "manufacturer": ("manufacturer_a",),
+                "brand": ("brand_a",),
+                "sku": ("sku_missing",),
+                "store": ("store_a",),
+            },
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.PARTIAL
+    assert item.value is None
+    assert item.current_value is None
+    assert "no_sku_units_metric_facts" in item.limitations
+
+
+def test_active_sku_store_scope_does_not_merge_duplicate_sku_names(tmp_path) -> None:
+    source_like_rows = _source_like_rows_with_period(
+        ("category_a", "manufacturer_a", "brand_a", "sku_a", "store_a", False, date(2026, 1, 1)),
+        ("category_a", "manufacturer_a", "brand_a", "sku_b", "store_a", False, date(2026, 1, 1)),
+    ).with_columns(pl.lit("duplicate display").alias("sku_name"))
+    service = _service(
+        tmp_path,
+        _portfolio_facts(current_active_skus=("sku_a", "sku_b")),
+        source_like_rows=source_like_rows,
+    )
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            entity_filters={"category": ("category_a",), "store": ("store_a",)},
+            user_entity_filters={"category": ("category_a",), "store": ("store_a",)},
+        )
+    )
+
+    assert response.items[0].value == 2
+
+
 def test_active_sku_scalar_is_not_defined_for_date_range(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts())
 

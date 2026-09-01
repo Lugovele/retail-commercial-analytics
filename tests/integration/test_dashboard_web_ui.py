@@ -400,6 +400,58 @@ def test_dashboard_product_routes_resolve_and_report_user_execution_filters(tmp_
     assert data["source_like_rows"]["total_count"] == 1
 
 
+def test_dashboard_active_sku_selected_sku_store_scope_uses_source_like_truth(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")
+    runtime = replace(
+        runtime,
+        source_like_rows_path=source_rows_path,
+        query_service=DashboardMartQueryService(
+            runtime.query_service.metric_facts_path,
+            catalog=runtime.query_service.catalog,
+            mart_builds=runtime.query_service.mart_builds,
+            source_ledger=runtime.query_service.source_ledger,
+            source_like_rows_path=source_rows_path,
+        ),
+    )
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/portfolio-market",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "grain_id": "manufacturer",
+            "entity_ids": [],
+            "entity_filters": {
+                "category": ["CATEGORY_STANDARD"],
+                "manufacturer": ["Manufacturer A"],
+                "brand": ["Brand A"],
+                "sku": ["SKU_A_001"],
+                "store": ["STORE_001"],
+            },
+            "concept_ids": ["active_sku_count"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    item = response["items"][0]
+    assert item["status"] == "PARTIAL"
+    assert item["current_value"] == 1
+    assert item["value"] == 1
+    assert item["limitations"] == ["comparison_period_unavailable"]
+
+
 def test_dashboard_query_route_uses_product_store_serving_for_store_and_product_filters(tmp_path: Path) -> None:
     source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
     runtime = build_synthetic_dashboard_runtime(tmp_path / "demo")
