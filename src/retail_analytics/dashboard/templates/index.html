@@ -54,20 +54,45 @@
                   <button type="button" class="mode-button" data-period-mode="AVAILABLE_MONTH_SET">Совпадающие месяцы</button>
                 </div>
                 <div class="period-fields period-fields--single is-hidden" id="single-fields">
+                  <select id="period-single" class="period-resolved-select" aria-hidden="true" tabindex="-1"></select>
+                  <label class="period-card period-card--select">
+                    <span class="period-card-label">Год</span>
+                    <select id="period-single-year" aria-label="Один месяц — год"></select>
+                  </label>
                   <label class="period-card period-card--select">
                     <span class="period-card-label">Месяц</span>
-                    <select id="period-single"></select>
+                    <select id="period-single-month" aria-label="Один месяц — месяц"></select>
                   </label>
                 </div>
                 <div class="period-fields period-fields--compare" id="compare-fields">
-                  <label class="period-card period-card--select">
-                    <span class="period-card-label">Текущий месяц</span>
-                    <select id="period-a"></select>
-                  </label>
-                  <label class="period-card period-card--select">
-                    <span class="period-card-label">Сравнить с</span>
-                    <select id="period-b"></select>
-                  </label>
+                  <select id="period-a" class="period-resolved-select" aria-hidden="true" tabindex="-1"></select>
+                  <select id="period-b" class="period-resolved-select" aria-hidden="true" tabindex="-1"></select>
+                  <div class="period-card period-card--period-group" role="group" aria-labelledby="period-a-heading">
+                    <span class="period-section-label" id="period-a-heading">Текущий период</span>
+                    <div class="period-subfields">
+                      <label class="period-subfield">
+                        <span class="period-card-label">Год</span>
+                        <select id="period-a-year" aria-label="Текущий период — год"></select>
+                      </label>
+                      <label class="period-subfield">
+                        <span class="period-card-label">Месяц</span>
+                        <select id="period-a-month" aria-label="Текущий период — месяц"></select>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="period-card period-card--period-group" role="group" aria-labelledby="period-b-heading">
+                    <span class="period-section-label" id="period-b-heading">Сравнить с</span>
+                    <div class="period-subfields">
+                      <label class="period-subfield">
+                        <span class="period-card-label">Год</span>
+                        <select id="period-b-year" aria-label="Сравнить с — год"></select>
+                      </label>
+                      <label class="period-subfield">
+                        <span class="period-card-label">Месяц</span>
+                        <select id="period-b-month" aria-label="Сравнить с — месяц"></select>
+                      </label>
+                    </div>
+                  </div>
                 </div>
                 <div class="period-fields period-fields--available is-hidden" id="available-month-fields">
                   <label class="period-card period-card--select">
@@ -87,14 +112,34 @@
                   </div>
                 </div>
                 <div class="period-fields is-hidden" id="range-fields">
-                  <label class="period-card period-card--select">
-                    <span class="period-card-label">С</span>
-                    <select id="date-from"></select>
-                  </label>
-                  <label class="period-card period-card--select">
-                    <span class="period-card-label">По</span>
-                    <select id="date-to"></select>
-                  </label>
+                  <select id="date-from" class="period-resolved-select" aria-hidden="true" tabindex="-1"></select>
+                  <select id="date-to" class="period-resolved-select" aria-hidden="true" tabindex="-1"></select>
+                  <div class="period-card period-card--period-group" role="group" aria-labelledby="date-from-heading">
+                    <span class="period-section-label" id="date-from-heading">Начало</span>
+                    <div class="period-subfields">
+                      <label class="period-subfield">
+                        <span class="period-card-label">Год</span>
+                        <select id="date-from-year" aria-label="Начало — год"></select>
+                      </label>
+                      <label class="period-subfield">
+                        <span class="period-card-label">Месяц</span>
+                        <select id="date-from-month" aria-label="Начало — месяц"></select>
+                      </label>
+                    </div>
+                  </div>
+                  <div class="period-card period-card--period-group" role="group" aria-labelledby="date-to-heading">
+                    <span class="period-section-label" id="date-to-heading">Конец</span>
+                    <div class="period-subfields">
+                      <label class="period-subfield">
+                        <span class="period-card-label">Год</span>
+                        <select id="date-to-year" aria-label="Конец — год"></select>
+                      </label>
+                      <label class="period-subfield">
+                        <span class="period-card-label">Месяц</span>
+                        <select id="date-to-month" aria-label="Конец — месяц"></select>
+                      </label>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>

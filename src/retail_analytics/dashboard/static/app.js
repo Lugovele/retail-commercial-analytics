@@ -1237,10 +1237,31 @@ function bindDynamicControls() {
     if (event.key === "Escape") closeAllFilterPopovers();
   });
 
-  ["period-single", "period-a", "period-b", "matched-current-year", "matched-reference-year", "date-from", "date-to"].forEach((id) => {
+  [
+    "period-single-year",
+    "period-single-month",
+    "period-a-year",
+    "period-a-month",
+    "period-b-year",
+    "period-b-month",
+    "matched-current-year",
+    "matched-reference-year",
+    "date-from-year",
+    "date-from-month",
+    "date-to-year",
+    "date-to-month"
+  ].forEach((id) => {
     document.getElementById(id).addEventListener("change", async () => {
       await applyScopeChange(async () => {
-        if (id === "period-a") syncDefaultComparisonPeriod();
+        const resolvedControl = resolvedPeriodControlForPart(id);
+        if (resolvedControl) {
+          syncResolvedPeriodFromParts(resolvedControl);
+          if (resolvedControl === "date-from" || resolvedControl === "date-to") enforceRangePeriodOrder(resolvedControl);
+        }
+        if (resolvedControl === "period-a") {
+          syncDefaultComparisonPeriod();
+          syncPeriodPartControls("period-b");
+        }
         updatePeriodSummary();
         resetDataPagination();
         await refreshRuntimeOptions();
@@ -1310,13 +1331,14 @@ function setupPeriodSelect(id, selected, resetSelection) {
   select.value = !resetSelection && previous && state.options.periods.some((period) => period.value === previous)
     ? previous
     : selected;
+  syncPeriodPartControls(id);
 }
 
 function populateMatchedYearSelects(resetSelection) {
   const years = Array.from(
     new Set((state.options.periods || []).map((period) => new Date(`${period.value}T00:00:00`).getFullYear()))
-  ).sort((left, right) => left - right);
-  const latestYear = years[years.length - 1];
+  ).sort((left, right) => right - left);
+  const latestYear = years[0];
   setupYearSelect("matched-current-year", latestYear, resetSelection, years);
   setupYearSelect("matched-reference-year", latestYear ? latestYear - 1 : years[0], resetSelection, years);
 }
@@ -1328,6 +1350,94 @@ function setupYearSelect(id, selected, resetSelection, years) {
   select.replaceChildren(...years.map((year) => option(String(year), String(year))));
   const selectedText = selected ? String(selected) : "";
   select.value = !resetSelection && previous && years.includes(Number(previous)) ? previous : selectedText;
+}
+
+function resolvedPeriodControlForPart(partId) {
+  const match = partId.match(/^(period-single|period-a|period-b|date-from|date-to)-(year|month)$/);
+  return match ? match[1] : "";
+}
+
+function periodValues() {
+  return (state.options.periods || []).map((period) => period.value);
+}
+
+function availablePeriodYears() {
+  return Array.from(new Set(periodValues().map((value) => periodParts(value).year).filter(Boolean)))
+    .sort((left, right) => right - left);
+}
+
+function availableMonthsForYear(year) {
+  const numericYear = Number(year);
+  return periodValues()
+    .map(periodParts)
+    .filter((part) => part.year === numericYear)
+    .map((part) => part.month)
+    .sort((left, right) => left - right);
+}
+
+function periodParts(value) {
+  const [year, month] = String(value || "").split("-").map(Number);
+  return { year: year || 0, month: month || 0 };
+}
+
+function periodValueFromParts(year, month) {
+  const numericYear = Number(year);
+  const numericMonth = Number(month);
+  if (!numericYear || !numericMonth) return "";
+  return `${numericYear}-${String(numericMonth).padStart(2, "0")}-01`;
+}
+
+function monthLabel(month) {
+  const date = new Date(Date.UTC(2026, Number(month) - 1, 1));
+  return new Intl.DateTimeFormat("ru-RU", { month: "long" }).format(date);
+}
+
+function syncPeriodPartControls(periodId) {
+  const periodSelect = document.getElementById(periodId);
+  const yearSelect = document.getElementById(`${periodId}-year`);
+  const monthSelect = document.getElementById(`${periodId}-month`);
+  if (!periodSelect || !yearSelect || !monthSelect) return;
+  const fallback = periodValues()[0] || "";
+  const selected = periodSelect.value || fallback;
+  const { year, month } = periodParts(selected);
+  const years = availablePeriodYears();
+  yearSelect.replaceChildren(...years.map((value) => option(String(value), String(value))));
+  yearSelect.value = years.includes(year) ? String(year) : String(years[0] || "");
+  syncMonthPartOptions(periodId, month);
+}
+
+function syncMonthPartOptions(periodId, preferredMonth) {
+  const yearSelect = document.getElementById(`${periodId}-year`);
+  const monthSelect = document.getElementById(`${periodId}-month`);
+  if (!yearSelect || !monthSelect) return;
+  const months = availableMonthsForYear(yearSelect.value);
+  const current = Number(preferredMonth || monthSelect.value || 0);
+  const selected = months.includes(current) ? current : months[0];
+  monthSelect.replaceChildren(...months.map((value) => option(String(value).padStart(2, "0"), monthLabel(value))));
+  monthSelect.value = selected ? String(selected).padStart(2, "0") : "";
+}
+
+function syncResolvedPeriodFromParts(periodId) {
+  const periodSelect = document.getElementById(periodId);
+  const yearSelect = document.getElementById(`${periodId}-year`);
+  const monthSelect = document.getElementById(`${periodId}-month`);
+  if (!periodSelect || !yearSelect || !monthSelect) return;
+  syncMonthPartOptions(periodId, monthSelect.value);
+  const value = periodValueFromParts(yearSelect.value, monthSelect.value);
+  if (periodValues().includes(value)) periodSelect.value = value;
+}
+
+function enforceRangePeriodOrder(changedPeriodId) {
+  const start = document.getElementById("date-from")?.value || "";
+  const end = document.getElementById("date-to")?.value || "";
+  if (!start || !end || start <= end) return;
+  if (changedPeriodId === "date-from") {
+    document.getElementById("date-to").value = start;
+    syncPeriodPartControls("date-to");
+    return;
+  }
+  document.getElementById("date-from").value = end;
+  syncPeriodPartControls("date-from");
 }
 
 function defaultComparisonPeriod(current) {
@@ -1342,7 +1452,10 @@ function syncDefaultComparisonPeriod() {
   if (!select || state.periodMode !== "COMPARE") return;
   const current = document.getElementById("period-a")?.value || "";
   const fallback = defaultComparisonPeriod(current);
-  if (fallback) select.value = fallback;
+  if (fallback) {
+    select.value = fallback;
+    syncPeriodPartControls("period-b");
+  }
 }
 
 async function runActiveViewQuery() {

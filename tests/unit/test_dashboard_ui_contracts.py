@@ -598,9 +598,15 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "Сравнение" in html
     assert "Совпадающие месяцы" in html
     assert "Диапазон" in html
-    assert "Текущий месяц" in html
+    assert "Текущий период" in html
     assert "Сравнить с" in html
+    assert "Начало" in html
+    assert "Конец" in html
     assert 'id="period-b"' in html
+    assert 'id="period-a-year"' in html
+    assert 'id="period-a-month"' in html
+    assert 'id="period-b-year"' in html
+    assert 'id="period-b-month"' in html
     assert 'id="matched-current-year"' in html
     assert 'id="matched-reference-year"' in html
     assert "available-months-derived" in html
@@ -648,6 +654,40 @@ def test_period_mode_switch_refreshes_option_universe_before_query() -> None:
 
     assert "await refreshRuntimeOptions();" in mode_handler
     assert mode_handler.index("await refreshRuntimeOptions();") < mode_handler.index("await runActiveViewQuery();")
+
+
+def test_period_popover_splits_year_month_without_changing_resolved_period_contract() -> None:
+    html = html_or_script("index.html")
+    script = html_or_script("app.js")
+
+    assert 'id="period-single-year"' in html
+    assert 'id="period-single-month"' in html
+    assert 'id="period-a-year"' in html
+    assert 'id="period-a-month"' in html
+    assert 'id="period-b-year"' in html
+    assert 'id="period-b-month"' in html
+    assert 'id="date-from-year"' in html
+    assert 'id="date-from-month"' in html
+    assert 'id="date-to-year"' in html
+    assert 'id="date-to-month"' in html
+    assert 'id="matched-current-year"' in html
+    assert 'id="matched-reference-year"' in html
+    assert 'id="matched-current-month"' not in html
+    assert 'id="matched-reference-month"' not in html
+
+    assert "function availablePeriodYears()" in script
+    assert "function availableMonthsForYear(year)" in script
+    assert "function syncPeriodPartControls(periodId)" in script
+    assert "function syncResolvedPeriodFromParts(periodId)" in script
+    assert "function enforceRangePeriodOrder(changedPeriodId)" in script
+    assert "return `${numericYear}-${String(numericMonth).padStart(2, \"0\")}-01`;" in script
+    assert "state.options.periods || []" in script.split("function periodValues()", 1)[1].split("function availablePeriodYears", 1)[0]
+    assert ".sort((left, right) => right - left)" in script.split("function availablePeriodYears()", 1)[1].split("function availableMonthsForYear", 1)[0]
+    assert ".sort((left, right) => left - right)" in script.split("function availableMonthsForYear(year)", 1)[1].split("function periodParts", 1)[0]
+    assert "const selected = months.includes(current) ? current : months[0];" in script
+    assert "if (periodValues().includes(value)) periodSelect.value = value;" in script
+    assert "document.getElementById(\"date-to\").value = start;" in script
+    assert "document.getElementById(\"date-from\").value = end;" in script
 
 
 def test_available_month_mode_keeps_unsupported_metrics_row_level_limited() -> None:
@@ -1474,6 +1514,28 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert "grid-template-columns: repeat(3, minmax(0, 1fr));" in fields_body
     assert 'class="period-fields period-fields--single is-hidden" id="single-fields"' in html
     assert 'class="period-fields period-fields--compare" id="compare-fields"' in html
+    assert 'id="period-single" class="period-resolved-select" aria-hidden="true" tabindex="-1"' in html
+    assert 'id="period-a" class="period-resolved-select" aria-hidden="true" tabindex="-1"' in html
+    assert 'id="period-b" class="period-resolved-select" aria-hidden="true" tabindex="-1"' in html
+    assert 'id="date-from" class="period-resolved-select" aria-hidden="true" tabindex="-1"' in html
+    assert 'id="date-to" class="period-resolved-select" aria-hidden="true" tabindex="-1"' in html
+    for control_id in (
+        "period-single-year",
+        "period-single-month",
+        "period-a-year",
+        "period-a-month",
+        "period-b-year",
+        "period-b-month",
+        "date-from-year",
+        "date-from-month",
+        "date-to-year",
+        "date-to-month",
+    ):
+        assert f'id="{control_id}"' in html
+    assert "Текущий период — год" in html
+    assert "Сравнить с — месяц" in html
+    assert "Начало — год" in html
+    assert "Конец — месяц" in html
     assert ".period-fields--available" in css
     period_mode = html.split('<div class="period-mode"', 1)[1].split("</div>", 1)[0]
     mode_order = [
@@ -1483,7 +1545,13 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
         period_mode.index('data-period-mode="AVAILABLE_MONTH_SET"'),
     ]
     assert mode_order == sorted(mode_order)
+    assert "grid-template-columns: repeat(2, minmax(0, 220px));" in css.split(".period-fields--single {", 1)[1].split("}", 1)[0]
     assert "grid-template-columns: repeat(2, minmax(0, 220px));" in css
+    assert ".period-resolved-select" in css
+    assert "display: none;" in css.split(".period-resolved-select {", 1)[1].split("}", 1)[0]
+    assert ".period-card--period-group" in css
+    assert ".period-subfields" in css
+    assert "grid-template-columns: minmax(92px, 0.78fr) minmax(118px, 1fr);" in css.split(".period-subfields {", 1)[1].split("}", 1)[0]
     assert 'class="period-card period-card--months derived-field"' in html
     assert 'id="available-months-current"' in html
     assert 'id="available-months-reference"' not in html
@@ -2036,12 +2104,15 @@ def test_sku_filter_options_are_name_first_but_identity_stable(tmp_path) -> None
 def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:
     script = html_or_script("app.js")
 
-    period_handler = script.split('["period-single", "period-a", "period-b", "matched-current-year", "matched-reference-year", "date-from", "date-to"].forEach((id) => {', 1)[1].split("async function applyScopeChange(work)", 1)[0]
+    period_handler = script.split('"period-single-year"', 1)[1].split("async function applyScopeChange(work)", 1)[0]
     assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("preview-grain")', 1)[0]
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-signal-kind]")', 1)[0]
 
     assert "await refreshRuntimeOptions();" in period_handler
     assert "resetEntities: true" not in period_handler
+    assert "syncResolvedPeriodFromParts(resolvedControl)" in period_handler
+    assert "syncDefaultComparisonPeriod();" in period_handler
+    assert "enforceRangePeriodOrder(resolvedControl)" in period_handler
     assert "await refreshRuntimeOptions();" in assortment_handler
     assert "resetEntities: true" not in assortment_handler
     assert "async function applyScopeChange(work)" in script
