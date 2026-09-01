@@ -51,7 +51,7 @@ def test_dashboard_filter_apply_updates_rendered_kpi_when_browser_url_is_provide
                     if (cards.length < 4) return false;
                     return JSON.stringify(cards.map((card) => card.innerText)) !== JSON.stringify(beforeValues);
                 }""",
-                before,
+                arg=before,
                 timeout=15000,
             )
 

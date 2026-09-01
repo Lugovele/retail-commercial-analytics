@@ -1475,16 +1475,28 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert 'class="period-fields period-fields--single is-hidden" id="single-fields"' in html
     assert 'class="period-fields period-fields--compare" id="compare-fields"' in html
     assert ".period-fields--available" in css
-    assert "grid-template-columns: minmax(0, 140px) minmax(0, 140px) minmax(0, 1fr);" in css
+    period_mode = html.split('<div class="period-mode"', 1)[1].split("</div>", 1)[0]
+    mode_order = [
+        period_mode.index('data-period-mode="SINGLE_PERIOD"'),
+        period_mode.index('data-period-mode="COMPARE"'),
+        period_mode.index('data-period-mode="DATE_RANGE"'),
+        period_mode.index('data-period-mode="AVAILABLE_MONTH_SET"'),
+    ]
+    assert mode_order == sorted(mode_order)
+    assert "grid-template-columns: repeat(2, minmax(0, 220px));" in css
     assert 'class="period-card period-card--months derived-field"' in html
     assert 'id="available-months-current"' in html
     assert 'id="available-months-reference"' not in html
     assert "Используются только месяцы, доступные в обоих периодах." in html
     derived_body = css.split(".derived-field strong {", 1)[1].split(".filter-count", 1)[0]
-    assert "overflow: hidden;" in derived_body
-    assert "overflow-wrap: anywhere;" in derived_body
+    assert "overflow: hidden;" not in derived_body
+    assert "overflow: visible;" in derived_body
+    assert "white-space: normal;" in derived_body
     assert ".period-policy" in css
-    assert "color: var(--text-muted);" in css.split(".period-policy {", 1)[1].split("}", 1)[0]
+    period_policy_body = css.split(".period-policy {", 1)[1].split("}", 1)[0]
+    assert "color: var(--text-muted);" in period_policy_body
+    assert "white-space: normal;" in period_policy_body
+    assert "overflow: visible;" in css.split(".period-policy {", 2)[2].split("}", 1)[0]
     assert "data-toggle-full-list-filter" not in html.split('id="period-popover"', 1)[1].split('<div class="filter-grid"', 1)[0]
     active_mode_body = css.split(".mode-button.is-active {", 1)[1].split(".period-fields", 1)[0]
     assert "var(--brand-secondary)" not in active_mode_body
