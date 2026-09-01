@@ -9,10 +9,12 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Any, ClassVar, Final, cast
 
+import duckdb
 import polars as pl
 
 from retail_analytics.mart.metric_facts import RangeAggregationStrategy
 from retail_analytics.mart.query import (
+    PARENT_ENTITY_JSON_KEYS,
     ComparisonMode,
     ComparisonResult,
     DashboardMartQueryService,
@@ -21,6 +23,9 @@ from retail_analytics.mart.query import (
     MetricQueryResult,
     PeriodMode,
     QualityPolicy,
+    _duckdb_path,
+    _reject_duplicate_fact_contributors,
+    _reject_source_revision_ambiguity,
 )
 from retail_analytics.mart.scopes import PrivateLabelScope, scope_identity_hash
 
@@ -93,6 +98,18 @@ class PortfolioMarketItem:
     rows: tuple[dict[str, Any], ...] = ()
     limitations: tuple[str, ...] = ()
     provenance: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class ActiveSkuRollup:
+    """Period-level active SKU projection metadata derived without materializing SKU rows."""
+
+    counts: dict[date, int]
+    fact_count: int
+    source_revision_ids: tuple[str, ...]
+    analysis_run_ids: tuple[str, ...]
+    metric_definition_ids: tuple[str, ...]
+    quality_statuses: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -753,19 +770,39 @@ class PortfolioMarketService:
         history_start = request.date_from if request.period_mode == PeriodMode.DATE_RANGE else None
         history_end = request.date_to or request.date_from
         entity_filters = self._active_sku_entity_filters(request, history_end=history_end)
-        response = self.query_service.query(
-            _metric_request(
-                request,
-                grain_id="sku",
-                metric_concepts=("units",),
-                comparison_mode=ComparisonMode.NONE,
-                entity_ids=(),
-                entity_filters=entity_filters,
-                date_from=history_start,
-                date_to=history_end,
+        rollup = self._active_sku_rollup(request, entity_filters, history_start=history_start, history_end=history_end)
+        if rollup is None:
+            response = self.query_service.query(
+                _metric_request(
+                    request,
+                    grain_id="sku",
+                    metric_concepts=("units",),
+                    comparison_mode=ComparisonMode.NONE,
+                    entity_ids=(),
+                    entity_filters=entity_filters,
+                    date_from=history_start,
+                    date_to=history_end,
+                )
             )
-        )
-        counts = _active_sku_counts(response.metric_results)
+            counts = _active_sku_counts(response.metric_results)
+            provenance = _projection_provenance(
+                request,
+                concept_id=concept_id,
+                projection_semantics="sales_based_active_sku_count_against_available_period_peak",
+                component_metric_concepts=("units",),
+                input_results=response.metric_results,
+                population_scope={"scope": "selected_category_or_network", "peak_period": None},
+                tie_policy=None,
+                evaluated_periods=tuple(sorted(counts)),
+            )
+        else:
+            counts = rollup.counts
+            provenance = _active_sku_projection_provenance(
+                request,
+                concept_id=concept_id,
+                rollup=rollup,
+                evaluated_periods=tuple(sorted(counts)),
+            )
         current_count = counts.get(current_period, 0)
         peak_period, peak_count = _peak_count(counts)
         change = None if peak_count == 0 else (current_count - peak_count) / peak_count
@@ -807,17 +844,135 @@ class PortfolioMarketService:
             pct_delta=pct_delta if concept_id == "active_sku_count" else None,
             rows=rows if concept_id == "active_sku_count" else (),
             limitations=limitations,
-            provenance=_projection_provenance(
-                request,
-                concept_id=concept_id,
-                projection_semantics="sales_based_active_sku_count_against_available_period_peak",
-                component_metric_concepts=("units",),
-                input_results=response.metric_results,
-                population_scope={"scope": "selected_category_or_network", "peak_period": peak_period},
-                tie_policy=None,
-                evaluated_periods=tuple(sorted(counts)),
+            provenance=_active_sku_provenance_with_periods(
+                provenance,
+                peak_period=peak_period,
                 reference_period=reference_period,
             ),
+        )
+
+    def _active_sku_rollup(
+        self,
+        request: PortfolioMarketQueryRequest,
+        entity_filters: dict[str, tuple[str, ...]] | None,
+        *,
+        history_start: date | None,
+        history_end: date | None,
+    ) -> ActiveSkuRollup | None:
+        if not self.metric_facts_path.exists():
+            return None
+        facts_have_private_label_scope = self.query_service._facts_have_private_label_scope()
+        if request.private_label_scope != PrivateLabelScope.INCLUDE and not facts_have_private_label_scope:
+            return ActiveSkuRollup(
+                counts={},
+                fact_count=0,
+                source_revision_ids=(),
+                analysis_run_ids=(),
+                metric_definition_ids=(),
+                quality_statuses=(),
+            )
+        clauses = [
+            "retailer_id = ?",
+            "source_id = ?",
+            "period_grain = ?",
+            "mart_build_id = ?",
+            "grain_id = ?",
+            "metric_concept = ?",
+        ]
+        params: list[Any] = [
+            request.retailer_id,
+            request.source_id,
+            request.period_grain,
+            request.mart_build_id,
+            "sku",
+            "units",
+        ]
+        if facts_have_private_label_scope:
+            clauses.append("private_label_scope = ?")
+            params.append(request.private_label_scope.value)
+        if history_start is not None:
+            clauses.append("period_start >= CAST(? AS DATE)")
+            params.append(history_start.isoformat())
+        if history_end is not None:
+            clauses.append("period_start <= CAST(? AS DATE)")
+            params.append(history_end.isoformat())
+        for column, values in (entity_filters or {}).items():
+            if column in {"category", "manufacturer", "brand", "sku", "store"}:
+                _add_portfolio_parent_filter(clauses, params, column, values)
+                continue
+            if column not in {"entity_id", "metric_concept", "metric_definition_id", "quality_status"}:
+                return None
+            _add_portfolio_in_filter(clauses, params, column, values)
+        if request.quality_policy == QualityPolicy.VALID_ONLY:
+            clauses.append("quality_status = ?")
+            params.append("valid")
+        selected_columns = [
+            "retailer_id",
+            "source_id",
+            "source_revision_id",
+            "analysis_run_id",
+            "mart_build_id",
+            "period_grain",
+            "period_start",
+            "period_end",
+            "business_period_id",
+            "grain_id",
+            "entity_id",
+            "parent_entity_ids",
+            "metric_definition_id",
+            "metric_definition_version",
+            "metric_config_hash",
+            "rule_version",
+            "value",
+            "quality_status",
+        ]
+        if facts_have_private_label_scope:
+            selected_columns.insert(5, "private_label_scope")
+        sql = f"""
+            SELECT {", ".join(selected_columns)}
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
+            ORDER BY period_start, entity_id, metric_definition_id
+        """
+        frame = duckdb.sql(sql, params=[_duckdb_path(self.metric_facts_path), *params]).pl()
+        metric_request = _metric_request(
+            request,
+            grain_id="sku",
+            metric_concepts=("units",),
+            comparison_mode=ComparisonMode.NONE,
+            entity_ids=(),
+            entity_filters=entity_filters,
+            date_from=history_start,
+            date_to=history_end,
+        )
+        self.query_service._validate_active_revision_scope(metric_request, request.mart_build_id or "")
+        self.query_service._validate_fact_active_revisions(frame, metric_request)
+        _reject_source_revision_ambiguity(frame)
+        _reject_duplicate_fact_contributors(frame)
+        if frame.is_empty():
+            return ActiveSkuRollup(
+                counts={},
+                fact_count=0,
+                source_revision_ids=(),
+                analysis_run_ids=(),
+                metric_definition_ids=(),
+                quality_statuses=(),
+            )
+        count_rows = (
+            frame.group_by("period_start")
+            .agg(pl.col("entity_id").filter(pl.col("value") > 0).n_unique().alias("active_sku_count"))
+            .sort("period_start")
+            .iter_rows(named=True)
+        )
+        return ActiveSkuRollup(
+            counts={row["period_start"]: int(row["active_sku_count"] or 0) for row in count_rows},
+            fact_count=frame.height,
+            source_revision_ids=tuple(sorted(str(value) for value in frame["source_revision_id"].drop_nulls().unique())),
+            analysis_run_ids=tuple(sorted(str(value) for value in frame["analysis_run_id"].drop_nulls().unique())),
+            metric_definition_ids=tuple(
+                sorted(str(value) for value in frame["metric_definition_id"].drop_nulls().unique())
+            ),
+            quality_statuses=tuple(sorted(str(value) for value in frame["quality_status"].drop_nulls().unique())),
         )
 
     def _active_sku_entity_filters(
@@ -1455,6 +1610,62 @@ def _projection_provenance(
     }
 
 
+def _active_sku_projection_provenance(
+    request: PortfolioMarketQueryRequest,
+    *,
+    concept_id: str,
+    rollup: ActiveSkuRollup,
+    evaluated_periods: tuple[date, ...],
+) -> dict[str, Any]:
+    return {
+        "current_analytical_scope": _request_scope(request),
+        "projection": {
+            "concept_id": concept_id,
+            "projection_semantics": "sales_based_active_sku_count_against_available_period_peak",
+            "component_metric_concepts": ("units",),
+            "population_scope": {"scope": "selected_category_or_network", "peak_period": None},
+            "tie_policy": None,
+            "deterministic_secondary_sort": None,
+            "rank_movement_semantics": None,
+            "reference_period": None,
+            "evaluated_periods": evaluated_periods,
+            "unsupported_reason": None,
+        },
+        "input_metric_facts": {
+            "metric_definition_ids": rollup.metric_definition_ids,
+            "fact_count": rollup.fact_count,
+        },
+        "run_lineage": {
+            "analysis_run_ids": rollup.analysis_run_ids,
+            "mart_build_id": request.mart_build_id,
+            "source_revision_ids": rollup.source_revision_ids,
+        },
+        "source_evidence": {
+            "status": "PARTIAL_AGGREGATED_FACT_NO_ROW_IDS",
+            "source_row_ids": (),
+        },
+        "quality": {
+            "quality_statuses": rollup.quality_statuses,
+            "limitations": (),
+        },
+        "missing_fields": ("source_row_ids",),
+    }
+
+
+def _active_sku_provenance_with_periods(
+    provenance: dict[str, Any],
+    *,
+    peak_period: date | None,
+    reference_period: date | None,
+) -> dict[str, Any]:
+    projection = dict(provenance.get("projection") or {})
+    population_scope = dict(projection.get("population_scope") or {})
+    population_scope["peak_period"] = peak_period
+    projection["population_scope"] = population_scope
+    projection["reference_period"] = reference_period
+    return {**provenance, "projection": projection}
+
+
 def _request_scope(request: PortfolioMarketQueryRequest) -> dict[str, Any]:
     return {
         "retailer_id": request.retailer_id,
@@ -1474,6 +1685,23 @@ def _request_scope(request: PortfolioMarketQueryRequest) -> dict[str, Any]:
             entity_filters=request.entity_filters,
         ),
     }
+
+
+def _add_portfolio_in_filter(clauses: list[str], params: list[Any], column: str, values: tuple[str, ...]) -> None:
+    if not values:
+        return
+    placeholders = ", ".join("?" for _ in values)
+    clauses.append(f"{column} IN ({placeholders})")
+    params.extend(values)
+
+
+def _add_portfolio_parent_filter(clauses: list[str], params: list[Any], key: str, values: tuple[str, ...]) -> None:
+    if not values:
+        return
+    placeholders = ", ".join("?" for _ in values)
+    json_key = PARENT_ENTITY_JSON_KEYS.get(key, key)
+    clauses.append(f"json_extract_string(parent_entity_ids, '$.{json_key}') IN ({placeholders})")
+    params.extend(values)
 
 
 def _not_applicable(
@@ -1583,7 +1811,7 @@ def _resolve_active_sku_filter_skus(
     }
     if not selected:
         return None
-    available_columns = set(pl.read_parquet_schema(source_like_rows_path).names())
+    available_columns = set(pl.read_parquet_schema(source_like_rows_path))
     if "canonical_product_id" not in available_columns:
         return None
     frame = pl.scan_parquet(source_like_rows_path).filter(

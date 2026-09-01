@@ -895,6 +895,80 @@ def test_active_sku_records_zero_active_period_as_evaluated(tmp_path) -> None:
     )
 
 
+def test_active_sku_uses_fact_rollup_without_materializing_sku_results(tmp_path, monkeypatch) -> None:
+    service = _service(tmp_path, _portfolio_facts())
+
+    def fail_query(*_args, **_kwargs):
+        raise AssertionError("active_sku_count should use the portfolio rollup path")
+
+    monkeypatch.setattr(service.query_service, "query", fail_query)
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            comparison_mode=ComparisonMode.YOY,
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 2
+    assert item.current_value == 2
+    assert item.reference_value == 2
+    assert item.delta == 0
+    assert item.provenance is not None
+    assert item.provenance["input_metric_facts"]["fact_count"] == 4
+
+
+def test_active_sku_fact_rollup_respects_parent_filters(tmp_path, monkeypatch) -> None:
+    service = _service(tmp_path, _portfolio_facts(current_active_skus=("sku_a", "sku_b")))
+
+    def fail_query(*_args, **_kwargs):
+        raise AssertionError("active_sku_count should use the portfolio rollup path")
+
+    monkeypatch.setattr(service.query_service, "query", fail_query)
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            entity_filters={"category": ("category_a",), "sku": ("sku_a",)},
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 1
+    assert item.rows == (
+        {"period_start": date(2025, 1, 1), "value": 1, "source": "backend_active_sku_count"},
+        {"period_start": date(2026, 1, 1), "value": 1, "source": "backend_active_sku_count"},
+    )
+
+
+def test_active_sku_fact_rollup_handles_missing_private_label_scope_column(tmp_path) -> None:
+    facts = _portfolio_facts().drop("private_label_scope")
+    path = tmp_path / "portfolio_facts.parquet"
+    facts.write_parquet(path)
+    service = PortfolioMarketService(DashboardMartQueryService(path, mart_builds=(_build(),)))
+
+    include_response = service.query(_request(concept_ids=("active_sku_count",)))
+    exclude_response = service.query(
+        _request(concept_ids=("active_sku_count",), private_label_scope=PrivateLabelScope.EXCLUDE)
+    )
+
+    assert include_response.items[0].status == PortfolioConceptStatus.READY
+    assert include_response.items[0].value == 2
+    assert exclude_response.items[0].status == PortfolioConceptStatus.PARTIAL
+    assert exclude_response.items[0].value is None
+    assert "no_sku_units_metric_facts" in exclude_response.items[0].limitations
+
+
+def test_active_sku_fact_rollup_rejects_duplicate_fact_contributors(tmp_path) -> None:
+    service = _service(tmp_path, pl.concat([_portfolio_facts(), _portfolio_facts()]))
+
+    with pytest.raises(ValueError, match="Duplicate mart fact contributors"):
+        service.query(_request(concept_ids=("active_sku_count",)))
+
+
 def test_active_sku_resolves_brand_scope_from_source_like_sku_universe(tmp_path) -> None:
     service = _service(
         tmp_path,
