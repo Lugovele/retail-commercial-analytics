@@ -8,6 +8,7 @@ const state = {
   contributionResponse: null,
   overviewPortfolioResponse: null,
   salesDriversResponse: null,
+  diagnosticsResponse: null,
   salesDriversFormatDistributionResponse: null,
   salesDriverStoreFormatOptions: [],
   salesDriversChartResponse: null,
@@ -1381,30 +1382,13 @@ async function runSalesDriversQuery() {
   try {
     syncDiagnosticsSelectedMetric();
     ensureDiagnosticsDimension();
-    const summaryGrain = salesDriverSummaryGrain();
-    const concepts = salesDriverConcepts(summaryGrain);
-    if (!concepts.length) {
-      renderSalesDriversUnavailable("Для выбранного среза нет поддержанных показателей.");
-      state.loadedViews.sales_drivers = true;
-      setLoading(false, "Данные обновлены");
-      return;
-    }
-    const summaryPayload = buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), salesDriverBackendConcepts(summaryGrain));
-    const detailPayload = buildQueryPayload(diagnosticsBreakdownGrain(), entityIdsForDiagnosticsDetail(), diagnosticsDetailConcepts());
-    const portfolioPromise = state.chartMetric === "active_sku_count"
-      ? postJson("/api/dashboard/portfolio-market", buildOverviewPortfolioPayload())
-      : Promise.resolve(state.overviewPortfolioResponse);
-    const [salesDriversResponse, salesDriversTableResponse, overviewPortfolioResponse] = await Promise.all([
-      postJson("/api/dashboard/query", summaryPayload),
-      postJson("/api/dashboard/query", detailPayload),
-      portfolioPromise
-    ]);
+    const diagnosticsResponse = await postJson("/api/dashboard/diagnostics", buildDiagnosticsPayload());
     if (!isCurrentSectionRequest(token)) return;
-    state.salesDriversResponse = salesDriversResponse;
-    state.overviewPortfolioResponse = overviewPortfolioResponse;
+    state.diagnosticsResponse = diagnosticsResponse;
+    state.salesDriversResponse = null;
     state.salesDriversFormatDistributionResponse = null;
     state.salesDriversChartResponse = null;
-    state.salesDriversTableResponse = salesDriversTableResponse;
+    state.salesDriversTableResponse = null;
     renderSalesDrivers();
     state.loadedViews.sales_drivers = true;
     setLoading(false, "Данные обновлены");
@@ -1637,6 +1621,30 @@ function buildOverviewPortfolioPayload() {
     entity_ids: [],
     entity_filters: selectedFilterValuesForPortfolio(),
     concept_ids: ["active_sku_count"]
+  };
+}
+
+function buildDiagnosticsPayload() {
+  const retailer = selectedRetailer();
+  const summaryGrain = salesDriverSummaryGrain();
+  return {
+    retailer_id: retailer.retailer_id,
+    source_id: retailer.source_id,
+    date_from: queryDateFrom(),
+    date_to: queryDateTo(),
+    period_mode: backendPeriodMode(),
+    period_grain: "month",
+    selected_metric: state.chartMetric,
+    breakdown_grain: diagnosticsBreakdownGrain(),
+    summary_grain: summaryGrain,
+    summary_entity_ids: entityIdsForSalesDriverSummary(summaryGrain),
+    entity_filters: selectedFilterValuesForPortfolio(),
+    metric_concepts: overviewKpiDefinitions.map((definition) => definition.concept),
+    comparison_mode: state.periodMode === "AVAILABLE_MONTH_SET" ? "NONE" : selectedComparisonMode(),
+    include_lineage: true,
+    mart_build_id: retailer.default_mart_build_id,
+    private_label_scope: document.getElementById("private-label-scope").value,
+    limit: state.tablePageSize
   };
 }
 
@@ -1883,33 +1891,13 @@ function renderDiagnosticsOutcome() {
   summary.replaceChildren();
   const value = document.createElement("span");
   value.className = "diagnostics-outcome-value";
-  if (model.result) {
-    value.appendChild(metricValueButton({
-      concept: definition.concept,
-      text: model.currentText,
-      result: model.result,
-      response: model.response,
-      className: "diagnostics-outcome-value-button"
-    }));
-  } else {
-    value.textContent = model.currentText;
-  }
+  value.textContent = model.currentText;
   summary.appendChild(value);
   if (model.deltaText) {
     const delta = document.createElement("span");
-    delta.className = "diagnostics-outcome-delta";
-    if (model.result) {
-      delta.appendChild(metricDeltaButton({
-        concept: definition.concept,
-        text: model.deltaText,
-        value: model.deltaValue,
-        format: model.deltaFormat,
-        result: model.result,
-        response: model.response
-      }));
-    } else {
-      delta.textContent = model.deltaText;
-    }
+    const concept = definition.concept;
+    delta.className = `diagnostics-outcome-delta ${deltaSemanticClass(concept, model.deltaValue, model.deltaFormat)}`;
+    delta.textContent = model.deltaText;
     summary.appendChild(delta);
   }
   if (model.referenceText) appendText(summary, "span", model.referenceText).className = "diagnostics-outcome-reference";
@@ -2098,31 +2086,17 @@ function diagnosticsSelectedDefinition() {
 
 function diagnosticsSummaryModel(definition) {
   if (!definition) return { currentText: "н/д" };
-  if (definition.source === "portfolio") {
-    const item = overviewPortfolioItem(definition.concept);
-    return {
-      result: item ? portfolioResultForInspector(item) : null,
-      response: state.overviewPortfolioResponse,
-      currentText: item && isDisplayablePortfolioItem(item) ? formatPortfolioItemValue(item) : "н/д",
-      deltaText: isComparisonDisplayMode() && item?.delta !== null && item?.delta !== undefined
-        ? formatDeltaValue(item.delta, item.unit === "percentage_points" ? "percentage_points" : item.unit || "decimal")
-        : "",
-      deltaValue: item?.delta,
-      deltaFormat: item?.unit === "percentage_points" ? "percentage_points" : item?.unit || "decimal",
-      referenceText: item?.reference_value !== null && item?.reference_value !== undefined ? `к ${formatValue(item.reference_value, item.unit || "decimal")}` : ""
-    };
-  }
-  const result = salesDriverResultFor(definition.concept);
-  const entry = catalogEntry(definition.concept);
-  const comparison = comparisonFor(state.salesDriversResponse, result);
+  const metric = state.diagnosticsResponse?.summary?.metrics?.[definition.concept];
   return {
-    result,
-    response: state.salesDriversResponse,
-    currentText: result && entry ? formatValue(result.value, entry.format) : "н/д",
-    deltaText: comparison && entry ? formatDeltaValue(kpiDeltaPresentationValue(comparison, entry), kpiDeltaPresentationFormat(comparison, entry)) : "",
-    deltaValue: comparison && entry ? kpiDeltaPresentationValue(comparison, entry) : null,
-    deltaFormat: comparison && entry ? kpiDeltaPresentationFormat(comparison, entry) : null,
-    referenceText: comparison && entry ? `${formatValue(comparison.comparison_value, entry.format)} · ${kpiReferenceText(comparison, entry)}` : ""
+    result: metric,
+    response: state.diagnosticsResponse,
+    currentText: diagnosticsMetricValueText(metric),
+    deltaText: diagnosticsMetricDeltaText(metric),
+    deltaValue: metric?.delta_value,
+    deltaFormat: metric?.delta_format,
+    referenceText: metric?.reference_value !== null && metric?.reference_value !== undefined
+      ? `к ${formatValue(metric.reference_value, diagnosticsMetricFormat(metric))}`
+      : ""
   };
 }
 
@@ -2158,12 +2132,8 @@ function diagnosticsMetricCopy(concept) {
 }
 
 function diagnosticsRawEntityRows() {
-  const definition = diagnosticsSelectedDefinition();
-  if (definition?.source !== "query") return [];
-  const response = state.salesDriversTableResponse;
-  if (!response?.metric_results?.length) return [];
-  const entityIds = [...new Set(response.metric_results.map((result) => result.entity_id).filter(Boolean))];
-  return entityIds.map((entityId) => diagnosticsEntityRow(entityId)).filter(Boolean);
+  const entities = state.diagnosticsResponse?.entities || [];
+  return entities.map((entity) => diagnosticsEntityRow(entity)).filter(Boolean);
 }
 
 function diagnosticsEntityRows() {
@@ -2173,42 +2143,26 @@ function diagnosticsEntityRows() {
     .sort((left, right) => Math.abs(right.analysisValue || 0) - Math.abs(left.analysisValue || 0));
 }
 
-function diagnosticsEntityRow(entityId) {
+function diagnosticsEntityRow(entity) {
   const definition = diagnosticsSelectedDefinition();
-  const result = definition?.source === "query" ? salesDriverTableResultFor(definition.concept, entityId) : null;
-  const entry = definition?.source === "query" ? catalogEntry(definition.concept) : null;
-  const fallbackResult = state.salesDriversTableResponse?.metric_results.find((item) => item.entity_id === entityId);
-  const fallbackEntry = catalogEntry(fallbackResult?.metric_concept);
-  if (!fallbackResult || !fallbackEntry) return null;
-  if (!result || !entry) {
-    return {
-      entityId,
-      label: entityDisplayLabel(diagnosticsBreakdownGrain(), entityId) || entityId,
-      result: null,
-      entry: null,
-      currentText: "н/д",
-      referenceText: "н/д",
-      deltaText: "н/д",
-      deltaValue: null,
-      deltaFormat: null,
-      analysisText: "н/д",
-      analysisValue: null,
-      analysisFormat: null
-    };
-  }
-  const comparison = result ? comparisonFor(state.salesDriversTableResponse, result) : null;
-  const deltaFormat = entry ? kpiDeltaPresentationFormat(comparison || {}, entry) : null;
-  const deltaValue = comparison && entry ? kpiDeltaPresentationValue(comparison, entry) : null;
-  const analysisFormat = comparison ? deltaFormat : null;
-  const analysisValue = comparison ? deltaValue : null;
+  const entityId = entity?.stable_entity_id;
+  if (!entityId || !definition) return null;
+  const metric = entity.metrics?.[definition.concept] || entity.selected_metric;
+  const deltaValue = metric?.delta_value;
+  const deltaFormat = metric?.delta_format;
+  const analysisValue = metric?.status === "READY" || metric?.status === "PARTIAL" ? deltaValue : null;
+  const analysisFormat = analysisValue === null || analysisValue === undefined ? null : deltaFormat;
   return {
     entityId,
-    label: entityDisplayLabel(diagnosticsBreakdownGrain(), entityId) || entityId,
-    result,
-    entry,
-    currentText: result && entry ? formatValue(result.value, entry.format) : "н/д",
-    referenceText: comparison && entry ? formatValue(comparison.comparison_value, entry.format) : "н/д",
-    deltaText: comparison && entry ? formatDeltaValue(deltaValue, deltaFormat) : "н/д",
+    label: entity.display_label || entityId,
+    metrics: entity.metrics || {},
+    status: metric?.status || "NO_DATA",
+    reason: metric?.reason || "",
+    currentText: diagnosticsMetricValueText(metric),
+    referenceText: metric?.reference_value !== null && metric?.reference_value !== undefined
+      ? formatValue(metric.reference_value, diagnosticsMetricFormat(metric))
+      : "н/д",
+    deltaText: diagnosticsMetricDeltaText(metric) || "н/д",
     deltaValue,
     deltaFormat,
     analysisText: analysisValue === null || analysisValue === undefined ? "н/д" : formatDeltaValue(analysisValue, analysisFormat),
@@ -2240,26 +2194,23 @@ function selectDiagnosticsEntity(entityId) {
 
 function diagnosticsSelectedMetricRow(concept, selectedRow) {
   if (!selectedRow) return null;
-  const result = salesDriverTableResultFor(concept, selectedRow.entityId);
-  const entry = catalogEntry(concept);
-  if (!result || !entry) {
+  const metric = selectedRow.metrics?.[concept];
+  if (!diagnosticsMetricDisplayable(metric)) {
     return diagnosticsMetricUnavailableRow(concept);
   }
-  const comparison = comparisonFor(state.salesDriversTableResponse, result);
   const row = document.createElement("div");
   row.className = "diagnostics-metric";
   appendText(row, "span", displayLabel(concept)).className = "diagnostics-metric-name";
   const numbers = document.createElement("div");
   numbers.className = "diagnostics-metric-numbers";
   const current = document.createElement("strong");
-  current.appendChild(metricValueButton({ concept, text: formatValue(result.value, entry.format), result, response: state.salesDriversTableResponse }));
+  current.textContent = diagnosticsMetricValueText(metric);
   numbers.appendChild(current);
   const delta = document.createElement("span");
   delta.className = "diagnostics-metric-delta";
-  if (comparison) {
-    const format = kpiDeltaPresentationFormat(comparison, entry);
-    const value = kpiDeltaPresentationValue(comparison, entry);
-    delta.appendChild(metricDeltaButton({ concept, text: formatDeltaValue(value, format), value, format, result, response: state.salesDriversTableResponse }));
+  if (metric?.delta_value !== null && metric?.delta_value !== undefined) {
+    delta.textContent = formatDeltaValue(metric.delta_value, metric.delta_format || diagnosticsMetricFormat(metric));
+    delta.className = `diagnostics-metric-delta ${deltaSemanticClass(concept, metric.delta_value, metric.delta_format || diagnosticsMetricFormat(metric))}`;
   } else {
     delta.textContent = "н/д";
   }
@@ -2277,9 +2228,28 @@ function diagnosticsMetricUnavailableRow(concept) {
 }
 
 function diagnosticsRowConceptText(entityId, concept) {
-  const result = salesDriverTableResultFor(concept, entityId);
-  const entry = catalogEntry(concept);
-  return result && entry ? formatValue(result.value, entry.format) : "н/д";
+  const row = diagnosticsRawEntityRows().find((item) => item.entityId === entityId);
+  return diagnosticsMetricValueText(row?.metrics?.[concept]);
+}
+
+function diagnosticsMetricDisplayable(metric) {
+  return metric && ["READY", "PARTIAL"].includes(metric.status) && metric.current_value !== null && metric.current_value !== undefined;
+}
+
+function diagnosticsMetricFormat(metric) {
+  const format = metric?.format || "decimal";
+  if (format === "sku_count") return "integer";
+  return format;
+}
+
+function diagnosticsMetricValueText(metric) {
+  if (!diagnosticsMetricDisplayable(metric)) return "н/д";
+  return formatValue(metric.current_value, diagnosticsMetricFormat(metric));
+}
+
+function diagnosticsMetricDeltaText(metric) {
+  if (!metric || metric.delta_value === null || metric.delta_value === undefined) return "";
+  return formatDeltaValue(metric.delta_value, metric.delta_format || diagnosticsMetricFormat(metric));
 }
 
 function renderKpis() {

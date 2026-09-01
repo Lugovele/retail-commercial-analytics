@@ -17,6 +17,7 @@ from retail_analytics.dashboard.data import (
     build_data_request,
     data_response_to_dict,
 )
+from retail_analytics.dashboard.diagnostics import DiagnosticsService, build_diagnostics_request
 from retail_analytics.dashboard.geography import GeographyQueryService, build_geography_request
 from retail_analytics.dashboard.package_volume import (
     PackageVolumeQueryService,
@@ -53,6 +54,11 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
         mart_builds=resolved_runtime.query_service.mart_builds,
     )
     portfolio_market_service = PortfolioMarketService(resolved_runtime.query_service)
+    diagnostics_service = DiagnosticsService(
+        resolved_runtime.query_service,
+        portfolio_market_service,
+        source_like_rows_path=resolved_runtime.source_like_rows_path,
+    )
     signal_feed_service = SignalFeedService(
         events_path=resolved_runtime.events_path,
         event_facts_path=resolved_runtime.event_facts_path,
@@ -157,6 +163,13 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                 data = serialize_portfolio_market_response(portfolio_response)
                 _attach_user_execution_filters(data, original_entity_filters)
                 return _json_response(start_response, data)
+            if method == "POST" and path == "/api/dashboard/diagnostics":
+                payload = _read_json(environ)
+                original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)
+                if original_entity_filters is not None:
+                    payload["user_entity_filters"] = original_entity_filters
+                diagnostics_response = diagnostics_service.query(build_diagnostics_request(payload))
+                return _json_response(start_response, diagnostics_response)
             if method == "POST" and path == "/api/dashboard/signals":
                 payload = _read_json(environ)
                 original_entity_filters = _resolve_payload_entity_filters(payload, resolved_runtime)

@@ -864,19 +864,15 @@ def test_diagnostics_uses_backend_query_and_shared_selected_kpi_state() -> None:
     assert 'if (state.activeView === "sales_drivers")' in script
     assert "async function runSalesDriversQuery()" in script
     assert 'const token = sectionRequestToken("sales_drivers");' in script
-    assert 'const [salesDriversResponse, salesDriversTableResponse, overviewPortfolioResponse] = await Promise.all([' in script
-    assert 'postJson("/api/dashboard/query", summaryPayload)' in script
-    assert 'postJson("/api/dashboard/query", detailPayload)' in script
-    assert 'const portfolioPromise = state.chartMetric === "active_sku_count"' in script
-    assert 'postJson("/api/dashboard/portfolio-market", buildOverviewPortfolioPayload())' in script
-    assert "state.salesDriversResponse = salesDriversResponse;" in script
-    assert "state.overviewPortfolioResponse = overviewPortfolioResponse;" in script
+    assert 'postJson("/api/dashboard/diagnostics", buildDiagnosticsPayload())' in script
+    assert "state.diagnosticsResponse = diagnosticsResponse;" in script
     assert "renderSalesDriverTrend()" not in script.split("function renderSalesDrivers()", 1)[1].split("function renderDiagnosticsKpiSelector()", 1)[0]
-    assert "state.salesDriversTableResponse = salesDriversTableResponse;" in script
-    assert "const summaryGrain = salesDriverSummaryGrain();" in script
-    assert "buildQueryPayload(summaryGrain, entityIdsForSalesDriverSummary(summaryGrain), salesDriverBackendConcepts(summaryGrain))" in script
-    assert "buildQueryPayload(diagnosticsBreakdownGrain(), entityIdsForDiagnosticsDetail(), diagnosticsDetailConcepts())" in script
-    assert "comparisonFor(response, result)" in script
+    assert "state.salesDriversTableResponse = null;" in script
+    assert "function buildDiagnosticsPayload()" in script
+    assert "selected_metric: state.chartMetric" in script
+    assert "breakdown_grain: diagnosticsBreakdownGrain()" in script
+    assert "summary_grain: summaryGrain" in script
+    assert "entity_filters: selectedFilterValuesForPortfolio()" in script
     assert '["READY", "PARTIAL"].includes(entry.availability_status)' in script
     assert "!salesDriverGrainSupport[concept]?.includes(grain)" in script
     assert "syncDiagnosticsSelectedMetric()" in script
@@ -904,9 +900,10 @@ def test_diagnostics_uses_backend_query_and_shared_selected_kpi_state() -> None:
     assert 'margin_velocity: ["category", "manufacturer", "brand", "sku"]' in script
     assert "margin / revenue" not in script
     assert "sum(" not in script.lower()
-    entity_row = script.split("function diagnosticsEntityRow(entityId)", 1)[1].split("function selectedDiagnosticsEntityId()", 1)[0]
-    assert "const analysisValue = comparison ? deltaValue : null;" in entity_row
-    assert "const analysisFormat = comparison ? deltaFormat : null;" in entity_row
+    entity_row = script.split("function diagnosticsEntityRow(entity)", 1)[1].split("function selectedDiagnosticsEntityId()", 1)[0]
+    assert "const entityId = entity?.stable_entity_id;" in entity_row
+    assert "entity.display_label || entityId" in entity_row
+    assert "const analysisValue = metric?.status === \"READY\" || metric?.status === \"PARTIAL\" ? deltaValue : null;" in entity_row
     assert "result.value : deltaValue" not in entity_row
 
 
@@ -938,7 +935,7 @@ def test_diagnostics_selector_contains_all_overview_kpis_and_non_additive_semant
     assert "Изменение цены за литр" in copy
     assert "Изменение ассортимента" in copy
     assert "Вклад в общий Δ" not in copy
-    assert "definition?.source !== \"query\"" in script.split("function diagnosticsRawEntityRows()", 1)[1].split("function diagnosticsEntityRows()", 1)[0]
+    assert "state.diagnosticsResponse?.entities || []" in script.split("function diagnosticsRawEntityRows()", 1)[1].split("function diagnosticsEntityRows()", 1)[0]
 
 
 def test_sales_drivers_exposes_presence_and_speed_metrics_without_store_scope_fallback() -> None:

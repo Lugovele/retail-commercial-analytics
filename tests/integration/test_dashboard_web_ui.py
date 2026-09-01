@@ -16,8 +16,10 @@ import pytest
 
 from retail_analytics.dashboard import build_synthetic_dashboard_runtime, create_dashboard_wsgi_app
 from retail_analytics.dashboard.app import _asset_version
+from retail_analytics.dashboard.diagnostics import DiagnosticsService, build_diagnostics_request
 from retail_analytics.mart import (
     DashboardMartQueryService,
+    PortfolioMarketService,
     build_product_store_metric_facts,
     write_product_store_metric_facts,
 )
@@ -255,7 +257,7 @@ def test_dashboard_query_route_rolls_up_canonical_multi_select_filters(tmp_path:
 
 def test_dashboard_query_route_resolves_cascading_source_like_filters(tmp_path: Path) -> None:
     source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
-    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
     app = create_dashboard_wsgi_app(runtime)
 
     status, _, body = _call(
@@ -310,7 +312,7 @@ def test_dashboard_query_route_resolves_cascading_source_like_filters(tmp_path: 
 
 def test_dashboard_sku_options_respect_selected_store_scope(tmp_path: Path) -> None:
     source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
-    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
     app = create_dashboard_wsgi_app(runtime)
 
     status, _, body = _call(
@@ -331,7 +333,7 @@ def test_dashboard_sku_options_respect_selected_store_scope(tmp_path: Path) -> N
 
 def test_dashboard_product_routes_resolve_and_report_user_execution_filters(tmp_path: Path) -> None:
     source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
-    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
     app = create_dashboard_wsgi_app(runtime)
     base_payload: dict[str, Any] = {
         "retailer_id": "retailer_a",
@@ -450,6 +452,275 @@ def test_dashboard_active_sku_selected_sku_store_scope_uses_source_like_truth(tm
     assert item["current_value"] == 1
     assert item["value"] == 1
     assert item["limitations"] == ["comparison_period_unavailable"]
+
+
+def test_dashboard_diagnostics_route_binds_real_query_metric_rows(tmp_path: Path) -> None:
+    source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/diagnostics",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "selected_metric": "units",
+            "breakdown_grain": "category",
+            "summary_grain": "network",
+            "summary_entity_ids": ["network"],
+            "entity_filters": {},
+            "metric_concepts": ["units", "revenue_vat", "active_sku_count"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["selected_metric"] == "units"
+    assert response["breakdown_level"] == "category"
+    assert response["entity_count"] >= 1
+    standard = next(item for item in response["entities"] if item["stable_entity_id"] == "CATEGORY_STANDARD")
+    assert standard["selected_metric"]["current_value"] is not None
+    assert standard["metrics"]["units"]["status"] in {"READY", "PARTIAL"}
+    assert standard["metrics"]["active_sku_count"]["current_value"] == 2
+    assert response["summary"]["metrics"]["active_sku_count"]["status"] in {"READY", "PARTIAL"}
+
+
+def test_dashboard_diagnostics_active_sku_narrow_scope_returns_one(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/diagnostics",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "selected_metric": "active_sku_count",
+            "breakdown_grain": "sku",
+            "summary_grain": "sku",
+            "summary_entity_ids": ["SKU_A_001"],
+            "entity_filters": {
+                "category": ["CATEGORY_STANDARD"],
+                "manufacturer": ["Manufacturer A"],
+                "brand": ["Brand A"],
+                "sku": ["SKU_A_001"],
+                "store": ["STORE_001"],
+            },
+            "metric_concepts": ["active_sku_count", "units"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["entity_count"] == 1
+    row = response["entities"][0]
+    assert row["stable_entity_id"] == "SKU_A_001"
+    assert row["selected_metric"]["current_value"] == 1
+    assert response["summary"]["metrics"]["active_sku_count"]["current_value"] == 1
+
+
+def test_dashboard_diagnostics_source_like_kpis_keep_local_breakdown_grain(tmp_path: Path) -> None:
+    source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
+    diagnostics_service = DiagnosticsService(
+        runtime.query_service,
+        PortfolioMarketService(runtime.query_service),
+        source_like_rows_path=source_rows_path,
+    )
+
+    response = diagnostics_service.query(
+        build_diagnostics_request(
+            {
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "selected_metric": "velocity",
+            "breakdown_grain": "brand",
+            "summary_grain": "category",
+            "summary_entity_ids": [],
+            "entity_filters": {"sku": ["SKU_A_001"]},
+            "user_entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "metric_concepts": ["velocity", "distribution"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+            }
+        )
+    )
+
+    by_id = {item["stable_entity_id"]: item for item in response["entities"]}
+    assert set(by_id) == {"Brand A", "Brand B"}
+    assert by_id["Brand A"]["metrics"]["velocity"]["current_value"] == 8.0
+    assert by_id["Brand A"]["metrics"]["velocity"]["numerator_value"] == 8.0
+    assert by_id["Brand A"]["metrics"]["velocity"]["denominator_value"] == 1.0
+    assert by_id["Brand B"]["metrics"]["velocity"]["current_value"] == 5.0
+    assert by_id["Brand A"]["metrics"]["distribution"]["current_value"] == 0.5
+    assert by_id["Brand B"]["metrics"]["distribution"]["current_value"] == 0.5
+
+
+def test_dashboard_diagnostics_source_like_kpis_reject_unproductized_range_period(
+    tmp_path: Path,
+) -> None:
+    source_rows_path = _write_product_store_source_like_rows(tmp_path / "source_like_enriched.parquet")
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/diagnostics",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2025-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "DATE_RANGE",
+            "period_grain": "month",
+            "selected_metric": "velocity",
+            "breakdown_grain": "brand",
+            "summary_grain": "network",
+            "summary_entity_ids": ["network"],
+            "entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "metric_concepts": ["velocity", "active_sku_count"],
+            "comparison_mode": "NONE",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    row = next(item for item in response["entities"] if item["stable_entity_id"] == "Brand A")
+    assert row["metrics"]["velocity"]["status"] == "NEEDS_BUSINESS_RULE"
+    assert row["metrics"]["velocity"]["current_value"] is None
+    assert "date_range_period_not_productized" in row["metrics"]["velocity"]["reason"]
+    assert row["metrics"]["active_sku_count"]["status"] == "NEEDS_BUSINESS_RULE"
+
+
+def test_dashboard_diagnostics_stm_exclude_matches_overview_null_scope(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows_with_null_private_label(tmp_path / "source_like_null_stm.parquet")
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/diagnostics",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "selected_metric": "active_sku_count",
+            "breakdown_grain": "sku",
+            "summary_grain": "network",
+            "summary_entity_ids": ["network"],
+            "entity_filters": {"category": ["CATEGORY_STANDARD"]},
+            "metric_concepts": ["active_sku_count"],
+            "comparison_mode": "NONE",
+            "private_label_scope": "EXCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert [item["stable_entity_id"] for item in response["entities"]] == ["SKU_FALSE", "SKU_NULL"]
+    assert {item["selected_metric"]["current_value"] for item in response["entities"]} == {1}
+
+
+def test_dashboard_diagnostics_preserves_duplicate_sku_identities(tmp_path: Path) -> None:
+    source_rows_path = _write_duplicate_diagnostics_source_like_rows(tmp_path / "diagnostics_duplicates.parquet")
+    runtime = _runtime_with_source_like(tmp_path / "demo", source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/diagnostics",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "selected_metric": "active_sku_count",
+            "breakdown_grain": "sku",
+            "summary_grain": "category",
+            "summary_entity_ids": ["COLA"],
+            "entity_filters": {"category": ["COLA"]},
+            "metric_concepts": ["active_sku_count"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    ids = [item["stable_entity_id"] for item in response["entities"]]
+    assert ids == ["706913", "756771", "940211"]
+    assert len({item["display_label"] for item in response["entities"]}) == 3
+    assert all("НАПИТОК КОКА-КОЛА ОРИДЖИНАЛ Ж/Б 0,33Л" in item["display_label"] for item in response["entities"])
+    assert {item["selected_metric"]["current_value"] for item in response["entities"]} == {1}
+
+
+def test_dashboard_diagnostics_returns_explicit_unsupported_status(tmp_path: Path) -> None:
+    source_rows_path = _write_source_like_rows(tmp_path / "source_like.parquet")
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path / "demo"), source_like_rows_path=source_rows_path)
+    app = create_dashboard_wsgi_app(runtime)
+
+    status, _, body = _call(
+        app,
+        "POST",
+        "/api/dashboard/diagnostics",
+        payload={
+            "retailer_id": "retailer_a",
+            "source_id": "source_a",
+            "date_from": "2026-06-01",
+            "date_to": "2026-06-01",
+            "period_mode": "SINGLE_PERIOD",
+            "period_grain": "month",
+            "selected_metric": "weighted_distribution",
+            "breakdown_grain": "manufacturer",
+            "summary_grain": "network",
+            "summary_entity_ids": ["network"],
+            "entity_filters": {},
+            "metric_concepts": ["weighted_distribution"],
+            "comparison_mode": "YOY",
+            "private_label_scope": "INCLUDE",
+            "mart_build_id": "build_dashboard_synthetic",
+        },
+    )
+    response = json.loads(body)
+
+    assert status.startswith("200")
+    assert response["support_matrix"]["weighted_distribution"]["manufacturer"] == "NEEDS_BUSINESS_RULE"
+    assert response["entities"][0]["selected_metric"]["status"] == "NEEDS_BUSINESS_RULE"
 
 
 def test_dashboard_query_route_uses_product_store_serving_for_store_and_product_filters(tmp_path: Path) -> None:
@@ -986,6 +1257,22 @@ def _write_product_store_source_like_rows(path: Path) -> Path:
     ).write_parquet(path)
     return path
 
+
+def _runtime_with_source_like(base_path: Path, source_like_rows_path: Path):
+    runtime = build_synthetic_dashboard_runtime(base_path)
+    return replace(
+        runtime,
+        source_like_rows_path=source_like_rows_path,
+        query_service=DashboardMartQueryService(
+            runtime.query_service.metric_facts_path,
+            catalog=runtime.query_service.catalog,
+            mart_builds=runtime.query_service.mart_builds,
+            source_ledger=runtime.query_service.source_ledger,
+            source_like_rows_path=source_like_rows_path,
+        ),
+    )
+
+
 def _write_source_like_rows(path: Path) -> Path:
     pl.DataFrame(
         {
@@ -1007,6 +1294,53 @@ def _write_source_like_rows(path: Path) -> Path:
             "units": [10.0, 5.0, 999.0, 99.0],
             "revenue_vat": [100.0, 50.0, 9990.0, 990.0],
             "private_label_flag": [False, True, False, False],
+        }
+    ).write_parquet(path)
+    return path
+
+
+def _write_source_like_rows_with_null_private_label(path: Path) -> Path:
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a", "source_a"],
+            "source_revision_id": ["revision_dashboard_synthetic"] * 3,
+            "analysis_run_id": ["analysis_dashboard_synthetic"] * 3,
+            "period": [date(2026, 6, 1), date(2026, 6, 1), date(2026, 6, 1)],
+            "category": ["CATEGORY_STANDARD", "CATEGORY_STANDARD", "CATEGORY_STANDARD"],
+            "manufacturer": ["Manufacturer A", "Manufacturer A", "Manufacturer A"],
+            "brand": ["Brand A", "Brand A", "Brand A"],
+            "sku_name": ["SKU False", "SKU Null", "SKU True"],
+            "canonical_product_id": ["SKU_FALSE", "SKU_NULL", "SKU_TRUE"],
+            "canonical_store_id": ["STORE_001", "STORE_002", "STORE_003"],
+            "units": [4.0, 5.0, 6.0],
+            "revenue_vat": [40.0, 50.0, 60.0],
+            "private_label_flag": [False, None, True],
+        },
+        schema_overrides={"private_label_flag": pl.Boolean},
+    ).write_parquet(path)
+    return path
+
+
+def _write_duplicate_diagnostics_source_like_rows(path: Path) -> Path:
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a", "source_a"],
+            "source_revision_id": ["revision_dashboard_synthetic"] * 3,
+            "analysis_run_id": ["analysis_dashboard_synthetic"] * 3,
+            "period": [date(2026, 6, 1), date(2026, 6, 1), date(2026, 6, 1)],
+            "category": ["COLA", "COLA", "COLA"],
+            "manufacturer": ["Manufacturer C", "Manufacturer C", "Manufacturer C"],
+            "brand": ["COCA-COLA", "COCA-COLA", "COCA-COLA"],
+            "sku_name": ["НАПИТОК КОКА-КОЛА ОРИДЖИНАЛ Ж/Б 0,33Л"] * 3,
+            "canonical_product_id": ["706913", "756771", "940211"],
+            "canonical_store_id": ["STORE_001", "STORE_001", "STORE_001"],
+            "units": [1.0, 2.0, 3.0],
+            "revenue_vat": [10.0, 20.0, 30.0],
+            "private_label_flag": [False, False, False],
+            "package": ["Ж/Б 0,33Л", "Ж/Б 0,33Л", "Ж/Б 0,33Л"],
+            "volume_l": [0.33, 0.33, 0.33],
         }
     ).write_parquet(path)
     return path
