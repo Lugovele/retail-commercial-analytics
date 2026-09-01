@@ -39,6 +39,7 @@ class GeographyQueryRequest:
     date_to: date | None = None
     entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: str = "NONE"
+    comparison_period_start: date | None = None
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
 
@@ -99,6 +100,7 @@ class GeographyQueryService:
                 "metric_concepts": requested,
                 "entity_filters": request.entity_filters or {},
                 "comparison_mode": request.comparison_mode,
+                "comparison_period_start": request.comparison_period_start.isoformat() if request.comparison_period_start else None,
                 "private_label_scope": request.private_label_scope.value,
                 "mart_build_id": build.mart_build_id,
             },
@@ -134,7 +136,7 @@ class GeographyQueryService:
         if request.period_mode == "SINGLE_PERIOD":
             return tuple(period for period in periods if request.date_from is None or period == request.date_from)
         if request.period_mode in {"DATE_RANGE", "AVAILABLE_MONTH_SET"}:
-            if request.period_mode == "AVAILABLE_MONTH_SET" and request.comparison_mode == "YOY":
+            if request.period_mode == "AVAILABLE_MONTH_SET" and request.comparison_mode in {"YOY", "CUSTOM"}:
                 matched_months = self._matched_month_numbers(request, build)
                 return tuple(period for period in periods if period.month in matched_months)
             return periods
@@ -148,8 +150,21 @@ class GeographyQueryService:
     ) -> tuple[date, ...]:
         if request.comparison_mode == "NONE" or not current_periods:
             return ()
-        if request.comparison_mode == "YOY":
-            candidates = tuple(date(period.year - 1, period.month, 1) for period in current_periods)
+        if request.comparison_mode == "CUSTOM" and request.period_mode != "AVAILABLE_MONTH_SET":
+            if request.comparison_period_start is None:
+                return ()
+            available_reference_periods = set(
+                self._available_periods(
+                    request,
+                    build,
+                    request.comparison_period_start,
+                    request.comparison_period_start,
+                )
+            )
+            return (request.comparison_period_start,) if request.comparison_period_start in available_reference_periods else ()
+        if request.comparison_mode in {"YOY", "CUSTOM"}:
+            reference_year = request.comparison_period_start.year if request.comparison_period_start is not None else min(current_periods).year - 1
+            candidates = tuple(date(reference_year, period.month, 1) for period in current_periods)
             available_reference_periods = set(
                 self._available_periods(request, build, date(min(candidates).year, 1, 1), date(max(candidates).year, 12, 31))
             )
@@ -202,12 +217,8 @@ class GeographyQueryService:
         current = self._available_periods(request, build, request.date_from, request.date_to)
         if request.date_from is None:
             return ()
-        reference = self._available_periods(
-            request,
-            build,
-            date(request.date_from.year - 1, 1, 1),
-            date(request.date_from.year - 1, 12, 31),
-        )
+        reference_year = request.comparison_period_start.year if request.comparison_period_start is not None else request.date_from.year - 1
+        reference = self._available_periods(request, build, date(reference_year, 1, 1), date(reference_year, 12, 31))
         return tuple(sorted({period.month for period in current} & {period.month for period in reference}))
 
     def _aggregate(
@@ -357,6 +368,7 @@ def build_geography_request(payload: GeographyQueryRequest | dict[str, Any]) -> 
         metric_concepts=tuple(str(item) for item in payload.get("metric_concepts", SUPPORTED_METRICS)),
         entity_filters=filters,
         comparison_mode=str(payload.get("comparison_mode", "NONE")),
+        comparison_period_start=_date_or_none(payload.get("comparison_period_start")),
         private_label_scope=PrivateLabelScope(payload.get("private_label_scope", PrivateLabelScope.INCLUDE)),
         mart_build_id=payload.get("mart_build_id"),
     )

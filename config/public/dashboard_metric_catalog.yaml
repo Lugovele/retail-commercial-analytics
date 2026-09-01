@@ -1,11 +1,11 @@
-metrics:
+﻿metrics:
   - metric_concept: revenue_vat
     default_display_label: Оборот с НДС
     description: Оборот с НДС из deterministic metric outputs.
     format: currency
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какой оборот с НДС сформирован в выбранном срезе?
     decision_use: Проверить общий денежный масштаб продаж с учётом НДС.
     formula_summary: Сумма оборота с НДС по фактам выбранного среза.
@@ -16,7 +16,7 @@ metrics:
     format: currency
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какой коммерческий оборот сформирован в выбранном срезе?
     decision_use: Оценить основной денежный результат и его изменение.
     formula_summary: Сумма оборота без НДС по фактам выбранного среза.
@@ -27,7 +27,7 @@ metrics:
     format: decimal
     dashboard_group: sales
     default_range_aggregation_strategy: sum_available_periods
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Сколько единиц продано в выбранном срезе?
     decision_use: Отделить изменение физического объёма от ценового эффекта.
     formula_summary: Сумма проданных единиц по фактам выбранного среза.
@@ -38,7 +38,7 @@ metrics:
     format: currency
     dashboard_group: economics
     default_range_aggregation_strategy: sum_available_periods
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Сколько абсолютной маржи сформировано?
     decision_use: Оценить денежный вклад среза в экономику сети.
     formula_summary: Сумма абсолютной маржи по фактам выбранного среза.
@@ -49,7 +49,7 @@ metrics:
     format: percent
     dashboard_group: economics
     default_range_aggregation_strategy: ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какой уровень маржинальности у выбранного среза?
     decision_use: Проверить экономическую эффективность продаж.
     formula_summary: Отношение суммы абсолютной маржи к сумме оборота в выбранном срезе.
@@ -60,7 +60,7 @@ metrics:
     format: currency
     dashboard_group: price
     default_range_aggregation_strategy: weighted_ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: По какой средней полочной цене продавался срез?
     decision_use: Проверить движение цены без вывода о качестве результата.
     formula_summary: Средневзвешенная полочная цена по продажам выбранного среза.
@@ -71,7 +71,7 @@ metrics:
     format: currency
     dashboard_group: price
     default_range_aggregation_strategy: weighted_ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какой средний входной уровень цены у среза?
     decision_use: Проверить изменение входной цены как контекст экономики.
     formula_summary: Средневзвешенная входная цена по продажам выбранного среза.
@@ -82,7 +82,7 @@ metrics:
     format: integer
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: В скольких ТТ были продажи выбранного среза?
     decision_use: Оценить присутствие продаж в торговых точках.
@@ -94,7 +94,7 @@ metrics:
     format: integer
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: Сколько ТТ входит в активную базу периода?
     decision_use: Проверить размер доступной базы для оценки присутствия.
@@ -106,7 +106,7 @@ metrics:
     format: percent
     dashboard_group: distribution
     default_range_aggregation_strategy: ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какая доля активных ТТ продаёт выбранный срез?
     decision_use: Оценить ширину присутствия без причинной интерпретации.
     formula_summary: Distinct ТТ с продажами выбранного SKU/бренда/категории, делённые на все активные ТТ выбранного периода.
@@ -117,7 +117,7 @@ metrics:
     format: percent
     dashboard_group: distribution
     default_range_aggregation_strategy: ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какая доля оборота категории приходится на ТТ, где представлен выбранный SKU или бренд?
     decision_use: Оценить экономическую важность присутствия выбранного SKU или бренда.
     formula_summary: Оборот категории в ТТ с продажами выбранного SKU/бренда, делённый на весь оборот этой категории.
@@ -128,7 +128,7 @@ metrics:
     format: percent
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable, requires_store_format_universe]
     business_question: Какая доля ТТ выбранного формата продаёт выбранный срез?
     decision_use: Оценить ширину присутствия внутри утверждённого формата ТТ без причинной интерпретации.
@@ -140,7 +140,7 @@ metrics:
     format: ratio
     dashboard_group: distribution
     default_range_aggregation_strategy: ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Сколько единиц продаётся на одну ТТ с продажами?
     decision_use: Оценить интенсивность продаж там, где товар присутствует.
     formula_summary: Сумма продаж в штуках, делённая на distinct ТТ с ненулевыми продажами выбранного SKU/бренда/категории.
@@ -151,7 +151,7 @@ metrics:
     format: currency
     dashboard_group: price
     default_range_aggregation_strategy: ratio_of_sums
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     business_question: Какая реализованная цена за литр у выбранного среза?
     decision_use: Сравнить фактический ценовой уровень с учётом микса упаковок.
     formula_summary: Сумма оборота с НДС по строкам с валидным volume_l, делённая на сумму units × volume_l тех же строк.
@@ -162,7 +162,7 @@ metrics:
     format: currency
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: Какой оборот приходится на одну ТТ с продажами?
     decision_use: Оценить денежную интенсивность продаж в точках присутствия.
@@ -174,7 +174,7 @@ metrics:
     format: currency
     dashboard_group: distribution
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: Какая маржа приходится на одну ТТ с продажами?
     decision_use: Оценить экономическую интенсивность в точках присутствия.
@@ -186,7 +186,7 @@ metrics:
     format: integer
     dashboard_group: assortment
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: Сколько SKU реально продавалось в периоде?
     decision_use: Оценить ширину активного ассортимента.
@@ -198,7 +198,7 @@ metrics:
     format: integer
     dashboard_group: assortment
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: Сколько брендов реально продавалось в периоде?
     decision_use: Оценить ширину активного брендового портфеля.
@@ -210,7 +210,7 @@ metrics:
     format: integer
     dashboard_group: assortment
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_unavailable]
     business_question: Сколько категорий реально продавалось в периоде?
     decision_use: Оценить ширину активного категорийного портфеля.
@@ -222,7 +222,7 @@ metrics:
     format: percent
     dashboard_group: share
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_requires_declared_scope]
     business_question: Какую долю оборота категории занимает выбранный срез?
     decision_use: Оценить позицию внутри категории и её движение.
@@ -234,7 +234,7 @@ metrics:
     format: percent
     dashboard_group: share
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_requires_declared_scope]
     business_question: Какую долю продаж категории в штуках занимает выбранный срез?
     decision_use: Оценить физическую позицию внутри категории.
@@ -246,7 +246,7 @@ metrics:
     format: percent
     dashboard_group: share
     default_range_aggregation_strategy: period_only
-    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE]
+    default_comparison_support: [NONE, YOY, MOM, PREVIOUS_AVAILABLE, CUSTOM]
     generic_limitations: [selected_range_value_requires_declared_scope]
     business_question: Какую долю маржи категории занимает выбранный срез?
     decision_use: Оценить экономическую позицию внутри категории.

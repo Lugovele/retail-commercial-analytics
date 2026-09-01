@@ -120,6 +120,7 @@ class ComparisonMode(StrEnum):
     YOY = "YOY"
     MOM = "MOM"
     PREVIOUS_AVAILABLE = "PREVIOUS_AVAILABLE"
+    CUSTOM = "CUSTOM"
 
 
 class CoverageStatus(StrEnum):
@@ -155,6 +156,7 @@ class DashboardMetricQueryRequest:
     metric_concepts: tuple[str, ...] = ()
     metric_definition_ids: tuple[str, ...] = ()
     comparison_mode: ComparisonMode = ComparisonMode.NONE
+    comparison_period_start: date | None = None
     ownership_scope: str | None = None
     quality_policy: QualityPolicy = QualityPolicy.INCLUDE_ALL
     include_lineage: bool = True
@@ -312,6 +314,7 @@ class DashboardMartQueryService:
         mart_build_id = self._resolve_build_id(request)
         self._validate_active_revision_scope(request, mart_build_id)
         fetch_start = _comparison_fetch_start(request)
+        fetch_request = _comparison_fetch_request(request)
         limitations = list(self._private_label_scope_materialization_limitations(request))
         scoped_rollup_grain: str | None = None
         serving_fact_grain: str | None = None
@@ -322,19 +325,20 @@ class DashboardMartQueryService:
             else ()
         )
         fact_request = _request_without_source_like_approved_kpis(request) if source_like_concepts else request
+        fact_fetch_request = _request_without_source_like_approved_kpis(fetch_request) if source_like_concepts else fetch_request
         if unsupported_distribution_scope:
             raw = pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
             limitations.extend(unsupported_distribution_scope)
         elif _requests_store_format_distribution(request):
             raw, serving_fact_grain, product_store_limitations = self._read_store_format_distribution_facts(
-                request,
+                fetch_request,
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
             )
             limitations.extend(product_store_limitations)
         elif _has_product_store_intersection(request):
             raw, serving_fact_grain, product_store_limitations = self._read_product_store_rollup_facts(
-                fact_request,
+                fact_fetch_request,
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
             )
@@ -342,7 +346,11 @@ class DashboardMartQueryService:
         elif _source_like_only_request(request, fact_request):
             raw = pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
         else:
-            raw = self._read_facts(fact_request, mart_build_id=mart_build_id, period_start=fetch_start)
+            raw = self._read_facts(
+                fact_fetch_request,
+                mart_build_id=mart_build_id,
+                period_start=fetch_start,
+            )
         if (
             raw.is_empty()
             and fact_request.entity_filters
@@ -350,15 +358,14 @@ class DashboardMartQueryService:
             and not _source_like_only_request(request, fact_request)
         ):
             raw, scoped_rollup_grain, rollup_limitations = self._read_scoped_rollup_facts(
-                fact_request,
+                fact_fetch_request,
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
             )
             limitations.extend(rollup_limitations)
         if source_like_concepts and not unsupported_distribution_scope:
-            source_like_request = _source_like_effective_scope_request(request)
             source_like_raw, source_like_limitations = self._read_source_like_approved_kpi_facts(
-                source_like_request,
+                _source_like_effective_scope_request(fetch_request),
                 mart_build_id=mart_build_id,
                 period_start=fetch_start,
                 metric_concepts=source_like_concepts,
@@ -422,6 +429,7 @@ class DashboardMartQueryService:
                 "metric_definition_ids": request.metric_definition_ids,
                 "period_mode": request.period_mode.value,
                 "comparison_mode": request.comparison_mode.value,
+                "comparison_period_start": request.comparison_period_start,
                 "entity_filters": request.entity_filters or {},
                 "private_label_scope": request.private_label_scope.value,
             },
@@ -1309,18 +1317,7 @@ def _aggregate_rows(
             )
         total = sum(_float_or_zero(row["value"]) for row in rows)
         if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
-            month_count = len({row["period_start"] for row in rows})
-            if month_count == 0:
-                return None, total, 0.0, (
-                    *result_limitations,
-                    QueryLimitation(
-                        "available_month_set_empty",
-                        "Available-month aggregation requires at least one available month",
-                        metric_definition_id=str(rows[0]["metric_definition_id"]),
-                        metric_concept=str(rows[0]["metric_concept"]),
-                    ),
-                )
-            return total / month_count, total, float(month_count), tuple(result_limitations)
+            return total, None, None, tuple(result_limitations)
         return total, None, None, tuple(result_limitations)
     if strategy in {
         RangeAggregationStrategy.RATIO_OF_SUMS,
@@ -1452,17 +1449,18 @@ def _available_month_set_comparisons(
     metric_results: tuple[MetricQueryResult, ...],
     request: DashboardMetricQueryRequest,
 ) -> tuple[tuple[ComparisonResult, ...], tuple[QueryLimitation, ...]]:
-    if request.comparison_mode != ComparisonMode.YOY:
+    if request.comparison_mode not in {ComparisonMode.YOY, ComparisonMode.CUSTOM}:
         return (), (
             QueryLimitation(
                 "available_month_comparison_mode_unsupported",
-                "Available-month set comparison currently supports matched month year-over-year only",
+                "Available-month set comparison supports explicit matched month year comparison only",
             ),
         )
     current_periods = _result_periods(metric_results)
     if not current_periods:
         return (), (QueryLimitation("available_month_set_empty", "No current available months matched the request"),)
-    reference_periods = _reference_periods_for_matched_yoy(current_periods, frame)
+    reference_year = request.comparison_period_start.year if request.comparison_period_start is not None else min(current_periods).year - 1
+    reference_periods = _reference_periods_for_matched_year(current_periods, frame, reference_year)
     if len(reference_periods) != len(current_periods):
         return (), (
             QueryLimitation(
@@ -2562,6 +2560,8 @@ def _comparison_target(frame: pl.DataFrame, request: DashboardMetricQueryRequest
     if request.date_from is None:
         return None
     periods = sorted(set(frame.get_column("period_start").to_list())) if not frame.is_empty() else []
+    if request.comparison_period_start is not None:
+        return request.comparison_period_start if request.comparison_period_start in periods else None
     if request.comparison_mode == ComparisonMode.YOY:
         candidate = date(request.date_from.year - 1, request.date_from.month, request.date_from.day)
         return candidate if candidate in periods else None
@@ -3127,7 +3127,7 @@ def _filter_available_month_set_periods(frame: pl.DataFrame, request: DashboardM
         result = result.filter(pl.col("period_start") >= request.date_from)
     if request.date_to is not None:
         result = result.filter(pl.col("period_start") <= request.date_to)
-    if request.comparison_mode != ComparisonMode.YOY:
+    if request.comparison_mode not in {ComparisonMode.YOY, ComparisonMode.CUSTOM}:
         return result
     matched_months = _matched_yoy_month_numbers(frame, request)
     if not matched_months:
@@ -3164,8 +3164,9 @@ def _matched_yoy_month_numbers(frame: pl.DataFrame, request: DashboardMetricQuer
     if frame.is_empty() or request.date_from is None:
         return ()
     current = _available_periods_in_range(frame, request.date_from, request.date_to)
-    reference_start = date(request.date_from.year - 1, 1, 1)
-    reference_end = date(request.date_from.year - 1, 12, 31)
+    reference_year = request.comparison_period_start.year if request.comparison_period_start is not None else request.date_from.year - 1
+    reference_start = date(reference_year, 1, 1)
+    reference_end = date(reference_year, 12, 31)
     reference = _available_periods_in_range(frame, reference_start, reference_end)
     current_months = {period.month for period in current}
     reference_months = {period.month for period in reference}
@@ -3185,14 +3186,15 @@ def _result_periods(results: tuple[MetricQueryResult, ...]) -> tuple[date, ...]:
     return tuple(sorted({period.period_start for result in results for period in result.period_values}))
 
 
-def _reference_periods_for_matched_yoy(
+def _reference_periods_for_matched_year(
     current_periods: tuple[date, ...],
     frame: pl.DataFrame,
+    reference_year: int,
 ) -> tuple[date, ...]:
     available = set(frame.get_column("period_start").to_list()) if not frame.is_empty() else set()
     return tuple(
         period
-        for period in (date(current.year - 1, current.month, 1) for current in current_periods)
+        for period in (date(reference_year, current.month, 1) for current in current_periods)
         if period in available
     )
 
@@ -3227,7 +3229,7 @@ def _period_set_payload(
     return {
         "scope_type": "AVAILABLE_MONTH_SET",
         "comparison_policy": "MATCHED_AVAILABLE_MONTHS"
-        if request.comparison_mode == ComparisonMode.YOY
+        if request.comparison_mode in {ComparisonMode.YOY, ComparisonMode.CUSTOM}
         else "ALL_AVAILABLE_MONTHS_PER_SIDE",
         "included_periods": periods,
         "included_month_numbers": tuple(period.month for period in periods),
@@ -3264,7 +3266,7 @@ def _available_month_aggregation_method(
     if request.period_mode != PeriodMode.AVAILABLE_MONTH_SET:
         return None
     if strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS:
-        return "ARITHMETIC_MEAN_OF_MONTHLY_TOTALS"
+        return "SUM_OF_MATCHED_AVAILABLE_MONTHS"
     if strategy in {
         RangeAggregationStrategy.RATIO_OF_SUMS,
         RangeAggregationStrategy.WEIGHTED_RATIO_OF_SUMS,
@@ -3367,6 +3369,8 @@ def _reject_duplicate_fact_contributors(frame: pl.DataFrame) -> None:
 
 
 def _comparison_fetch_start(request: DashboardMetricQueryRequest) -> date | None:
+    if request.comparison_period_start is not None:
+        return min(request.date_from, request.comparison_period_start) if request.date_from is not None else request.comparison_period_start
     if request.comparison_mode == ComparisonMode.YOY and request.date_from is not None:
         return date(request.date_from.year - 1, request.date_from.month, request.date_from.day)
     if request.comparison_mode == ComparisonMode.MOM and request.date_from is not None:
@@ -3374,6 +3378,19 @@ def _comparison_fetch_start(request: DashboardMetricQueryRequest) -> date | None
     if request.comparison_mode == ComparisonMode.PREVIOUS_AVAILABLE:
         return None
     return request.date_from
+
+
+def _comparison_fetch_request(request: DashboardMetricQueryRequest) -> DashboardMetricQueryRequest:
+    if request.comparison_period_start is None or request.date_to is None:
+        return request
+    if request.period_mode == PeriodMode.AVAILABLE_MONTH_SET:
+        comparison_end = date(request.comparison_period_start.year, 12, 1)
+    else:
+        comparison_end = request.comparison_period_start
+    fetch_end = max(request.date_to, comparison_end)
+    if fetch_end == request.date_to:
+        return request
+    return replace(request, date_to=fetch_end)
 
 
 def _lineage(row: dict[str, Any]) -> MetricDefinitionLineage:

@@ -602,8 +602,12 @@ input {
   grid-template-columns: minmax(0, 220px);
 }
 
+.period-fields--compare {
+  grid-template-columns: repeat(2, minmax(0, 220px));
+}
+
 .period-fields--available {
-  grid-template-columns: minmax(154px, 180px) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 140px) minmax(0, 140px) minmax(0, 1fr);
 }
 
 .period-fields label,

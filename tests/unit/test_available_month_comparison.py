@@ -23,18 +23,18 @@ from retail_analytics.mart import (
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA
 
 
-def test_available_month_set_compares_matched_yoy_months_and_averages_monthly_totals(tmp_path) -> None:
+def test_available_month_set_compares_matched_months_and_sums_additive_totals(tmp_path) -> None:
     service = _query_service(tmp_path, _metric_facts())
 
     response = service.query(_request(("revenue",), comparison_mode=ComparisonMode.YOY))
 
     revenue = _result(response, "revenue")
-    assert revenue.value == pytest.approx((300.0 + 600.0 + 900.0) / 3)
-    assert revenue.numerator_value == pytest.approx(1800.0)
-    assert revenue.denominator_value == pytest.approx(3.0)
+    assert revenue.value == pytest.approx(300.0 + 600.0 + 900.0)
+    assert revenue.numerator_value is None
+    assert revenue.denominator_value is None
     assert response.available_periods == (date(2026, 3, 1), date(2026, 4, 1), date(2026, 6, 1))
     comparison = response.comparisons[0]
-    assert comparison.comparison_value == pytest.approx((100.0 + 200.0 + 300.0) / 3)
+    assert comparison.comparison_value == pytest.approx(100.0 + 200.0 + 300.0)
     assert comparison.current_included_periods == (date(2026, 3, 1), date(2026, 4, 1), date(2026, 6, 1))
     assert comparison.comparison_included_periods == (date(2025, 3, 1), date(2025, 4, 1), date(2025, 6, 1))
     assert comparison.comparison_policy == "MATCHED_AVAILABLE_MONTHS"
@@ -43,7 +43,105 @@ def test_available_month_set_compares_matched_yoy_months_and_averages_monthly_to
     assert provenance["current_analytical_scope"]["period_set"]["included_month_numbers"] == (3, 4, 6)
     assert provenance["comparison"]["period_set"]["current_month_numbers"] == (3, 4, 6)
     assert provenance["comparison"]["period_set"]["comparison_month_numbers"] == (3, 4, 6)
-    assert provenance["value"]["available_month_aggregation_method"] == "ARITHMETIC_MEAN_OF_MONTHLY_TOTALS"
+    assert provenance["value"]["available_month_aggregation_method"] == "SUM_OF_MATCHED_AVAILABLE_MONTHS"
+
+
+def test_explicit_reference_month_drives_custom_comparison(tmp_path) -> None:
+    service = _query_service(tmp_path, _metric_facts())
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 6, 1),
+            date_to=date(2026, 6, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            metric_concepts=("revenue",),
+            comparison_mode=ComparisonMode.CUSTOM,
+            comparison_period_start=date(2026, 4, 1),
+        )
+    )
+
+    revenue = _result(response, "revenue")
+    comparison = response.comparisons[0]
+    assert revenue.value == pytest.approx(900.0)
+    assert response.request_scope["comparison_period_start"] == date(2026, 4, 1)
+    assert comparison.comparison_mode == ComparisonMode.CUSTOM
+    assert comparison.comparison_period_start == date(2026, 4, 1)
+    assert comparison.comparison_value == pytest.approx(600.0)
+    assert comparison.delta == pytest.approx(300.0)
+
+
+def test_explicit_reference_month_can_be_after_current_month(tmp_path) -> None:
+    service = _query_service(tmp_path, _metric_facts())
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 4, 1),
+            date_to=date(2026, 4, 1),
+            period_mode=PeriodMode.SINGLE_PERIOD,
+            period_grain="month",
+            grain_id="network",
+            metric_concepts=("revenue",),
+            comparison_mode=ComparisonMode.CUSTOM,
+            comparison_period_start=date(2026, 6, 1),
+        )
+    )
+
+    revenue = _result(response, "revenue")
+    comparison = response.comparisons[0]
+    assert revenue.value == pytest.approx(600.0)
+    assert response.available_periods == (date(2026, 4, 1),)
+    assert comparison.current_period_start == date(2026, 4, 1)
+    assert comparison.comparison_period_start == date(2026, 6, 1)
+    assert comparison.comparison_value == pytest.approx(900.0)
+    assert comparison.delta == pytest.approx(-300.0)
+
+
+def test_matched_month_set_can_compare_user_selected_years(tmp_path) -> None:
+    service = _query_service(tmp_path, _metric_facts())
+
+    response = service.query(
+        _request(
+            ("revenue",),
+            comparison_mode=ComparisonMode.CUSTOM,
+            comparison_period_start=date(2025, 1, 1),
+        )
+    )
+
+    comparison = response.comparisons[0]
+    assert comparison.current_included_periods == (date(2026, 3, 1), date(2026, 4, 1), date(2026, 6, 1))
+    assert comparison.comparison_included_periods == (date(2025, 3, 1), date(2025, 4, 1), date(2025, 6, 1))
+    assert comparison.comparison_value == pytest.approx(600.0)
+
+
+def test_matched_month_set_can_compare_against_later_selected_year(tmp_path) -> None:
+    service = _query_service(tmp_path, _metric_facts())
+
+    response = service.query(
+        DashboardMetricQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2025, 1, 1),
+            date_to=date(2025, 12, 1),
+            period_mode=PeriodMode.AVAILABLE_MONTH_SET,
+            period_grain="month",
+            grain_id="network",
+            metric_concepts=("revenue",),
+            comparison_mode=ComparisonMode.CUSTOM,
+            comparison_period_start=date(2026, 1, 1),
+        )
+    )
+
+    comparison = response.comparisons[0]
+    assert response.available_periods == (date(2025, 3, 1), date(2025, 4, 1), date(2025, 6, 1))
+    assert comparison.current_included_periods == (date(2025, 3, 1), date(2025, 4, 1), date(2025, 6, 1))
+    assert comparison.comparison_included_periods == (date(2026, 3, 1), date(2026, 4, 1), date(2026, 6, 1))
+    assert comparison.comparison_value == pytest.approx(1800.0)
 
 
 def test_available_month_margin_pct_is_ratio_of_sums_not_mean_of_monthly_percentages(tmp_path) -> None:
@@ -162,6 +260,7 @@ def _request(
     metric_concepts: tuple[str, ...],
     *,
     comparison_mode: ComparisonMode = ComparisonMode.NONE,
+    comparison_period_start: date | None = None,
 ) -> DashboardMetricQueryRequest:
     return DashboardMetricQueryRequest(
         retailer_id="retailer_a",
@@ -173,6 +272,7 @@ def _request(
         grain_id="network",
         metric_concepts=metric_concepts,
         comparison_mode=comparison_mode,
+        comparison_period_start=comparison_period_start,
     )
 
 

@@ -880,6 +880,28 @@ def test_active_sku_yoy_exposes_backend_comparison_fields(tmp_path) -> None:
     assert item.provenance["projection"]["reference_period"] == date(2025, 1, 1)
 
 
+def test_active_sku_custom_comparison_accepts_explicit_future_reference(tmp_path) -> None:
+    service = _service(tmp_path, _portfolio_facts(current_active_skus=("sku_a",)))
+
+    response = service.query(
+        _request(
+            concept_ids=("active_sku_count",),
+            comparison_mode=ComparisonMode.CUSTOM,
+            comparison_period_start=date(2026, 1, 1),
+            date_from=date(2025, 1, 1),
+            date_to=date(2025, 1, 1),
+        )
+    )
+
+    item = response.items[0]
+    assert item.status == PortfolioConceptStatus.READY
+    assert item.value == 2
+    assert item.current_value == 2
+    assert item.reference_value == 1
+    assert item.delta == 1
+    assert item.provenance["projection"]["reference_period"] == date(2026, 1, 1)
+
+
 def test_active_sku_records_zero_active_period_as_evaluated(tmp_path) -> None:
     service = _service(tmp_path, _portfolio_facts(current_active_skus=()))
 
@@ -1597,6 +1619,9 @@ def _request(
     concept_ids: tuple[str, ...],
     period_mode: PeriodMode = PeriodMode.SINGLE_PERIOD,
     comparison_mode: ComparisonMode = ComparisonMode.NONE,
+    comparison_period_start: date | None = None,
+    date_from: date = date(2026, 1, 1),
+    date_to: date = date(2026, 1, 1),
     grain_id: str = "category",
     entity_ids: tuple[str, ...] = (),
     entity_filters: dict[str, tuple[str, ...]] | object | None = _DEFAULT_ENTITY_FILTERS,
@@ -1611,8 +1636,8 @@ def _request(
     return PortfolioMarketQueryRequest(
         retailer_id="retailer_a",
         source_id="source_a",
-        date_from=date(2026, 1, 1),
-        date_to=date(2026, 1, 1),
+        date_from=date_from,
+        date_to=date_to,
         period_mode=period_mode,
         period_grain="month",
         grain_id=grain_id,
@@ -1621,6 +1646,7 @@ def _request(
         user_entity_filters=user_entity_filters,
         concept_ids=concept_ids,
         comparison_mode=comparison_mode,
+        comparison_period_start=comparison_period_start,
         private_label_scope=private_label_scope,
     )
 

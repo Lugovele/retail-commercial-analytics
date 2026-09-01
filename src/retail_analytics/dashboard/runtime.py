@@ -48,7 +48,7 @@ SUPPORTED_PERIOD_MODES = (
     "AVAILABLE_MONTH_SET",
     "FULL_AVAILABLE_HISTORY",
 )
-SUPPORTED_COMPARISON_MODES = ("NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE")
+SUPPORTED_COMPARISON_MODES = ("NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE", "CUSTOM")
 SUPPORTED_PRIVATE_LABEL_SCOPES = ("INCLUDE", "EXCLUDE", "ONLY")
 DEFAULT_DASHBOARD_CONFIG_ENV = "RETAIL_ANALYTICS_DASHBOARD_CONFIG"
 DEFAULT_DASHBOARD_MODE_ENV = "RETAIL_ANALYTICS_DASHBOARD_MODE"
@@ -255,7 +255,9 @@ class DashboardRuntime:
         private_label_scope: str | PrivateLabelScope,
         date_from: date | None,
         date_to: date | None,
+        comparison_period_start: date | None,
         comparison_mode: str = "NONE",
+        period_mode: str | None = None,
         entity_filters: dict[str, tuple[str, ...]] | None,
     ) -> dict[str, tuple[str, ...]] | None:
         """Resolve UI entity filters to a mart-query-safe filter universe."""
@@ -279,9 +281,15 @@ class DashboardRuntime:
                 source_id=source_id,
                 private_label_scope=private_label_scope,
                 date_from=date_from,
+                comparison_period_start=comparison_period_start,
                 comparison_mode=comparison_mode,
             ),
-            date_to=date_to,
+            date_to=_source_like_resolution_end(
+                date_to=date_to,
+                comparison_period_start=comparison_period_start,
+                comparison_mode=comparison_mode,
+                period_mode=period_mode,
+            ),
             product_filters=product_filters,
         )
         if resolved_skus is None:
@@ -932,10 +940,13 @@ def _source_like_resolution_start(
     source_id: str,
     private_label_scope: str | PrivateLabelScope,
     date_from: date | None,
+    comparison_period_start: date | None,
     comparison_mode: str,
 ) -> date | None:
     if date_from is None or comparison_mode == "NONE":
         return date_from
+    if comparison_period_start is not None:
+        return min(date_from, comparison_period_start)
     periods = [
         row[0]
         for row in duckdb.sql(
@@ -969,6 +980,22 @@ def _source_like_resolution_start(
         return previous_month if previous_month in periods else date_from
     earlier = [period for period in periods if period < date_from]
     return earlier[-1] if earlier else date_from
+
+
+def _source_like_resolution_end(
+    *,
+    date_to: date | None,
+    comparison_period_start: date | None,
+    comparison_mode: str,
+    period_mode: str | None,
+) -> date | None:
+    if comparison_mode == "NONE" or comparison_period_start is None:
+        return date_to
+    if period_mode == "AVAILABLE_MONTH_SET":
+        comparison_period_start = date(comparison_period_start.year, 12, 1)
+    if date_to is None:
+        return comparison_period_start
+    return max(date_to, comparison_period_start)
 
 
 def _source_revision_ids_for_options(

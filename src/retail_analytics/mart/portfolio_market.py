@@ -68,6 +68,7 @@ class PortfolioMarketQueryRequest:
     entity_filters: dict[str, tuple[str, ...]] | None = None
     user_entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: ComparisonMode = ComparisonMode.NONE
+    comparison_period_start: date | None = None
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
     quality_policy: QualityPolicy = QualityPolicy.INCLUDE_ALL
@@ -702,6 +703,9 @@ class PortfolioMarketService:
             )
         )
         periods = tuple(period for period in history.available_periods if period < request.date_from)
+        if request.comparison_period_start is not None:
+            candidate = request.comparison_period_start
+            return (candidate, ()) if candidate in periods else (None, ("comparison_period_unavailable",))
         if request.comparison_mode == ComparisonMode.YOY:
             candidate = date(request.date_from.year - 1, request.date_from.month, request.date_from.day)
             return (candidate, ()) if candidate in periods else (None, ("comparison_period_unavailable",))
@@ -771,7 +775,9 @@ class PortfolioMarketService:
         if current_period is None:
             return _not_applicable(request, concept_id, "assortment", "active_sku_requires_current_period")
         history_start = request.date_from if request.period_mode == PeriodMode.DATE_RANGE else None
-        history_end = request.date_to or request.date_from
+        history_end = request.date_to or current_period
+        if request.comparison_period_start is not None and request.comparison_period_start > history_end:
+            history_end = request.comparison_period_start
         source_like_rollup = self._active_sku_source_like_rollup(
             request,
             history_start=history_start,
@@ -823,6 +829,7 @@ class PortfolioMarketService:
             current_period,
             tuple(sorted(counts)),
             request.comparison_mode,
+            request.comparison_period_start,
         )
         reference_count = counts.get(reference_period) if reference_period is not None else None
         delta: int | None = None
@@ -1249,6 +1256,7 @@ def _metric_request(
         entity_filters=request.entity_filters if entity_filters is None else entity_filters,
         metric_concepts=metric_concepts,
         comparison_mode=comparison_mode,
+        comparison_period_start=request.comparison_period_start if comparison_mode != ComparisonMode.NONE else None,
         quality_policy=request.quality_policy,
         include_lineage=request.include_lineage,
         mart_build_id=request.mart_build_id,
@@ -1637,10 +1645,17 @@ def _active_sku_reference_period(
     current_period: date,
     periods: tuple[date, ...],
     comparison_mode: ComparisonMode,
+    explicit_reference_period: date | None = None,
 ) -> tuple[date | None, str | None]:
     if comparison_mode == ComparisonMode.NONE:
         return None, None
     previous_periods = tuple(period for period in periods if period < current_period)
+    if explicit_reference_period is not None:
+        return (
+            (explicit_reference_period, None)
+            if explicit_reference_period in periods
+            else (None, "comparison_period_unavailable")
+        )
     if comparison_mode == ComparisonMode.YOY:
         candidate = date(current_period.year - 1, current_period.month, current_period.day)
         return (candidate, None) if candidate in previous_periods else (None, "comparison_period_unavailable")
@@ -1781,6 +1796,7 @@ def _request_scope(request: PortfolioMarketQueryRequest) -> dict[str, Any]:
         "date_from": request.date_from,
         "date_to": request.date_to,
         "comparison_mode": request.comparison_mode.value,
+        "comparison_period_start": request.comparison_period_start,
         "grain_id": request.grain_id,
         "entity_ids": request.entity_ids,
         "entity_filters": request.entity_filters or {},

@@ -133,6 +133,80 @@ def test_comparison_and_available_months_are_backend_period_set_values(tmp_path:
     assert pack_a["provenance"]["current_analytical_scope"]["period_set"]["comparison_policy"] == "MATCHED_AVAILABLE_MONTHS"
 
 
+def test_custom_comparison_uses_exact_selected_reference_month(tmp_path: Path) -> None:
+    source_rows = pl.concat(
+        [
+            _source_rows(),
+            pl.DataFrame(
+                [
+                    {
+                        "retailer_id": "retailer_a",
+                        "source_id": "source_a",
+                        "analysis_run_id": "analysis_a",
+                        "period": date(2026, 4, 1),
+                        "category": "CATEGORY_A",
+                        "manufacturer": "MANUFACTURER_A",
+                        "brand": "BRAND_A",
+                        "canonical_product_id": "SKU_A",
+                        "canonical_store_id": "STORE_A",
+                        "sku_name": "SKU_A name",
+                        "units": 7.0,
+                        "revenue_vat": 70.0 * 1.2,
+                        "revenue_net": 70.0,
+                        "retailer_margin_abs": 14.0,
+                        "shelf_price_vat": 12.0,
+                        "input_price_vat": 8.0,
+                        "private_label_flag": False,
+                        "source_row_number": 999,
+                        "store_format": "FORMAT_A",
+                        "region": "REGION_A",
+                        "package": "PACK_A",
+                        "volume_l": 0.5,
+                        "volume_band": "NOT_PRODUCTIZED",
+                    }
+                ]
+            ),
+        ],
+        how="diagonal_relaxed",
+    )
+    source_path = tmp_path / "source_like.parquet"
+    source_rows.write_parquet(source_path)
+    product_store_path = tmp_path / "product_store.parquet"
+    write_product_store_metric_facts(
+        build_product_store_metric_facts(
+            source_rows,
+            build_metadata=_build(),
+            source_revision_id="revision_a",
+            created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        ),
+        product_store_path,
+    )
+    service = PackageVolumeQueryService(str(source_path), str(product_store_path), mart_builds=(_build(),))
+
+    response = service.query(
+        PackageVolumeQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 6, 1),
+            date_to=date(2026, 6, 1),
+            period_mode="SINGLE_PERIOD",
+            period_grain="month",
+            grouping="package",
+            basis_metric="revenue",
+            metric_concepts=("revenue",),
+            entity_filters={"category": ("CATEGORY_A",)},
+            comparison_mode="CUSTOM",
+            comparison_period_start=date(2026, 4, 1),
+            private_label_scope=PrivateLabelScope.INCLUDE,
+        )
+    )
+
+    pack_a = next(row for row in response["rows"] if row["entity_id"] == "PACK_A")
+    assert pack_a["metric_value"] == 160.0
+    assert pack_a["reference_metric_value"] == 70.0
+    assert pack_a["delta"] == 90.0
+
+
 def test_store_filter_is_served_from_product_store_without_scope_widening(tmp_path: Path) -> None:
     source_path, product_store_path = _write_inputs(tmp_path)
     service = PackageVolumeQueryService(source_path, product_store_path, mart_builds=(_build(),))

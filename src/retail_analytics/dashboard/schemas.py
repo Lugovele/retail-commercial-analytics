@@ -42,6 +42,7 @@ class DashboardUiQueryPayload:
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: ComparisonMode | str = ComparisonMode.NONE
+    comparison_period_start: date | str | None = None
     ownership_scope: str | None = None
     quality_policy: QualityPolicy | str = QualityPolicy.INCLUDE_ALL
     include_lineage: bool = True
@@ -101,6 +102,7 @@ class DashboardUiPortfolioMarketPayload:
     entity_filters: dict[str, tuple[str, ...]] | None = None
     user_entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: str = "NONE"
+    comparison_period_start: date | str | None = None
     private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
     quality_policy: QualityPolicy | str = QualityPolicy.INCLUDE_ALL
@@ -121,6 +123,7 @@ class DashboardUiSignalFeedPayload:
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: ComparisonMode | str = ComparisonMode.NONE
+    comparison_period_start: date | str | None = None
     private_label_scope: PrivateLabelScope | str = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
     signal_types: tuple[str, ...] = (
@@ -148,6 +151,7 @@ def build_backend_query_request(payload: DashboardUiQueryPayload | dict[str, Any
         entity_filters=data.entity_filters,
         metric_concepts=tuple(data.metric_concepts),
         comparison_mode=ComparisonMode(data.comparison_mode),
+        comparison_period_start=_date_or_none(data.comparison_period_start),
         ownership_scope=data.ownership_scope,
         quality_policy=QualityPolicy(data.quality_policy),
         include_lineage=data.include_lineage,
@@ -199,6 +203,7 @@ def build_portfolio_market_request(
         entity_filters=data.entity_filters,
         user_entity_filters=data.user_entity_filters or data.entity_filters,
         comparison_mode=ComparisonMode(data.comparison_mode),
+        comparison_period_start=_date_or_none(data.comparison_period_start),
         private_label_scope=PrivateLabelScope(data.private_label_scope),
         mart_build_id=data.mart_build_id,
         quality_policy=QualityPolicy(data.quality_policy),
@@ -221,6 +226,7 @@ def build_signal_feed_request(payload: DashboardUiSignalFeedPayload | dict[str, 
         entity_ids=tuple(data.entity_ids),
         entity_filters=data.entity_filters,
         comparison_mode=ComparisonMode(data.comparison_mode),
+        comparison_period_start=_date_or_none(data.comparison_period_start),
         private_label_scope=PrivateLabelScope(data.private_label_scope),
         mart_build_id=data.mart_build_id,
         signal_types=tuple(SignalType(item) for item in data.signal_types),
@@ -475,6 +481,7 @@ def _coerce_payload(payload: DashboardUiQueryPayload | dict[str, Any]) -> Dashbo
         entity_filters=filters,
         metric_concepts=tuple(str(item) for item in payload.get("metric_concepts", ())),
         comparison_mode=payload.get("comparison_mode", ComparisonMode.NONE),
+        comparison_period_start=payload.get("comparison_period_start"),
         ownership_scope=payload.get("ownership_scope"),
         quality_policy=payload.get("quality_policy", QualityPolicy.INCLUDE_ALL),
         include_lineage=bool(payload.get("include_lineage", True)),
@@ -538,6 +545,7 @@ def _coerce_portfolio_market_payload(
         entity_filters=filters,
         user_entity_filters=user_filters,
         comparison_mode=str(payload.get("comparison_mode", "NONE")),
+        comparison_period_start=payload.get("comparison_period_start"),
         private_label_scope=payload.get("private_label_scope", PrivateLabelScope.INCLUDE),
         mart_build_id=payload.get("mart_build_id"),
         quality_policy=payload.get("quality_policy", QualityPolicy.INCLUDE_ALL),
@@ -567,6 +575,7 @@ def _coerce_signal_feed_payload(
         entity_ids=tuple(str(item) for item in payload.get("entity_ids", ())),
         entity_filters=filters,
         comparison_mode=payload.get("comparison_mode", ComparisonMode.NONE),
+        comparison_period_start=payload.get("comparison_period_start"),
         private_label_scope=payload.get("private_label_scope", PrivateLabelScope.INCLUDE),
         mart_build_id=payload.get("mart_build_id"),
         signal_types=tuple(

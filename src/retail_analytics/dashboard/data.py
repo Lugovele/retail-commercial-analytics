@@ -28,6 +28,7 @@ class DashboardDataRequest:
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: str = "NONE"
+    comparison_period_start: date | None = None
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
     limit: int = 50
@@ -104,6 +105,7 @@ class DashboardDataService:
                 "entity_ids": request.entity_ids,
                 "entity_filters": request.entity_filters or {},
                 "comparison_mode": request.comparison_mode,
+                "comparison_period_start": request.comparison_period_start,
                 "private_label_scope": request.private_label_scope.value,
                 "mart_build_id": build.mart_build_id,
             },
@@ -501,6 +503,7 @@ def build_data_request(payload: DashboardDataRequest | dict[str, Any]) -> Dashbo
         entity_ids=tuple(str(item) for item in payload.get("entity_ids", ())),
         entity_filters=filters,
         comparison_mode=str(payload.get("comparison_mode", "NONE")),
+        comparison_period_start=_date_or_none(payload.get("comparison_period_start")),
         private_label_scope=PrivateLabelScope(payload.get("private_label_scope", PrivateLabelScope.INCLUDE)),
         mart_build_id=payload.get("mart_build_id"),
         limit=int(payload.get("limit", 50)),

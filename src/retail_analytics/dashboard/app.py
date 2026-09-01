@@ -123,8 +123,8 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                         retailer_id=retailer_id,
                         source_id=source_id,
                         private_label_scope=_first(params, "private_label_scope") or "INCLUDE",
-                        date_from=_optional_date(_first(params, "date_from")),
-                        date_to=_optional_date(_first(params, "date_to")),
+                        date_from=_options_date_from(params),
+                        date_to=_options_date_to(params),
                         parent_filters=_parent_filters(params),
                     ),
                 )
@@ -236,7 +236,9 @@ def _resolve_payload_entity_filters(payload: dict[str, Any], runtime: DashboardR
         private_label_scope=payload.get("private_label_scope", "INCLUDE"),
         date_from=_optional_date(payload.get("date_from")),
         date_to=_optional_date(payload.get("date_to")),
+        comparison_period_start=_optional_date(payload.get("comparison_period_start")),
         comparison_mode=payload.get("comparison_mode", "NONE"),
+        period_mode=payload.get("period_mode"),
         entity_filters=filters,
     )
     if resolved is not raw_filters:
@@ -344,6 +346,33 @@ def _first(params: dict[str, list[str]], key: str) -> str | None:
 
 def _optional_date(value: str | None) -> date | None:
     return date.fromisoformat(value) if value else None
+
+
+def _options_date_from(params: dict[str, list[str]]) -> date | None:
+    dates = tuple(
+        item
+        for item in (
+            _optional_date(_first(params, "date_from")),
+            _optional_date(_first(params, "comparison_period_start")),
+        )
+        if item is not None
+    )
+    return min(dates) if dates else None
+
+
+def _options_date_to(params: dict[str, list[str]]) -> date | None:
+    comparison_period_start = _optional_date(_first(params, "comparison_period_start"))
+    if _first(params, "period_mode") == "AVAILABLE_MONTH_SET" and comparison_period_start is not None:
+        comparison_period_start = date(comparison_period_start.year, 12, 1)
+    dates = tuple(
+        item
+        for item in (
+            _optional_date(_first(params, "date_to")),
+            comparison_period_start,
+        )
+        if item is not None
+    )
+    return max(dates) if dates else None
 
 
 def _parent_filters(params: dict[str, list[str]]) -> dict[str, tuple[str, ...]]:

@@ -170,7 +170,7 @@ class EffectiveMetricCatalogEntry:
 
 SUPPORTED_GRAINS = frozenset({"network", "category", "manufacturer", "brand", "sku", "store"})
 SUPPORTED_PERIOD_GRAINS = frozenset({"day", "week", "month", "quarter", "year"})
-SUPPORTED_COMPARISONS = frozenset({"NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE"})
+SUPPORTED_COMPARISONS = frozenset({"NONE", "YOY", "MOM", "PREVIOUS_AVAILABLE", "CUSTOM"})
 DEFAULT_PRIVATE_LABEL_SCOPE_SUPPORT = (
     PrivateLabelScope.INCLUDE,
     PrivateLabelScope.EXCLUDE,

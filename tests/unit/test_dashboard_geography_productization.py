@@ -124,6 +124,74 @@ def test_geography_comparison_uses_backend_periods_without_frontend_math(tmp_pat
     assert north["delta"] == 10.0
 
 
+def test_geography_custom_comparison_uses_exact_selected_reference_month(tmp_path) -> None:
+    source_rows = pl.concat(
+        [
+            _source_rows(),
+            pl.DataFrame(
+                [
+                    {
+                        "retailer_id": "retailer_a",
+                        "source_id": "source_a",
+                        "analysis_run_id": "analysis_a",
+                        "period": date(2026, 4, 1),
+                        "category": "CATEGORY_A",
+                        "manufacturer": "MANUFACTURER_A",
+                        "brand": "BRAND_A",
+                        "canonical_product_id": "SKU_A",
+                        "canonical_store_id": "STORE_A",
+                        "sku_name": "SKU_A name",
+                        "units": 7.0,
+                        "revenue_vat": 70.0 * 1.2,
+                        "revenue_net": 70.0,
+                        "retailer_margin_abs": 14.0,
+                        "shelf_price_vat": 12.0,
+                        "input_price_vat": 8.0,
+                        "private_label_flag": False,
+                        "source_row_number": 999,
+                        "store_format": "FORMAT_LARGE",
+                        "region": "REGION_NORTH",
+                    }
+                ]
+            ),
+        ],
+        how="diagonal_relaxed",
+    )
+    product_store_path = tmp_path / "product_store.parquet"
+    write_product_store_metric_facts(
+        build_product_store_metric_facts(
+            source_rows,
+            build_metadata=_build(),
+            source_revision_id="revision_a",
+            created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        ),
+        product_store_path,
+    )
+    service = GeographyQueryService(str(product_store_path), mart_builds=(_build(),))
+
+    response = service.query(
+        GeographyQueryRequest(
+            retailer_id="retailer_a",
+            source_id="source_a",
+            date_from=date(2026, 6, 1),
+            date_to=date(2026, 6, 1),
+            period_mode="SINGLE_PERIOD",
+            period_grain="month",
+            grouping="region",
+            metric_concepts=("revenue",),
+            entity_filters={"category": ("CATEGORY_A",)},
+            comparison_mode="CUSTOM",
+            comparison_period_start=date(2026, 4, 1),
+            private_label_scope=PrivateLabelScope.INCLUDE,
+        )
+    )
+
+    north = next(item for item in response["comparisons"] if item["entity_id"] == "REGION_NORTH")
+    assert north["current_value"] == 160.0
+    assert north["comparison_value"] == 70.0
+    assert north["delta"] == 90.0
+
+
 def test_unsupported_geography_semantics_fail_closed(tmp_path) -> None:
     service = GeographyQueryService(_write_product_store_facts(tmp_path), mart_builds=(_build(),))
     request = GeographyQueryRequest(

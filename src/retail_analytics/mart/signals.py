@@ -81,6 +81,7 @@ class SignalFeedRequest:
     entity_ids: tuple[str, ...] = ()
     entity_filters: dict[str, tuple[str, ...]] | None = None
     comparison_mode: ComparisonMode = ComparisonMode.NONE
+    comparison_period_start: date | None = None
     private_label_scope: PrivateLabelScope = PrivateLabelScope.INCLUDE
     mart_build_id: str | None = None
     signal_types: tuple[SignalType, ...] = (

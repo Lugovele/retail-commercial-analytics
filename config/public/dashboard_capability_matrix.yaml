@@ -1,4 +1,4 @@
-version: dashboard_capability_matrix.v1
+﻿version: dashboard_capability_matrix.v1
 status_values:
 - READY
 - PARTIAL
@@ -13,8 +13,9 @@ comparison_labels:
   YOY: Год к году
   MOM: Месяц к месяцу
   PREVIOUS_AVAILABLE: Предыдущий доступный период
-  AVAILABLE_MONTH_SET: Среднее за сопоставимые месяцы
-  NONE: Без сравнения
+  CUSTOM: Выбранный месяц
+  AVAILABLE_MONTH_SET: Совпадающие месяцы
+  NONE: Нет сравнения
 capabilities:
 - concept_id: revenue_vat
   ui_label_ru: Оборот с НДС
@@ -35,6 +36,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
   private_label_scope_support:
@@ -68,6 +70,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
   private_label_scope_support:
@@ -101,6 +104,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
   private_label_scope_support:
@@ -134,6 +138,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
   private_label_scope_support:
@@ -167,6 +172,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
@@ -201,6 +207,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: weighted_ratio_of_sums
   private_label_scope_support:
@@ -235,6 +242,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: weighted_ratio_of_sums
   private_label_scope_support:
@@ -267,6 +275,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
@@ -302,6 +311,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -333,6 +343,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -365,6 +376,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
@@ -397,6 +409,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
@@ -432,6 +445,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -471,6 +485,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: ratio_of_sums
   private_label_scope_support:
@@ -505,6 +520,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -539,6 +555,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -574,6 +591,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -607,6 +625,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -639,6 +658,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -670,6 +690,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -702,6 +723,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -734,6 +756,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: period_only
   private_label_scope_support:
@@ -767,6 +790,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -803,6 +827,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -839,6 +864,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -974,6 +1000,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1007,6 +1034,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1040,6 +1068,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1073,6 +1102,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1106,6 +1136,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1139,6 +1170,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1172,6 +1204,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1205,6 +1238,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1238,6 +1272,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1271,6 +1306,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1304,6 +1340,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1337,6 +1374,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1473,6 +1511,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1503,6 +1542,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1532,6 +1572,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: projection_defined
   private_label_scope_support:
@@ -1562,6 +1603,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: projection_defined
   private_label_scope_support: []
@@ -1590,6 +1632,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: projection_defined
   private_label_scope_support: []
@@ -1618,6 +1661,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: projection_defined
   private_label_scope_support: []
@@ -1669,6 +1713,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   - AVAILABLE_MONTH_SET
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
@@ -1703,6 +1748,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   - AVAILABLE_MONTH_SET
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
@@ -1736,6 +1782,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   - AVAILABLE_MONTH_SET
   date_range_support: READY
   range_aggregation_strategy: sum_available_periods
@@ -2109,6 +2156,7 @@ capabilities:
   comparison_support:
   - YOY
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: PARTIAL
   range_aggregation_strategy: unsupported
   private_label_scope_support: []
@@ -2168,6 +2216,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: NOT_APPLICABLE
   range_aggregation_strategy: contribution_to_delta
   private_label_scope_support:
@@ -2228,6 +2277,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   range_aggregation_strategy: metric_specific
   private_label_scope_support:
@@ -2258,6 +2308,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   available_month_set_support: READY
   range_aggregation_strategy: additive_ratio_safe
@@ -2293,6 +2344,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   available_month_set_support: READY
   range_aggregation_strategy: additive_ratio_safe
@@ -2329,6 +2381,7 @@ capabilities:
   - YOY
   - MOM
   - PREVIOUS_AVAILABLE
+  - CUSTOM
   date_range_support: READY
   available_month_set_support: READY
   range_aggregation_strategy: additive_ratio_safe

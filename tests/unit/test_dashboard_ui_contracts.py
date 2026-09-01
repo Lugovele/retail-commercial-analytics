@@ -22,7 +22,12 @@ from retail_analytics.dashboard import (
     load_dashboard_runtime_config,
     serialize_dashboard_query_response,
 )
-from retail_analytics.dashboard.app import _asset_version, _parent_filters, _template_text
+from retail_analytics.dashboard.app import (
+    _asset_version,
+    _options_date_to,
+    _parent_filters,
+    _template_text,
+)
 from retail_analytics.dashboard.schemas import build_portfolio_market_request
 from retail_analytics.history import write_source_ledger
 from retail_analytics.mart import (
@@ -45,7 +50,8 @@ def test_ui_payload_builds_exact_backend_query_request() -> None:
             grain_id="brand",
             entity_ids=("BRAND_A",),
             metric_concepts=("revenue", "retailer_margin_pct"),
-            comparison_mode="YOY",
+            comparison_mode="CUSTOM",
+            comparison_period_start="2026-04-01",
             private_label_scope="EXCLUDE",
             mart_build_id="build_dashboard_synthetic",
         )
@@ -59,9 +65,26 @@ def test_ui_payload_builds_exact_backend_query_request() -> None:
     assert request.grain_id == "brand"
     assert request.entity_ids == ("BRAND_A",)
     assert request.metric_concepts == ("revenue", "retailer_margin_pct")
-    assert request.comparison_mode == ComparisonMode.YOY
+    assert request.comparison_mode == ComparisonMode.CUSTOM
+    assert request.comparison_period_start == date(2026, 4, 1)
     assert request.private_label_scope == PrivateLabelScope.EXCLUDE
     assert request.mart_build_id == "build_dashboard_synthetic"
+
+
+def test_options_date_window_expands_matched_reference_year_without_widening_custom_month() -> None:
+    matched_params = {
+        "period_mode": ["AVAILABLE_MONTH_SET"],
+        "date_to": ["2025-12-01"],
+        "comparison_period_start": ["2026-01-01"],
+    }
+    custom_params = {
+        "period_mode": ["COMPARE"],
+        "date_to": ["2026-06-01"],
+        "comparison_period_start": ["2026-04-01"],
+    }
+
+    assert _options_date_to(matched_params) == date(2026, 12, 1)
+    assert _options_date_to(custom_params) == date(2026, 6, 1)
 
 
 def test_dashboard_static_assets_are_content_versioned() -> None:
@@ -99,6 +122,7 @@ def test_runtime_resolves_cascading_product_filters_to_sku_universe(tmp_path: Pa
         private_label_scope="INCLUDE",
         date_from=date(2026, 6, 1),
         date_to=date(2026, 6, 1),
+        comparison_period_start=None,
         entity_filters={
             "category": ("CATEGORY_A",),
             "manufacturer": ("MANUFACTURER_A",),
@@ -132,6 +156,7 @@ def test_runtime_resolves_compare_filters_across_current_and_reference_periods(t
         private_label_scope="INCLUDE",
         date_from=date(2026, 6, 1),
         date_to=date(2026, 6, 1),
+        comparison_period_start=None,
         comparison_mode="YOY",
         entity_filters={
             "category": ("CATEGORY_A",),
@@ -141,6 +166,77 @@ def test_runtime_resolves_compare_filters_across_current_and_reference_periods(t
     )
 
     assert filters == {"sku": ("SKU_CURRENT", "SKU_REFERENCE")}
+
+
+def test_runtime_resolves_custom_future_reference_filters_across_full_period_window(tmp_path: Path) -> None:
+    source_like_path = tmp_path / "source_like.parquet"
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a"],
+            "source_revision_id": ["revision_dashboard_synthetic", "revision_dashboard_synthetic"],
+            "period": ["2026-04-01", "2026-06-01"],
+            "category": ["CATEGORY_A", "CATEGORY_A"],
+            "manufacturer": ["MANUFACTURER_A", "MANUFACTURER_A"],
+            "brand": ["BRAND_A", "BRAND_A"],
+            "canonical_product_id": ["SKU_CURRENT", "SKU_FUTURE_REFERENCE"],
+            "private_label_flag": [False, False],
+        }
+    ).write_parquet(source_like_path)
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path), source_like_rows_path=source_like_path)
+
+    filters = runtime.query_entity_filters(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2026, 4, 1),
+        date_to=date(2026, 4, 1),
+        comparison_period_start=date(2026, 6, 1),
+        comparison_mode="CUSTOM",
+        entity_filters={
+            "category": ("CATEGORY_A",),
+            "manufacturer": ("MANUFACTURER_A",),
+            "brand": ("BRAND_A",),
+        },
+    )
+
+    assert filters == {"sku": ("SKU_CURRENT", "SKU_FUTURE_REFERENCE")}
+
+
+def test_runtime_resolves_matched_future_reference_year_filters_across_full_year_window(tmp_path: Path) -> None:
+    source_like_path = tmp_path / "source_like.parquet"
+    pl.DataFrame(
+        {
+            "retailer_id": ["retailer_a", "retailer_a"],
+            "source_id": ["source_a", "source_a"],
+            "source_revision_id": ["revision_dashboard_synthetic", "revision_dashboard_synthetic"],
+            "period": ["2025-06-01", "2026-06-01"],
+            "category": ["CATEGORY_A", "CATEGORY_A"],
+            "manufacturer": ["MANUFACTURER_A", "MANUFACTURER_A"],
+            "brand": ["BRAND_A", "BRAND_A"],
+            "canonical_product_id": ["SKU_CURRENT_YEAR", "SKU_REFERENCE_YEAR_JUNE"],
+            "private_label_flag": [False, False],
+        }
+    ).write_parquet(source_like_path)
+    runtime = replace(build_synthetic_dashboard_runtime(tmp_path), source_like_rows_path=source_like_path)
+
+    filters = runtime.query_entity_filters(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        private_label_scope="INCLUDE",
+        date_from=date(2025, 1, 1),
+        date_to=date(2025, 12, 1),
+        comparison_period_start=date(2026, 1, 1),
+        comparison_mode="CUSTOM",
+        period_mode="AVAILABLE_MONTH_SET",
+        entity_filters={
+            "category": ("CATEGORY_A",),
+            "manufacturer": ("MANUFACTURER_A",),
+            "brand": ("BRAND_A",),
+        },
+    )
+
+    assert filters == {"sku": ("SKU_CURRENT_YEAR", "SKU_REFERENCE_YEAR_JUNE")}
 
 
 def test_runtime_preserves_filters_when_source_like_resolution_is_unavailable(tmp_path: Path) -> None:
@@ -157,6 +253,7 @@ def test_runtime_preserves_filters_when_source_like_resolution_is_unavailable(tm
         private_label_scope="INCLUDE",
         date_from=date(2026, 6, 1),
         date_to=date(2026, 6, 1),
+        comparison_period_start=None,
         comparison_mode="YOY",
         entity_filters=original_filters,
     )
@@ -497,22 +594,22 @@ def test_html_contains_required_dashboard_shell_semantics() -> None:
     assert "Бизнес-оценки" not in html
     assert "Проверка показателя" in html
     assert "Откуда эта цифра?" not in html
-    assert "Один период" in html
+    assert "Один месяц" in html
     assert "Сравнение" in html
-    assert "Сопоставимые месяцы" in html
-    assert "Весь диапазон" in html
-    assert "Год к году" in html
-    assert "Месяц к месяцу" in html
-    assert "Предыдущий доступный период" in html
-    assert "period-b-derived" in html
-    assert "period-available-end" in html
+    assert "Совпадающие месяцы" in html
+    assert "Диапазон" in html
+    assert "Текущий месяц" in html
+    assert "Сравнить с" in html
+    assert 'id="period-b"' in html
+    assert 'id="matched-current-year"' in html
+    assert 'id="matched-reference-year"' in html
     assert "available-months-derived" in html
     assert "private-label-scope" in html
     assert "Картина изменений" in html
     assert "Где произошло изменение?" in html
     assert "Объекты с наибольшим вкладом в изменение" in html
     assert "Что проверить" in html
-    assert 'id="period-b"' not in html
+    assert "period-b-derived" not in html
 
 
 def test_available_month_comparison_is_visible_and_backend_driven() -> None:
@@ -520,14 +617,16 @@ def test_available_month_comparison_is_visible_and_backend_driven() -> None:
     script = html_or_script("app.js")
 
     assert 'data-period-mode="AVAILABLE_MONTH_SET"' in html
-    assert "Сопоставимые месяцы" in html
-    assert "MATCHED_AVAILABLE_MONTHS" in html
-    assert "Среднее за сопоставимые месяцы" in script
+    assert "Совпадающие месяцы" in html
+    assert "Используются только месяцы, доступные в обоих периодах." in html
+    assert "За совпадающие месяцы" in script
     assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "AVAILABLE_MONTH_SET";' in script
-    assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "YOY";' in script
+    assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "CUSTOM";' in script
     assert "function queryDateFrom()" in script
     assert "function queryDateTo()" in script
     assert "function availableMonthSummaryText(response)" in script
+    assert "function selectedComparisonPeriod()" in script
+    assert "function matchedMonthPreviewText()" in script
     assert "current_included_periods" in script
     assert "comparison_included_periods" in script
     assert "available_month_aggregation_method" in script
@@ -537,6 +636,18 @@ def test_available_month_comparison_is_visible_and_backend_driven() -> None:
     assert "6M" not in html
     assert "6М" not in html
     assert "H1" not in html
+
+
+def test_period_mode_switch_refreshes_option_universe_before_query() -> None:
+    script = html_or_script("app.js")
+
+    mode_handler = script.split('document.querySelectorAll("[data-period-mode]").forEach((button) => {', 1)[1].split(
+        'document.querySelectorAll("[data-view]")',
+        1,
+    )[0]
+
+    assert "await refreshRuntimeOptions();" in mode_handler
+    assert mode_handler.index("await refreshRuntimeOptions();") < mode_handler.index("await runActiveViewQuery();")
 
 
 def test_available_month_mode_keeps_unsupported_metrics_row_level_limited() -> None:
@@ -1201,7 +1312,7 @@ def test_user_visible_dashboard_surface_uses_russian_presentation_terms() -> Non
         "Оборот",
         "Покрытие данных",
         "Показатель доступен только по отдельным периодам",
-        "Определяется витриной",
+        "Определяются витриной",
         "Не удалось загрузить данные",
         "н/д",
     )
@@ -1364,11 +1475,11 @@ def test_top_workspace_uses_flat_scope_and_human_context_summary() -> None:
     assert 'class="period-fields period-fields--single is-hidden" id="single-fields"' in html
     assert 'class="period-fields period-fields--compare" id="compare-fields"' in html
     assert ".period-fields--available" in css
-    assert "grid-template-columns: minmax(154px, 180px) minmax(0, 1fr);" in css
+    assert "grid-template-columns: minmax(0, 140px) minmax(0, 140px) minmax(0, 1fr);" in css
     assert 'class="period-card period-card--months derived-field"' in html
     assert 'id="available-months-current"' in html
-    assert 'id="available-months-reference"' in html
-    assert 'class="period-policy">MATCHED_AVAILABLE_MONTHS</small>' in html
+    assert 'id="available-months-reference"' not in html
+    assert "Используются только месяцы, доступные в обоих периодах." in html
     derived_body = css.split(".derived-field strong {", 1)[1].split(".filter-count", 1)[0]
     assert "overflow: hidden;" in derived_body
     assert "overflow-wrap: anywhere;" in derived_body
@@ -1913,7 +2024,7 @@ def test_sku_filter_options_are_name_first_but_identity_stable(tmp_path) -> None
 def test_continuous_report_scope_keeps_filters_during_period_and_assortment_changes() -> None:
     script = html_or_script("app.js")
 
-    period_handler = script.split('["period-single", "period-a", "period-available-end", "date-from", "date-to"].forEach((id) => {', 1)[1].split("async function applyScopeChange(work)", 1)[0]
+    period_handler = script.split('["period-single", "period-a", "period-b", "matched-current-year", "matched-reference-year", "date-from", "date-to"].forEach((id) => {', 1)[1].split("async function applyScopeChange(work)", 1)[0]
     assortment_handler = script.split('document.getElementById("private-label-scope").addEventListener("change"', 1)[1].split('document.getElementById("preview-grain")', 1)[0]
     nav_handler = script.split('document.querySelectorAll("[data-view]")', 1)[1].split('document.querySelectorAll("[data-signal-kind]")', 1)[0]
 
@@ -1965,8 +2076,11 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
 
     assert "private_label_scope" in script
     assert "comparison_mode" in script
+    assert 'params.set("period_mode", state.periodMode);' in script
     assert "comparison_mode: selectedComparisonMode()" in script
+    assert "comparison_period_start: selectedComparisonPeriod()" in script
     assert 'comparison_mode: state.periodMode === "AVAILABLE_MONTH_SET" ? "NONE" : selectedComparisonMode()' in script
+    assert 'const referenceEnd = referenceYear ? `${referenceYear}-12-01` : "";' in script
     assert "period_mode" in script
     assert 'if (state.periodMode === "DATE_RANGE") return "DATE_RANGE";' in script
     assert 'if (state.periodMode === "AVAILABLE_MONTH_SET") return "AVAILABLE_MONTH_SET";' in script
@@ -2011,10 +2125,11 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert 'YOY: "Год к году"' in script
     assert 'MOM: "Месяц к месяцу"' in script
     assert 'PREVIOUS_AVAILABLE: "Предыдущий доступный период"' in script
-    assert "comparisonLabels[state.comparisonMode]" in script
+    assert 'CUSTOM: "Выбранный месяц"' in script
+    assert "comparisonLabels[selectedComparisonMode()]" in script
     assert "updateComparisonPeriodDisplay(response)" in script
     assert "comparison?.comparison_period_start" in script
-    assert 'document.getElementById("period-b-derived")' in script
+    assert 'document.getElementById("period-b")' in script
     assert "innerHTML" not in script
     assert "ONLY: `${scopeName}: только`" not in script
     assert "ONLY: `Только ${scopeName}`" in script
