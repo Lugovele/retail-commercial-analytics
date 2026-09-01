@@ -25,6 +25,10 @@ from retail_analytics.mart import (
     write_product_store_metric_facts,
 )
 from retail_analytics.mart.metric_facts import MART_METRIC_FACT_SCHEMA
+from retail_analytics.mart.query import (
+    _read_product_store_rollup_facts_from_sql,
+    _roll_up_product_store_facts,
+)
 
 
 def test_single_period_query_returns_multiple_metrics_with_lineage(tmp_path) -> None:
@@ -964,6 +968,103 @@ def test_product_store_intersection_respects_package_and_volume_filters(tmp_path
         "package": ("пэт",),
         "volume": ("1",),
     }
+
+
+
+def test_product_store_sql_rollup_matches_legacy_polars_rollup_for_package_scope(tmp_path) -> None:
+    facts_path = tmp_path / "facts.parquet"
+    product_store_path = tmp_path / "product_store.parquet"
+    source_rows = _product_store_source_rows().with_columns(
+        pl.when(pl.col("canonical_product_id") == "SKU_A")
+        .then(pl.lit("пэт"))
+        .when(pl.col("canonical_product_id") == "SKU_B")
+        .then(pl.lit("ж/б"))
+        .otherwise(pl.lit("ст/б"))
+        .alias("package"),
+        pl.when(pl.col("canonical_product_id") == "SKU_A")
+        .then(pl.lit(1.0))
+        .when(pl.col("canonical_product_id") == "SKU_B")
+        .then(pl.lit(0.5))
+        .otherwise(pl.lit(1.5))
+        .alias("volume_l"),
+    )
+    write_mart_metric_facts(_filtered_scope_facts(), facts_path)
+    write_product_store_metric_facts(
+        build_product_store_metric_facts(
+            source_rows,
+            build_metadata=_build(period_end=date(2026, 1, 31)),
+            source_revision_id="revision_a",
+            created_at=datetime(2026, 1, 15, tzinfo=UTC),
+        ),
+        product_store_path,
+    )
+    service = DashboardMartQueryService(
+        facts_path,
+        mart_builds=(_build(period_end=date(2026, 1, 31)),),
+        product_store_facts_path=product_store_path,
+    )
+    request = DashboardMetricQueryRequest(
+        retailer_id="retailer_a",
+        source_id="source_a",
+        date_from=date(2026, 1, 1),
+        date_to=date(2026, 1, 1),
+        period_mode=PeriodMode.SINGLE_PERIOD,
+        period_grain="month",
+        grain_id="network",
+        entity_ids=("ALL",),
+        entity_filters={"category": ("CATEGORY_A",), "package": ("пэт",), "volume": ("1",)},
+        metric_concepts=("revenue", "units", "retailer_margin_pct", "weighted_shelf_price_vat"),
+        mart_build_id="build_a",
+    )
+    clauses = [
+        "retailer_id = ?",
+        "source_id = ?",
+        "period_grain = ?",
+        "mart_build_id = ?",
+        "private_label_scope = ?",
+        "period_start >= CAST(? AS DATE)",
+        "period_start <= CAST(? AS DATE)",
+        "metric_concept IN (?, ?, ?, ?)",
+        "category IN (?)",
+        "package IN (?)",
+        "ROUND(CAST(volume_l AS DOUBLE), 6) IN (?)",
+    ]
+    params = [
+        "retailer_a",
+        "source_a",
+        "month",
+        "build_a",
+        "INCLUDE",
+        "2026-01-01",
+        "2026-01-01",
+        "revenue",
+        "units",
+        "retailer_margin_pct",
+        "weighted_shelf_price_vat",
+        "CATEGORY_A",
+        "пэт",
+        1.0,
+    ]
+    templates = service._metric_templates(request, "build_a")
+    raw = pl.read_parquet(product_store_path).filter(
+        (pl.col("retailer_id") == "retailer_a")
+        & (pl.col("source_id") == "source_a")
+        & (pl.col("period_grain") == "month")
+        & (pl.col("mart_build_id") == "build_a")
+        & (pl.col("private_label_scope") == "INCLUDE")
+        & (pl.col("period_start") >= date(2026, 1, 1))
+        & (pl.col("period_start") <= date(2026, 1, 1))
+        & pl.col("metric_concept").is_in(request.metric_concepts)
+        & (pl.col("category") == "CATEGORY_A")
+        & (pl.col("package") == "пэт")
+        & (pl.col("volume_l").round(6) == 1.0)
+    )
+
+    legacy = _roll_up_product_store_facts(raw, request, templates)
+    optimized = _read_product_store_rollup_facts_from_sql(product_store_path, clauses, params, request, templates)
+
+    columns = ["period_start", "grain_id", "entity_id", "parent_entity_ids", "metric_concept", "value", "numerator_value", "denominator_value", "quality_status", "quality_flags"]
+    assert optimized.select(columns).sort(columns[:5]).to_dicts() == legacy.select(columns).sort(columns[:5]).to_dicts()
 
 
 def test_product_store_intersection_supports_sku_grain_with_store_filter(tmp_path) -> None:

@@ -1979,8 +1979,10 @@ def test_browser_script_sends_backend_scope_fields_without_metric_formulas() -> 
     assert "chartResponse: null" in script
     assert "buildChartQueryPayload()" in script
     assert 'const chartPromise = postJson("/api/dashboard/query", chartPayload);' in script
-    assert "const [summaryResponse, chartResponse, finalResponses] = await Promise.all([summaryPromise, chartPromise, finalResponsesPromise]);" in script
     assert "const finalResponsesPromise = Promise.all([overviewPortfolioPromise, contributionPromise, tablePromise]);" in script
+    assert "const requiredSnapshotPromise = Promise.all([summaryPromise, chartPromise, finalResponsesPromise]);" in script
+    assert "OVERVIEW_SCOPE_REFRESH_TIMEOUT_MS" in script
+    assert "function withTimeout(promise, timeoutMs, message)" in script
     assert "state.chartResponse = chartResponse;" in script
     assert "period_mode: \"DATE_RANGE\"" in script
     assert "comparison_mode: \"NONE\"" in script
@@ -2060,6 +2062,9 @@ def test_overview_loading_states_preserve_existing_snapshot() -> None:
     assert "const chartRequestStillCurrent = state.sectionRequests.overview_chart === chartRequestSequence" in overview_query
     assert "if (chartRequestStillCurrent) state.chartResponse = chartResponse;" in overview_query
     assert "renderOverview({ includeChart: chartRequestStillCurrent });" in overview_query
+    assert "withTimeout(" in overview_query
+    assert "requiredSnapshotPromise" in overview_query
+    assert "OVERVIEW_SCOPE_REFRESH_TIMEOUT_MS" in overview_query
     assert 'if (chartRequestStillCurrent || state.overviewLoadMode !== "chart") setOverviewLoadMode("ready");' in overview_query
     assert "if (hadSnapshot)" in overview_query
     assert "renderSkeletons();" in overview_query

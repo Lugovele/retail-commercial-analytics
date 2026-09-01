@@ -59,6 +59,8 @@ const state = {
   activeProvenanceConcept: "revenue"
 };
 
+const OVERVIEW_SCOPE_REFRESH_TIMEOUT_MS = 30000;
+
 const overviewKpiDefinitions = [
   { slot: 1, group: "result", visualTier: "primary", concept: "units", label: "Продажи", unit: "шт.", source: "query" },
   { slot: 2, group: "result", visualTier: "primary", concept: "revenue_vat", label: "Оборот", unit: "₽", source: "query" },
@@ -1350,7 +1352,14 @@ async function runOverviewQuery() {
     const tablePromise = postJson("/api/dashboard/query", previewPayload);
     const contributionPromise = summaryPromise.then((summaryResponse) => loadContributionRows(summaryResponse));
     const finalResponsesPromise = Promise.all([overviewPortfolioPromise, contributionPromise, tablePromise]);
-    const [summaryResponse, chartResponse, finalResponses] = await Promise.all([summaryPromise, chartPromise, finalResponsesPromise]);
+    const requiredSnapshotPromise = Promise.all([summaryPromise, chartPromise, finalResponsesPromise]);
+    const [summaryResponse, chartResponse, finalResponses] = await (hadSnapshot
+      ? withTimeout(
+          requiredSnapshotPromise,
+          OVERVIEW_SCOPE_REFRESH_TIMEOUT_MS,
+          "Не удалось обновить данные: ожидание ответа превысило 30 секунд."
+        )
+      : requiredSnapshotPromise);
     if (!isCurrentSectionRequest(token)) return;
     const [overviewPortfolioResponse, contributionResponse, tableResponse] = finalResponses;
     const chartRequestStillCurrent = state.sectionRequests.overview_chart === chartRequestSequence
@@ -7384,6 +7393,15 @@ function showPageError(error) {
   showToast(error?.message ? "Не удалось загрузить данные. Детали доступны в журнале браузера." : "Не удалось загрузить данные.");
 }
 
+function withTimeout(promise, timeoutMs, message) {
+  let timeoutId = null;
+  const timeout = new Promise((_, reject) => {
+    timeoutId = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
+  });
+}
 function showToast(message) {
   const toast = document.getElementById("toast");
   toast.textContent = message;

@@ -76,6 +76,138 @@ def test_dashboard_filter_apply_updates_rendered_kpi_when_browser_url_is_provide
             browser.close()
 
 
+
+def test_dashboard_package_scope_refresh_exits_loading_when_browser_url_is_provided() -> None:
+    dashboard_url = os.environ.get("DASHBOARD_E2E_URL")
+    if not dashboard_url:
+        return
+    try:
+        sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+    except ImportError:
+        return
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.goto(dashboard_url, wait_until="domcontentloaded")
+            _wait_overview_ready(page, timeout=60000)
+            page.locator("#package-filter-trigger").click()
+            page.wait_for_selector("#package-filter-popover:not(.is-hidden)", timeout=10000)
+            page.locator("#package-filter-popover .filter-option", has_text="пэт").first.click()
+            page.locator('[data-apply-filter="package"]').click()
+            _wait_overview_refreshing(page, timeout=10000)
+            _wait_overview_ready(page, timeout=30000)
+
+            state = _overview_loading_state(page)
+            assert state["ariaBusy"] == "false"
+            assert state["loaderText"] == ""
+            assert state["progressHidden"] is True
+            assert state["verticalOverflow"] == 0
+            assert state["horizontalOverflow"] == 0
+            assert state["kpiCount"] == 11
+            assert state["filters"]["Тара"] == "пэт"
+        finally:
+            browser.close()
+
+
+def test_dashboard_scope_refresh_failure_clears_loading_when_browser_url_is_provided() -> None:
+    dashboard_url = os.environ.get("DASHBOARD_E2E_URL")
+    if not dashboard_url:
+        return
+    try:
+        sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+    except ImportError:
+        return
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.goto(dashboard_url, wait_until="domcontentloaded")
+            _wait_overview_ready(page, timeout=60000)
+            page.evaluate(
+                """() => {
+                    const originalFetch = window.fetch.bind(window);
+                    window.fetch = (input, init = {}) => {
+                        const url = typeof input === "string" ? input : input.url;
+                        if (url.includes("/api/dashboard/query") && init.method === "POST") {
+                            return new Promise((_, reject) => {
+                                window.setTimeout(
+                                    () => reject(new Error("simulated overview query failure")),
+                                    250
+                                );
+                            });
+                        }
+                        return originalFetch(input, init);
+                    };
+                }"""
+            )
+            page.locator("#package-filter-trigger").click()
+            page.wait_for_selector("#package-filter-popover:not(.is-hidden)", timeout=10000)
+            page.locator("#package-filter-popover .filter-option", has_text="ж/б").first.click()
+            page.locator('[data-apply-filter="package"]').click()
+            _wait_overview_refreshing(page, timeout=10000)
+            _wait_overview_ready(page, timeout=15000)
+
+            state = _overview_loading_state(page)
+            assert state["ariaBusy"] == "false"
+            assert state["loaderText"] == ""
+            assert state["progressHidden"] is True
+            assert "Предыдущий срез сохран" in state["chartFootnote"]
+            assert state["kpiCount"] == 11
+        finally:
+            browser.close()
+
+
+def _wait_overview_ready(page: Any, *, timeout: int) -> None:
+    page.wait_for_function(
+        """() => {
+            const overview = document.getElementById("overview");
+            return overview
+                && !overview.classList.contains("is-overview-initial-loading")
+                && !overview.classList.contains("is-overview-scope-refreshing")
+                && !overview.classList.contains("is-overview-chart-refreshing")
+                && !document.querySelector(".overview-chart-loader");
+        }""",
+        timeout=timeout,
+    )
+
+
+def _wait_overview_refreshing(page: Any, *, timeout: int) -> None:
+    page.wait_for_function(
+        """() => {
+            const overview = document.getElementById("overview");
+            return overview?.getAttribute("aria-busy") === "true"
+                || overview?.classList.contains("is-overview-scope-refreshing");
+        }""",
+        timeout=timeout,
+    )
+
+
+def _overview_loading_state(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        """() => {
+            const overview = document.getElementById("overview");
+            const filters = Object.fromEntries(Array.from(document.querySelectorAll(".scope-field")).map((node) => [
+                (node.querySelector(".scope-label")?.textContent || "").trim(),
+                (node.querySelector(".filter-summary, .scope-value")?.textContent || "").trim(),
+            ]));
+            return {
+                overviewClass: overview?.className || "",
+                ariaBusy: overview?.getAttribute("aria-busy") || "",
+                loaderText: document.querySelector(".overview-chart-loader")?.innerText || "",
+                progressHidden: document.getElementById("overview-refresh-progress")?.classList.contains("is-hidden"),
+                chartFootnote: document.getElementById("chart-footnote")?.innerText || "",
+                verticalOverflow: document.documentElement.scrollHeight - document.documentElement.clientHeight,
+                horizontalOverflow: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+                kpiCount: document.querySelectorAll(".kpi-card").length,
+                filters,
+            };
+        }"""
+    )
+
+
 def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> None:
     app = create_dashboard_wsgi_app(build_synthetic_dashboard_runtime(tmp_path))
 

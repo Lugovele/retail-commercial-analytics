@@ -793,13 +793,13 @@ class DashboardMartQueryService:
         if request.quality_policy == QualityPolicy.VALID_ONLY:
             clauses.append("quality_status = ?")
             params.append("valid")
-        sql = f"""
-            SELECT *
-            FROM read_parquet(?)
-            WHERE {" AND ".join(clauses)}
-            ORDER BY period_start, canonical_store_id, canonical_product_id, metric_concept
-        """
-        source = duckdb.sql(sql, params=[_duckdb_path(self.product_store_facts_path), *params]).pl()
+        source = _read_product_store_rollup_facts_from_sql(
+            self.product_store_facts_path,
+            clauses,
+            params,
+            request,
+            self._metric_templates(request, mart_build_id),
+        )
         if source.is_empty():
             limitations.append(
                 QueryLimitation(
@@ -807,7 +807,7 @@ class DashboardMartQueryService:
                     "No product-store facts match the selected analytical scope.",
                 )
             )
-        return _roll_up_product_store_facts(source, request, self._metric_templates(request, mart_build_id)), "sku_store", tuple(limitations)
+        return source, "sku_store", tuple(limitations)
 
     def _read_store_format_distribution_facts(
         self,
@@ -2614,53 +2614,121 @@ def _add_product_store_entity_id_filter(
     _add_in_filter(clauses, params, _product_store_filter_column(grain_id), entity_ids)
 
 
-def _roll_up_product_store_facts(
-    frame: pl.DataFrame,
+def _read_product_store_rollup_facts_from_sql(
+    path: Path,
+    clauses: list[str],
+    params: list[Any],
     request: DashboardMetricQueryRequest,
     templates: dict[str, dict[str, Any]],
 ) -> pl.DataFrame:
-    if frame.is_empty():
-        return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
-    grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
-    for row in frame.to_dicts():
-        entity_id, parent_entity_ids = _product_store_result_identity(row, request)
-        key = (
-            row["retailer_id"],
-            row["source_id"],
-            row["source_revision_id"],
-            row["analysis_run_id"],
-            row["mart_build_id"],
-            row.get("private_label_scope"),
-            row["period_grain"],
-            row["period_start"],
-            row["period_end"],
-            row["business_period_id"],
-            row["metric_concept"],
-            request.grain_id,
-            entity_id,
-            parent_entity_ids,
+    identity_select, parent_columns = _product_store_rollup_sql_identity_selects(request)
+    parent_selects = [f"CAST({column} AS VARCHAR) AS _rollup_parent_{column}" for column in parent_columns]
+    source_columns = [
+        "retailer_id",
+        "source_id",
+        "source_revision_id",
+        "analysis_run_id",
+        "mart_build_id",
+        "private_label_scope",
+        "period_grain",
+        "period_start",
+        "period_end",
+        "business_period_id",
+        "metric_concept",
+        "metric_name",
+        "metric_definition_id",
+        "metric_definition_version",
+        "metric_config_hash",
+        "semantic_family",
+        "semantic_compatibility_version",
+        "cross_retailer_comparable",
+        "value",
+        "numerator_value",
+        "denominator_value",
+        "aggregation",
+        "range_aggregation_strategy",
+        "share_scope",
+        "rule_version",
+        "quality_status",
+        "quality_flags",
+        "created_at",
+        identity_select,
+        *parent_selects,
+    ]
+    group_keys = [
+        "retailer_id",
+        "source_id",
+        "source_revision_id",
+        "analysis_run_id",
+        "mart_build_id",
+        "private_label_scope",
+        "period_grain",
+        "period_start",
+        "period_end",
+        "business_period_id",
+        "metric_concept",
+        "_rollup_entity_id",
+        *[f"_rollup_parent_{column}" for column in parent_columns],
+    ]
+    metadata_columns = [
+        "metric_name",
+        "metric_definition_id",
+        "metric_definition_version",
+        "metric_config_hash",
+        "semantic_family",
+        "semantic_compatibility_version",
+        "cross_retailer_comparable",
+        "aggregation",
+        "range_aggregation_strategy",
+        "share_scope",
+        "rule_version",
+    ]
+    sql = f"""
+        WITH scoped AS (
+            SELECT {", ".join(source_columns)}
+            FROM read_parquet(?)
+            WHERE {" AND ".join(clauses)}
         )
-        grouped[key].append(row)
-    rolled: list[dict[str, Any]] = []
-    for key, rows in grouped.items():
-        concept = str(key[10])
-        template = templates.get(concept, rows[0])
-        value, numerator_value, denominator_value = _roll_up_metric_values(rows)
-        rolled.append(
+        SELECT
+            {", ".join(group_keys)},
+            {", ".join(f"ANY_VALUE({column}) AS {column}" for column in metadata_columns)},
+            COUNT(*) AS _row_count,
+            COUNT(*) - COUNT(value) AS _value_null_count,
+            SUM(value) AS _value_sum,
+            COUNT(*) - COUNT(numerator_value) AS _numerator_null_count,
+            SUM(numerator_value) AS _numerator_sum,
+            COUNT(*) - COUNT(denominator_value) AS _denominator_null_count,
+            SUM(denominator_value) AS _denominator_sum,
+            COUNT(DISTINCT quality_status) AS _quality_status_count,
+            ANY_VALUE(quality_status) AS _quality_status_first,
+            STRING_AGG(DISTINCT CAST(quality_flags AS VARCHAR), ',') AS _quality_flags,
+            MAX(created_at) AS created_at
+        FROM scoped
+        GROUP BY {", ".join(group_keys)}
+    """
+    grouped = duckdb.sql(sql, params=[_duckdb_path(path), *params]).pl()
+    if grouped.is_empty():
+        return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
+    rows: list[dict[str, Any]] = []
+    for row in grouped.to_dicts():
+        concept = str(row["metric_concept"])
+        template = templates.get(concept, row)
+        value, numerator_value, denominator_value = _roll_up_metric_values_from_aggregate(row)
+        rows.append(
             {
-                "retailer_id": key[0],
-                "source_id": key[1],
-                "source_revision_id": key[2],
-                "analysis_run_id": key[3],
-                "mart_build_id": key[4],
-                "private_label_scope": key[5],
-                "period_grain": key[6],
-                "period_start": key[7],
-                "period_end": key[8],
-                "business_period_id": key[9],
-                "grain_id": key[11],
-                "entity_id": key[12],
-                "parent_entity_ids": key[13],
+                "retailer_id": row["retailer_id"],
+                "source_id": row["source_id"],
+                "source_revision_id": row["source_revision_id"],
+                "analysis_run_id": row["analysis_run_id"],
+                "mart_build_id": row["mart_build_id"],
+                "private_label_scope": row.get("private_label_scope"),
+                "period_grain": row["period_grain"],
+                "period_start": row["period_start"],
+                "period_end": row["period_end"],
+                "business_period_id": row["business_period_id"],
+                "grain_id": request.grain_id,
+                "entity_id": str(row["_rollup_entity_id"]),
+                "parent_entity_ids": _product_store_rollup_parent_ids(row, parent_columns),
                 "metric_concept": concept,
                 "metric_name": template["metric_name"],
                 "metric_definition_id": template["metric_definition_id"],
@@ -2681,13 +2749,203 @@ def _roll_up_product_store_facts(
                 "range_aggregation_strategy": template["range_aggregation_strategy"],
                 "share_scope": template["share_scope"],
                 "rule_version": template["rule_version"],
-                "quality_status": _roll_up_quality_status(rows),
-                "quality_flags": _roll_up_quality_flags(rows),
-                "created_at": max(item["created_at"] for item in rows if item["created_at"] is not None),
+                "quality_status": "valid"
+                if row["_quality_status_count"] == 1 and row["_quality_status_first"] == "valid"
+                else "mixed",
+                "quality_flags": _roll_up_aggregate_quality_flags(row.get("_quality_flags")),
+                "created_at": row["created_at"],
+            }
+        )
+    return pl.DataFrame(rows, schema=MART_METRIC_FACT_SCHEMA)
+
+
+def _product_store_rollup_sql_identity_selects(request: DashboardMetricQueryRequest) -> tuple[str, tuple[str, ...]]:
+    if request.grain_id == "network":
+        entity_id = request.entity_ids[0] if request.entity_ids else "network"
+        return f"{_duckdb_string_literal(entity_id)} AS _rollup_entity_id", ()
+    if request.grain_id == "category":
+        return "CAST(category AS VARCHAR) AS _rollup_entity_id", ()
+    if request.grain_id == "manufacturer":
+        return "CAST(manufacturer AS VARCHAR) AS _rollup_entity_id", ("category",)
+    if request.grain_id == "brand":
+        return "CAST(brand AS VARCHAR) AS _rollup_entity_id", ("category", "manufacturer")
+    if request.grain_id == "sku":
+        return "CAST(canonical_product_id AS VARCHAR) AS _rollup_entity_id", ("category", "manufacturer", "brand")
+    if request.grain_id == "store":
+        return "CAST(canonical_store_id AS VARCHAR) AS _rollup_entity_id", ()
+    raise ValueError(f"Unsupported product-store rollup grain_id: {request.grain_id}")
+
+
+def _duckdb_string_literal(value: object) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _roll_up_product_store_facts(
+    frame: pl.DataFrame,
+    request: DashboardMetricQueryRequest,
+    templates: dict[str, dict[str, Any]],
+) -> pl.DataFrame:
+    if frame.is_empty():
+        return pl.DataFrame(schema=MART_METRIC_FACT_SCHEMA)
+    entity_expr, parent_columns = _product_store_rollup_identity_expressions(request)
+    working = frame.with_columns(
+        [
+            entity_expr.alias("_rollup_entity_id"),
+            *[pl.col(column).cast(pl.Utf8).alias(f"_rollup_parent_{column}") for column in parent_columns],
+        ]
+    )
+    group_keys = [
+        "retailer_id",
+        "source_id",
+        "source_revision_id",
+        "analysis_run_id",
+        "mart_build_id",
+        "private_label_scope",
+        "period_grain",
+        "period_start",
+        "period_end",
+        "business_period_id",
+        "metric_concept",
+        "_rollup_entity_id",
+        *[f"_rollup_parent_{column}" for column in parent_columns],
+    ]
+    metadata_columns = [
+        "metric_name",
+        "metric_definition_id",
+        "metric_definition_version",
+        "metric_config_hash",
+        "semantic_family",
+        "semantic_compatibility_version",
+        "cross_retailer_comparable",
+        "business_rule_id",
+        "denominator_universe_type",
+        "store_alias_mapping_version",
+        "numerator_metric_name",
+        "denominator_metric_name",
+        "aggregation",
+        "range_aggregation_strategy",
+        "share_scope",
+        "rule_version",
+    ]
+    grouped = working.group_by(group_keys).agg(
+        [
+            pl.len().alias("_row_count"),
+            pl.col("value").null_count().alias("_value_null_count"),
+            pl.col("value").sum().alias("_value_sum"),
+            pl.col("numerator_value").null_count().alias("_numerator_null_count"),
+            pl.col("numerator_value").sum().alias("_numerator_sum"),
+            pl.col("denominator_value").null_count().alias("_denominator_null_count"),
+            pl.col("denominator_value").sum().alias("_denominator_sum"),
+            pl.col("quality_status").n_unique().alias("_quality_status_count"),
+            pl.col("quality_status").first().alias("_quality_status_first"),
+            pl.col("quality_flags").drop_nulls().unique().alias("_quality_flags"),
+            pl.col("created_at").max().alias("created_at"),
+            *[pl.col(column).first().alias(column) for column in metadata_columns if column in working.columns],
+        ]
+    )
+    rolled: list[dict[str, Any]] = []
+    for row in grouped.to_dicts():
+        concept = str(row["metric_concept"])
+        template = templates.get(concept, row)
+        value, numerator_value, denominator_value = _roll_up_metric_values_from_aggregate(row)
+        rolled.append(
+            {
+                "retailer_id": row["retailer_id"],
+                "source_id": row["source_id"],
+                "source_revision_id": row["source_revision_id"],
+                "analysis_run_id": row["analysis_run_id"],
+                "mart_build_id": row["mart_build_id"],
+                "private_label_scope": row.get("private_label_scope"),
+                "period_grain": row["period_grain"],
+                "period_start": row["period_start"],
+                "period_end": row["period_end"],
+                "business_period_id": row["business_period_id"],
+                "grain_id": request.grain_id,
+                "entity_id": str(row["_rollup_entity_id"]),
+                "parent_entity_ids": _product_store_rollup_parent_ids(row, parent_columns),
+                "metric_concept": concept,
+                "metric_name": template["metric_name"],
+                "metric_definition_id": template["metric_definition_id"],
+                "metric_definition_version": template["metric_definition_version"],
+                "metric_config_hash": template["metric_config_hash"],
+                "semantic_family": template["semantic_family"],
+                "semantic_compatibility_version": template["semantic_compatibility_version"],
+                "cross_retailer_comparable": template["cross_retailer_comparable"],
+                "value": value,
+                "numerator_value": numerator_value,
+                "denominator_value": denominator_value,
+                "business_rule_id": template.get("business_rule_id"),
+                "denominator_universe_type": template.get("denominator_universe_type"),
+                "store_alias_mapping_version": template.get("store_alias_mapping_version"),
+                "numerator_metric_name": template.get("numerator_metric_name"),
+                "denominator_metric_name": template.get("denominator_metric_name"),
+                "aggregation": template["aggregation"],
+                "range_aggregation_strategy": template["range_aggregation_strategy"],
+                "share_scope": template["share_scope"],
+                "rule_version": template["rule_version"],
+                "quality_status": "valid"
+                if row["_quality_status_count"] == 1 and row["_quality_status_first"] == "valid"
+                else "mixed",
+                "quality_flags": _roll_up_aggregate_quality_flags(row.get("_quality_flags")),
+                "created_at": row["created_at"],
             }
         )
     return pl.DataFrame(rolled, schema=MART_METRIC_FACT_SCHEMA)
 
+
+def _product_store_rollup_identity_expressions(request: DashboardMetricQueryRequest) -> tuple[pl.Expr, tuple[str, ...]]:
+    if request.grain_id == "network":
+        entity_id = request.entity_ids[0] if request.entity_ids else "network"
+        return pl.lit(entity_id).cast(pl.Utf8), ()
+    if request.grain_id == "category":
+        return pl.col("category").cast(pl.Utf8), ()
+    if request.grain_id == "manufacturer":
+        return pl.col("manufacturer").cast(pl.Utf8), ("category",)
+    if request.grain_id == "brand":
+        return pl.col("brand").cast(pl.Utf8), ("category", "manufacturer")
+    if request.grain_id == "sku":
+        return pl.col("canonical_product_id").cast(pl.Utf8), ("category", "manufacturer", "brand")
+    if request.grain_id == "store":
+        return pl.col("canonical_store_id").cast(pl.Utf8), ()
+    raise ValueError(f"Unsupported product-store rollup grain_id: {request.grain_id}")
+
+
+def _product_store_rollup_parent_ids(row: dict[str, Any], parent_columns: tuple[str, ...]) -> str:
+    if not parent_columns:
+        return "{}"
+    return _json_parent_ids({column: row.get(f"_rollup_parent_{column}") for column in parent_columns})
+
+
+def _roll_up_metric_values_from_aggregate(row: dict[str, Any]) -> tuple[float | None, float | None, float | None]:
+    if row["_row_count"] == 1:
+        return _float_or_none(row["_value_sum"]), _float_or_none(row["_numerator_sum"]), _float_or_none(row["_denominator_sum"])
+    strategy = RangeAggregationStrategy(str(row["range_aggregation_strategy"]))
+    if strategy == RangeAggregationStrategy.SUM_AVAILABLE_PERIODS:
+        if row["_value_null_count"]:
+            return None, None, None
+        return _float_or_zero(row["_value_sum"]), None, None
+    if strategy in {
+        RangeAggregationStrategy.RATIO_OF_SUMS,
+        RangeAggregationStrategy.WEIGHTED_RATIO_OF_SUMS,
+        RangeAggregationStrategy.RECOMPUTE_FROM_COMPONENTS,
+    }:
+        if row["_numerator_null_count"] or row["_denominator_null_count"]:
+            return None, None, None
+        numerator = _float_or_zero(row["_numerator_sum"])
+        denominator = _float_or_zero(row["_denominator_sum"])
+        return (None if denominator == 0 else numerator / denominator), numerator, denominator
+    return None, None, None
+
+
+def _roll_up_aggregate_quality_flags(flags: Any) -> str | None:
+    if not flags:
+        return None
+    if isinstance(flags, str):
+        candidates = flags.split(",")
+    else:
+        candidates = [piece for flag in flags for piece in str(flag or "").split(",")]
+    values = sorted({item.strip() for item in candidates if item.strip()})
+    return ",".join(values) if values else None
 
 def _product_store_result_identity(row: dict[str, Any], request: DashboardMetricQueryRequest) -> tuple[str, str]:
     if request.grain_id == "network":
