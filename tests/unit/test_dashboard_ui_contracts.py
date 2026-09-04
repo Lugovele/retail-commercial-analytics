@@ -2529,12 +2529,13 @@ def test_overview_kpi_switch_uses_chart_only_refresh() -> None:
     assert "state.contributionResponse" not in chart_refresh
 
 
-def test_overview_initial_loading_uses_final_geometry_skeletons() -> None:
+def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     script = html_or_script("app.js")
     styles = html_or_script("styles.css")
     skeleton = script.split("function renderSkeletons()", 1)[1].split("function attentionItems()", 1)[0]
     initialize_body = _function_body(script, "initializeDashboard")
     loading_body = _function_body(script, "setOverviewLoadMode")
+    dismiss_body = _function_body(script, "dismissInitialOverviewOverlay")
     chart_refresh = script.split("async function runOverviewChartRefresh()", 1)[1].split("function renderSkeletons()", 1)[0]
 
     assert "renderSkeletons();" in initialize_body
@@ -2542,6 +2543,13 @@ def test_overview_initial_loading_uses_final_geometry_skeletons() -> None:
     assert 'const startsOnOverview = !hashView || hashView === "overview";' in initialize_body
     assert 'setOverviewLoadMode("ready");' in initialize_body
     assert initialize_body.count('setOverviewLoadMode("ready");') >= 2
+    assert 'if (mode !== "initial") dismissInitialOverviewOverlay();' in loading_body
+    assert "state.initialOverviewOverlayDismissed = true;" in dismiss_body
+    assert 'const overlay = document.getElementById("overview-initial-overlay");' in dismiss_body
+    assert 'overlay?.setAttribute("hidden", "hidden");' in dismiss_body
+    assert 'body.classList.add("is-overview-initial-overlay-exiting");' in dismiss_body
+    assert 'body.classList.remove("is-overview-initializing");' in dismiss_body
+    assert 'setAttribute("hidden", "hidden")' in dismiss_body
     assert "renderKpiGroup(group, (definition) =>" in skeleton
     assert "kpi-card--${definition.visualTier} is-loading" in skeleton
     assert "kpi-card-content--skeleton" in skeleton
@@ -2554,14 +2562,18 @@ def test_overview_initial_loading_uses_final_geometry_skeletons() -> None:
     assert 'textContent = "0"' not in skeleton
     assert "overview-chart-skeleton" in skeleton
     assert "Загрузка динамики" not in skeleton
-    assert 'document.body?.classList.toggle("is-overview-initializing", mode === "initial");' in loading_body
+    assert 'document.body?.classList.toggle("is-overview-initializing", mode === "initial");' not in loading_body
     assert 'setOverviewLoadMode("chart")' in chart_refresh
     assert "renderSkeletons();" not in chart_refresh
     assert 'setOverviewLoadMode("scope")' not in chart_refresh
-    assert ".is-overview-initializing .filter-grid" in styles
-    assert ".is-overview-initializing #retailer-identity strong" in styles
-    assert ".is-overview-initializing #period-summary" in styles
-    assert "pointer-events: none;" in styles
+    assert ".overview-initial-overlay" in styles
+    assert ".is-overview-initializing .overview-initial-overlay" in styles
+    assert ".is-overview-initial-overlay-exiting .overview-initial-overlay" in styles
+    assert ".overview-initial-spinner" in styles
+    assert "transition: opacity 180ms ease;" in styles
+    assert "transform:" not in styles.split(".overview-initial-overlay {", 1)[1].split("}", 1)[0]
+    assert "progress" not in styles.split(".overview-initial-overlay {", 1)[1].split(".overview-initial-spinner", 1)[0]
+    assert ".is-overview-initializing .filter-grid" not in styles
     assert ".overview-layout.is-overview-initial-loading" in styles
     assert "min-height: calc(100% - 46px);" in styles
     assert "min-height: clamp(219px, calc(146vh - 902px), 412px);" in styles
@@ -2574,7 +2586,13 @@ def test_overview_initial_loading_uses_final_geometry_skeletons() -> None:
     assert "transform:" not in chart_line_styles
 
     template = _template_text("index.html")
-    assert '<body class="is-overview-initializing">' in template
+    assert '<body class="is-overview-initializing">' not in template
+    assert 'window.location.hash === "#overview"' in template
+    assert 'document.getElementById("overview-initial-overlay")?.removeAttribute("hidden");' in template
+    assert 'id="overview-initial-overlay"' in template
+    assert 'aria-label="Загрузка аналитики" hidden' in template
+    assert 'class="overview-initial-spinner"' in template
+    assert "Загрузка аналитики" in template
     assert "is-overview-initial-loading" in template
     assert "aria-busy=\"true\"" in template
     assert template.count("data-kpi-slot=") >= 11

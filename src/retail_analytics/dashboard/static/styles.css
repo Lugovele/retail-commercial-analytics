@@ -324,38 +324,6 @@ h3 {
   min-height: 36px;
 }
 
-.is-overview-initializing .report-control {
-  flex: 0 0 190px;
-}
-
-.is-overview-initializing .period-control {
-  flex: 0 0 86px;
-}
-
-.is-overview-initializing .filter-grid,
-.is-overview-initializing .period-trigger,
-.is-overview-initializing .filter-trigger,
-.is-overview-initializing #private-label-scope {
-  pointer-events: none;
-}
-
-.is-overview-initializing #retailer-identity strong,
-.is-overview-initializing #period-summary {
-  display: block;
-  width: 58px;
-  color: transparent;
-  background:
-    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent),
-    color-mix(in srgb, var(--text-muted) 13%, var(--bg-subtle));
-  background-size: 180% 100%;
-  border-radius: 999px;
-  animation: overview-skeleton-pulse 1.45s ease-in-out infinite;
-}
-
-.is-overview-initializing #period-summary {
-  width: 72px;
-}
-
 .control,
 .period-control,
 .report-control,
@@ -1191,6 +1159,42 @@ main {
   min-height: calc(100% - 46px);
 }
 
+.overview-initial-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ffffff;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+.is-overview-initializing .overview-initial-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.is-overview-initial-overlay-exiting .overview-initial-overlay {
+  opacity: 0;
+  pointer-events: auto;
+}
+
+.overview-initial-overlay[hidden] {
+  display: none;
+}
+
+.overview-initial-spinner {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #dce5ef;
+  border-top-color: var(--brand-menu-blue);
+  border-radius: 50%;
+  animation: overview-loader-spin 0.86s linear infinite;
+}
+
 .sales-drivers-layout,
 .portfolio-market-layout,
 .stores-layout {
@@ -2007,11 +2011,14 @@ main {
 @media (prefers-reduced-motion: reduce) {
   .overview-refresh-progress::before,
   .overview-chart-loader-spinner,
+  .overview-initial-spinner,
   .overview-chart-skeleton-line,
-  .is-overview-initializing #retailer-identity strong,
-  .is-overview-initializing #period-summary,
   .kpi-skeleton-line {
     animation: none;
+  }
+
+  .overview-initial-overlay {
+    transition: none;
   }
 }
 

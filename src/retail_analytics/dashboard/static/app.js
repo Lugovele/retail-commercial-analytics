@@ -31,6 +31,7 @@ const state = {
   scopeVersion: 0,
   sectionRequests: {},
   overviewLoadMode: "initial",
+  initialOverviewOverlayDismissed: false,
   periodMode: "COMPARE",
   comparisonMode: "YOY",
   currentGrain: "network",
@@ -936,7 +937,7 @@ function overviewHasRenderedSnapshot() {
 
 function setOverviewLoadMode(mode) {
   state.overviewLoadMode = mode;
-  document.body?.classList.toggle("is-overview-initializing", mode === "initial");
+  if (mode !== "initial") dismissInitialOverviewOverlay();
   const overview = document.getElementById("overview");
   const kpiGrid = document.getElementById("kpi-grid");
   const chartBox = document.getElementById("chart-box");
@@ -948,6 +949,23 @@ function setOverviewLoadMode(mode) {
   chartBox?.setAttribute("aria-busy", mode === "initial" || mode === "scope" || mode === "chart" ? "true" : "false");
   renderOverviewScopeProgress(mode === "scope");
   renderOverviewChartLoader(mode);
+}
+
+function dismissInitialOverviewOverlay() {
+  const body = document.body;
+  const overlay = document.getElementById("overview-initial-overlay");
+  if (!body || state.initialOverviewOverlayDismissed) return;
+  state.initialOverviewOverlayDismissed = true;
+  if (!body.classList.contains("is-overview-initializing")) {
+    overlay?.setAttribute("hidden", "hidden");
+    return;
+  }
+  body.classList.add("is-overview-initial-overlay-exiting");
+  body.classList.remove("is-overview-initializing");
+  window.setTimeout(() => {
+    body.classList.remove("is-overview-initial-overlay-exiting");
+    overlay?.setAttribute("hidden", "hidden");
+  }, 220);
 }
 
 function renderOverviewScopeProgress(isVisible) {

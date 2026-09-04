@@ -6,7 +6,16 @@
     <title>Аналитика продаж</title>
     <link rel="stylesheet" href="/static/styles.css?v=__DASHBOARD_ASSET_VERSION__" />
   </head>
-  <body class="is-overview-initializing">
+  <body>
+    <div class="overview-initial-overlay" id="overview-initial-overlay" role="status" aria-live="polite" aria-label="Загрузка аналитики" hidden>
+      <span class="overview-initial-spinner" aria-hidden="true"></span>
+    </div>
+    <script>
+      if (!window.location.hash || window.location.hash === "#overview") {
+        document.getElementById("overview-initial-overlay")?.removeAttribute("hidden");
+        document.body.classList.add("is-overview-initializing");
+      }
+    </script>
     <div class="app-shell">
       <header class="app-header">
         <h1 class="app-title">Аналитика</h1>
