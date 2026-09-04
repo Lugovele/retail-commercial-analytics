@@ -129,6 +129,40 @@ def test_dashboard_apply_filter_uses_retain_not_child_reset_contract() -> None:
     assert "state.pendingFilters[id] = []" in reset_body
 
 
+def test_dashboard_initial_load_defers_sku_options_from_startup() -> None:
+    script = html_or_script("app.js")
+    initialize_body = _function_body(script, "initializeDashboard")
+    load_options_body = _function_body(script, "loadOptions")
+    open_body = _function_body(script, "openFilterPopover")
+
+    assert "Promise.all([" in initialize_body
+    assert "refreshRuntimeOptions({ resetPeriods: true, resetEntities: true, deferSku: true })" in initialize_body
+    assert 'params.append("defer_entity", "sku")' in load_options_body
+    assert "isDeferredOptionEntity(id)" in open_body
+    assert "await ensureDeferredFilterOptions(id)" in open_body
+
+
+def test_runtime_can_defer_heavy_sku_options_without_changing_default(tmp_path: Path) -> None:
+    runtime = build_synthetic_dashboard_runtime(tmp_path)
+    common = {
+        "retailer_id": "retailer_a",
+        "source_id": "source_a",
+        "private_label_scope": "INCLUDE",
+        "date_from": date(2026, 6, 1),
+        "date_to": date(2026, 6, 1),
+        "parent_filters": {},
+    }
+
+    default_options = runtime.options_metadata(**common)
+    deferred_options = runtime.options_metadata(**common, deferred_entities=("sku",))
+
+    assert default_options["entities"]["sku"]
+    assert deferred_options["entities"]["sku"] == []
+    assert deferred_options["deferred_entities"] == ("sku",)
+    assert deferred_options["entities"]["category"] == default_options["entities"]["category"]
+    assert deferred_options["periods"] == default_options["periods"]
+
+
 def test_runtime_resolves_cascading_product_filters_to_sku_universe(tmp_path: Path) -> None:
     source_like_path = tmp_path / "source_like.parquet"
     pl.DataFrame(
@@ -1796,9 +1830,9 @@ def test_filter_toolbar_visual_noise_contract_groups_primary_scope_quietly() -> 
     assert "var(--scope-control-border)" in css
     assert "box-shadow" not in control_body
     assert 'const cell = document.querySelector(`.multi-filter[data-filter="${id}"]`);' in script
-    assert 'cell?.addEventListener("click", (event) => {' in script
+    assert 'cell?.addEventListener("click", async (event) => {' in script
     assert 'event.target.closest(".filter-popover, .filter-inline-clear, select, input, .filter-trigger")' in script
-    assert "openFilterPopover(id);" in script
+    assert "await openFilterPopover(id);" in script
     assert 'if (!["Enter", " "].includes(event.key)) return;' in script
     assert "event.stopPropagation();" in script
     assert "cell?.classList.toggle(\"has-selection\", selected.length > 0);" in script
@@ -3065,11 +3099,11 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
         .read_text(encoding="utf-8")
     )
 
-    assert "async function loadOptions()" in script
+    assert "async function loadOptions({ deferSku = false } = {})" in script
     assert "populatePeriodSelects" in script
     assert "populateEntityFilters" in script
     refresh_body = script.split("async function refreshRuntimeOptions", 1)[1].split("function populatePeriodSelects", 1)[0]
-    assert refresh_body.index("if (resetEntities) resetAllEntityFilters();") < refresh_body.index("await loadOptions();")
+    assert refresh_body.index("if (resetEntities) resetAllEntityFilters();") < refresh_body.index("await loadOptions({ deferSku });")
     reset_body = script.split("function resetAllEntityFilters", 1)[1].split("function applyFilterDrilldown", 1)[0]
     assert 'state.currentGrain = "network";' in reset_body
     assert "state.drilldownPath = [];" in reset_body
@@ -3082,6 +3116,7 @@ def test_browser_script_uses_runtime_options_and_resets_child_filters() -> None:
     assert 'state.currentGrain = "store";' not in filter_body
     assert "nearestSelectedGrain" not in script
     assert "await refreshRuntimeOptions();" in script
+    assert 'params.append("defer_entity", "sku")' in script
     assert 'category: {' in script
     assert 'childFilters: ["manufacturer", "brand", "package", "volume", "sku"]' in script
     assert 'manufacturer: {' in script
@@ -3589,7 +3624,20 @@ def html_or_script(name: str) -> str:
 def _function_body(script: str, function_name: str) -> str:
     marker = f"function {function_name}("
     start = script.index(marker)
-    brace = script.index("{", start)
+    paren = script.index("(", start)
+    paren_depth = 0
+    brace = -1
+    for index in range(paren, len(script)):
+        char = script[index]
+        if char == "(":
+            paren_depth += 1
+        elif char == ")":
+            paren_depth -= 1
+            if paren_depth == 0:
+                brace = script.index("{", index)
+                break
+    if brace == -1:
+        raise AssertionError(f"Function signature not found: {function_name}")
     depth = 0
     for index in range(brace, len(script)):
         char = script[index]

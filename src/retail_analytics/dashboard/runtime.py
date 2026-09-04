@@ -230,11 +230,13 @@ class DashboardRuntime:
         date_from: date | None = None,
         date_to: date | None = None,
         parent_filters: dict[str, tuple[str, ...]] | None = None,
+        deferred_entities: tuple[str, ...] = (),
     ) -> dict[str, Any]:
         """Return period and entity filter options from persisted mart facts."""
 
         scope = PrivateLabelScope(private_label_scope)
         runtime_retailer = _runtime_retailer_for_scope(self.retailers, retailer_id, source_id)
+        deferred = tuple(entity for entity in deferred_entities if entity in FILTER_ENTITY_KEYS)
         entities = _entity_options(
             self.query_service.metric_facts_path,
             retailer_id,
@@ -243,6 +245,7 @@ class DashboardRuntime:
             date_from=date_from,
             date_to=date_to,
             parent_filters=parent_filters or {},
+            deferred_entities=deferred,
             source_like_rows_path=self.source_like_rows_path,
             source_revision_ids=_source_revision_ids_for_options(
                 self.query_service.mart_builds,
@@ -254,6 +257,7 @@ class DashboardRuntime:
         return {
             "periods": _period_options(self.query_service.metric_facts_path, retailer_id, source_id, scope),
             "entities": entities,
+            "deferred_entities": deferred,
             "facets": {
                 "volume": entities.pop("_volume_facet", {"ranges": []}),
             },
@@ -650,6 +654,7 @@ def _entity_options(
     date_from: date | None,
     date_to: date | None,
     parent_filters: dict[str, tuple[str, ...]],
+    deferred_entities: tuple[str, ...] = (),
     source_like_rows_path: Path | None = None,
     source_revision_ids: tuple[str, ...] = (),
 ) -> dict[str, Any]:
@@ -662,6 +667,7 @@ def _entity_options(
             date_from=date_from,
             date_to=date_to,
             parent_filters=parent_filters,
+            deferred_entities=deferred_entities,
             source_revision_ids=source_revision_ids,
         )
         if any(source_like_entities.values()):
@@ -677,6 +683,8 @@ def _entity_options(
             return source_like_entities
     entities: dict[str, Any] = {grain: [] for grain in FILTER_ENTITY_KEYS}
     for grain in SUPPORTED_GRAINS:
+        if grain in deferred_entities:
+            continue
         clauses = ["retailer_id = ?", "source_id = ?", "grain_id = ?"]
         params: list[Any] = [retailer_id, source_id, grain]
         if _facts_have_column(metric_facts_path, "private_label_scope"):
@@ -765,11 +773,14 @@ def _source_like_entity_options(
     date_from: date | None,
     date_to: date | None,
     parent_filters: dict[str, tuple[str, ...]],
+    deferred_entities: tuple[str, ...],
     source_revision_ids: tuple[str, ...],
 ) -> dict[str, Any]:
     entities: dict[str, Any] = {grain: [] for grain in FILTER_ENTITY_KEYS}
     available_columns = _source_columns(source_like_rows_path)
     for grain, entity_column in SOURCE_LIKE_ENTITY_COLUMNS.items():
+        if grain in deferred_entities:
+            continue
         if entity_column not in available_columns:
             continue
         label_column = _source_like_label_column(grain, entity_column, available_columns)

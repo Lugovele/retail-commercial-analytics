@@ -2,6 +2,8 @@ const state = {
   runtime: null,
   catalog: [],
   options: { periods: [], entities: {} },
+  deferredOptionEntities: [],
+  loadingDeferredOptions: {},
   summaryResponse: null,
   chartResponse: null,
   tableResponse: null,
@@ -706,8 +708,10 @@ async function initializeDashboard() {
     setLoading(true, "Загрузка данных");
     state.runtime = await getJson("/api/dashboard/runtime");
     setupRetailerControl();
-    await loadCatalog();
-    await refreshRuntimeOptions({ resetPeriods: true, resetEntities: true });
+    await Promise.all([
+      loadCatalog(),
+      refreshRuntimeOptions({ resetPeriods: true, resetEntities: true, deferSku: true })
+    ]);
     bindDynamicControls();
     updatePeriodPanels();
     updatePrivateLabelTerminology();
@@ -1160,21 +1164,21 @@ function bindDynamicControls() {
   multiFilterIds.forEach((id) => {
     const trigger = document.getElementById(`${id}-filter-trigger`);
     const cell = document.querySelector(`.multi-filter[data-filter="${id}"]`);
-    trigger?.addEventListener("click", (event) => {
+    trigger?.addEventListener("click", async (event) => {
       event.stopPropagation();
-      openFilterPopover(id);
+      await openFilterPopover(id);
     });
-    trigger?.addEventListener("keydown", (event) => {
+    trigger?.addEventListener("keydown", async (event) => {
       if (!["Enter", " "].includes(event.key)) return;
       event.preventDefault();
       event.stopPropagation();
-      openFilterPopover(id);
+      await openFilterPopover(id);
     });
-    cell?.addEventListener("click", (event) => {
+    cell?.addEventListener("click", async (event) => {
       if (event.target.closest(".filter-popover, .filter-inline-clear, select, input, .filter-trigger")) return;
       event.stopPropagation();
       trigger?.focus({ preventScroll: true });
-      openFilterPopover(id);
+      await openFilterPopover(id);
     });
     document.getElementById(`${id}-filter-popover`)?.addEventListener("click", (event) => event.stopPropagation());
     document.getElementById(`${id}-search`)?.addEventListener("input", (event) => {
@@ -1294,7 +1298,7 @@ async function loadCatalog() {
   state.catalog = payload.metrics;
 }
 
-async function loadOptions() {
+async function loadOptions({ deferSku = false } = {}) {
   const retailer = selectedRetailer();
   const params = new URLSearchParams({
     retailer_id: retailer.retailer_id,
@@ -1311,12 +1315,14 @@ async function loadOptions() {
   Object.entries(selectedFilterValues()).forEach(([key, values]) => {
     values.forEach((value) => params.append(key, value));
   });
+  if (deferSku && !selectedValuesForFilter("sku").length) params.append("defer_entity", "sku");
   state.options = await getJson(`/api/dashboard/options?${params.toString()}`);
+  state.deferredOptionEntities = state.options.deferred_entities || [];
 }
 
-async function refreshRuntimeOptions({ resetPeriods = false, resetEntities = false } = {}) {
+async function refreshRuntimeOptions({ resetPeriods = false, resetEntities = false, deferSku = false } = {}) {
   if (resetEntities) resetAllEntityFilters();
-  await loadOptions();
+  await loadOptions({ deferSku });
   if (resetEntities) resetAllEntityFilters();
   populatePeriodSelects(resetPeriods);
   populateEntityFilters();
@@ -5822,6 +5828,15 @@ function renderFilterUnavailable(id, message) {
   list.replaceChildren(item);
 }
 
+function renderFilterLoading(id) {
+  const list = document.getElementById(`${id}-options`);
+  if (!list) return;
+  const item = document.createElement("div");
+  item.className = "filter-empty";
+  item.textContent = "Загрузка списка...";
+  list.replaceChildren(item);
+}
+
 function rankedEntityOptions(values, rawQuery) {
   const query = rawQuery.trim().toLocaleLowerCase("ru-RU");
   if (!query) return [...values].sort(compareEntityLabels);
@@ -6187,7 +6202,7 @@ function toggleFilterPopover(id) {
   openFilterPopover(id);
 }
 
-function openFilterPopover(id) {
+async function openFilterPopover(id) {
   closeAllFilterPopovers();
   state.scopeEditView = viewFromHash() || state.activeView || "overview";
   state.openFilterId = id;
@@ -6199,8 +6214,26 @@ function openFilterPopover(id) {
   if (input) input.value = "";
   document.getElementById(`${id}-filter-popover`)?.classList.remove("is-hidden");
   document.getElementById(`${id}-filter-trigger`)?.setAttribute("aria-expanded", "true");
+  if (isDeferredOptionEntity(id)) {
+    renderFilterLoading(id);
+    await ensureDeferredFilterOptions(id);
+  }
   renderFilterOptions(id);
   setTimeout(() => document.getElementById(`${id}-search`)?.focus(), 0);
+}
+
+function isDeferredOptionEntity(id) {
+  return (state.deferredOptionEntities || []).includes(id);
+}
+
+async function ensureDeferredFilterOptions(id) {
+  if (!isDeferredOptionEntity(id) || state.loadingDeferredOptions[id]) return;
+  state.loadingDeferredOptions[id] = true;
+  try {
+    await refreshRuntimeOptions();
+  } finally {
+    state.loadingDeferredOptions[id] = false;
+  }
 }
 
 function closeFilterPopover(id) {

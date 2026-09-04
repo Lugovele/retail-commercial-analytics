@@ -435,6 +435,19 @@ def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> No
         app,
         "GET",
         "/api/dashboard/options",
+        query="retailer_id=retailer_a&source_id=source_a&private_label_scope=EXCLUDE&defer_entity=sku",
+    )
+    deferred_options = json.loads(body)
+    assert status.startswith("200")
+    assert deferred_options["deferred_entities"] == ["sku"]
+    assert deferred_options["entities"]["sku"] == []
+    assert deferred_options["entities"]["category"] == options["entities"]["category"]
+    assert deferred_options["periods"] == options["periods"]
+
+    status, _, body = _call(
+        app,
+        "GET",
+        "/api/dashboard/options",
         query="retailer_id=retailer_a&source_id=source_a&private_label_scope=INCLUDE&category=CATEGORY_OTHER",
     )
     scoped_options = json.loads(body)

@@ -126,6 +126,7 @@ def create_dashboard_wsgi_app(runtime: DashboardRuntime | None = None) -> WSGIAp
                         date_from=_options_date_from(params),
                         date_to=_options_date_to(params),
                         parent_filters=_parent_filters(params),
+                        deferred_entities=_deferred_entities(params),
                     ),
                 )
             if method == "POST" and path == "/api/dashboard/query":
@@ -382,3 +383,9 @@ def _parent_filters(params: dict[str, list[str]]) -> dict[str, tuple[str, ...]]:
         if values:
             filters[key] = values
     return filters
+
+
+def _deferred_entities(params: dict[str, list[str]]) -> tuple[str, ...]:
+    supported = {"sku"}
+    requested = tuple(value for value in params.get("defer_entity", ()) if value in supported)
+    return requested
