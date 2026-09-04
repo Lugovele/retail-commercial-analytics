@@ -951,6 +951,16 @@ function setOverviewLoadMode(mode) {
   renderOverviewChartLoader(mode);
 }
 
+function nextAnimationFrame() {
+  return new Promise((resolve) => window.requestAnimationFrame(resolve));
+}
+
+async function settleOverviewInitialRevealGeometry() {
+  if (state.initialOverviewOverlayDismissed || !document.body?.classList.contains("is-overview-initializing")) return;
+  applyOverviewChartShellAlignment();
+  await nextAnimationFrame();
+}
+
 function dismissInitialOverviewOverlay() {
   const body = document.body;
   const overlay = document.getElementById("overview-initial-overlay");
@@ -1575,6 +1585,10 @@ async function runOverviewQuery() {
     state.tableResponse = tableResponse;
     state.loadedViews.overview = true;
     renderOverview({ includeChart: chartRequestStillCurrent });
+    if (!hadSnapshot && (chartRequestStillCurrent || state.overviewLoadMode !== "chart")) {
+      await settleOverviewInitialRevealGeometry();
+      if (!isCurrentSectionRequest(token)) return;
+    }
     if (chartRequestStillCurrent || state.overviewLoadMode !== "chart") setOverviewLoadMode("ready");
     setLoading(false, "Данные обновлены");
   } catch (error) {
@@ -3230,25 +3244,30 @@ function overviewChartStepPrecision(step) {
   return Math.min(6, Math.ceil(Math.abs(Math.log10(step))) + 1);
 }
 
+function applyOverviewChartShellAlignment() {
+  const shell = document.querySelector(".overview-layout .chart-panel");
+  const coverage = document.querySelector('.kpi-group--coverage');
+  const divider = document.querySelector('.kpi-group--price');
+  const juneAxis = document.querySelector('#chart-box .month-grid-line[data-month-index="5"]');
+  if (!shell || !coverage || !divider || !juneAxis) return false;
+  shell.style.transform = "";
+  const coverageRect = coverage.getBoundingClientRect();
+  const dividerRect = divider.getBoundingClientRect();
+  if (Math.abs(coverageRect.top - dividerRect.top) > 2) {
+    shell.dataset.juneAlignmentDelta = "0";
+    return true;
+  }
+  const dividerX = divider.getBoundingClientRect().left;
+  const juneRect = juneAxis.getBoundingClientRect();
+  const juneX = juneRect.left + juneRect.width / 2;
+  shell.style.transform = `translateX(${dividerX - juneX}px)`;
+  shell.dataset.juneAlignmentDelta = String(Math.round((dividerX - juneX) * 100) / 100);
+  return true;
+}
+
 function alignOverviewChartShell() {
   window.requestAnimationFrame(() => {
-    const shell = document.querySelector(".overview-layout .chart-panel");
-    const coverage = document.querySelector('.kpi-group--coverage');
-    const divider = document.querySelector('.kpi-group--price');
-    const juneAxis = document.querySelector('#chart-box .month-grid-line[data-month-index="5"]');
-    if (!shell || !coverage || !divider || !juneAxis) return;
-    shell.style.transform = "";
-    const coverageRect = coverage.getBoundingClientRect();
-    const dividerRect = divider.getBoundingClientRect();
-    if (Math.abs(coverageRect.top - dividerRect.top) > 2) {
-      shell.dataset.juneAlignmentDelta = "0";
-      return;
-    }
-    const dividerX = divider.getBoundingClientRect().left;
-    const juneRect = juneAxis.getBoundingClientRect();
-    const juneX = juneRect.left + juneRect.width / 2;
-    shell.style.transform = `translateX(${dividerX - juneX}px)`;
-    shell.dataset.juneAlignmentDelta = String(Math.round((dividerX - juneX) * 100) / 100);
+    applyOverviewChartShellAlignment();
   });
 }
 

@@ -2534,8 +2534,10 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     styles = html_or_script("styles.css")
     skeleton = script.split("function renderSkeletons()", 1)[1].split("function attentionItems()", 1)[0]
     initialize_body = _function_body(script, "initializeDashboard")
+    overview_query = script.split("async function runOverviewQuery()", 1)[1].split("async function runSalesDriversQuery()", 1)[0]
     loading_body = _function_body(script, "setOverviewLoadMode")
     dismiss_body = _function_body(script, "dismissInitialOverviewOverlay")
+    settle_body = _function_body(script, "settleOverviewInitialRevealGeometry")
     chart_refresh = script.split("async function runOverviewChartRefresh()", 1)[1].split("function renderSkeletons()", 1)[0]
 
     assert "renderSkeletons();" in initialize_body
@@ -2544,6 +2546,13 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert 'setOverviewLoadMode("ready");' in initialize_body
     assert initialize_body.count('setOverviewLoadMode("ready");') >= 2
     assert 'if (mode !== "initial") dismissInitialOverviewOverlay();' in loading_body
+    assert "await settleOverviewInitialRevealGeometry();" in overview_query
+    assert overview_query.index("renderOverview({ includeChart: chartRequestStillCurrent });") < overview_query.index("await settleOverviewInitialRevealGeometry();")
+    assert overview_query.index("await settleOverviewInitialRevealGeometry();") < overview_query.index('setOverviewLoadMode("ready")')
+    assert "state.initialOverviewOverlayDismissed" in settle_body
+    assert 'document.body?.classList.contains("is-overview-initializing")' in settle_body
+    assert "applyOverviewChartShellAlignment();" in settle_body
+    assert "await nextAnimationFrame();" in settle_body
     assert "state.initialOverviewOverlayDismissed = true;" in dismiss_body
     assert 'const overlay = document.getElementById("overview-initial-overlay");' in dismiss_body
     assert 'overlay?.setAttribute("hidden", "hidden");' in dismiss_body
@@ -2568,6 +2577,7 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert "Загрузка динамики" not in skeleton
     assert 'document.body?.classList.toggle("is-overview-initializing", mode === "initial");' not in loading_body
     assert 'setOverviewLoadMode("chart")' in chart_refresh
+    assert "settleOverviewInitialRevealGeometry" not in chart_refresh
     assert "renderSkeletons();" not in chart_refresh
     assert 'setOverviewLoadMode("scope")' not in chart_refresh
     assert ".overview-initial-overlay" in styles
@@ -3044,6 +3054,7 @@ def test_overview_chart_uses_month_axis_and_year_overlay_without_zero_fill() -> 
     assert "overviewMonthTooltip(monthIndex, series, entry)" in script
     assert "нет данных" in script
     assert "alignOverviewChartShell()" in script
+    assert "function applyOverviewChartShellAlignment()" in script
     assert "function alignOverviewChartShell()" in script
     assert 'document.querySelector(\'#chart-box .month-grid-line[data-month-index="5"]\')' in script
     assert "shell.dataset.juneAlignmentDelta" in script
