@@ -960,13 +960,13 @@ function dismissInitialOverviewOverlay() {
     overlay?.setAttribute("hidden", "hidden");
     return;
   }
-  body.classList.add("is-overview-initial-spinner-exiting");
+  body.classList.add("is-overview-initial-indicator-exiting");
   window.setTimeout(() => {
     body.classList.add("is-overview-initial-overlay-exiting");
     body.classList.remove("is-overview-initializing");
   }, 180);
   window.setTimeout(() => {
-    body.classList.remove("is-overview-initial-spinner-exiting");
+    body.classList.remove("is-overview-initial-indicator-exiting");
     body.classList.remove("is-overview-initial-overlay-exiting");
     overlay?.setAttribute("hidden", "hidden");
   }, 400);

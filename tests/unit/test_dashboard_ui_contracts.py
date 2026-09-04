@@ -2547,10 +2547,10 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert "state.initialOverviewOverlayDismissed = true;" in dismiss_body
     assert 'const overlay = document.getElementById("overview-initial-overlay");' in dismiss_body
     assert 'overlay?.setAttribute("hidden", "hidden");' in dismiss_body
-    assert 'body.classList.add("is-overview-initial-spinner-exiting");' in dismiss_body
+    assert 'body.classList.add("is-overview-initial-indicator-exiting");' in dismiss_body
     assert 'body.classList.add("is-overview-initial-overlay-exiting");' in dismiss_body
     assert 'body.classList.remove("is-overview-initializing");' in dismiss_body
-    assert 'body.classList.remove("is-overview-initial-spinner-exiting");' in dismiss_body
+    assert 'body.classList.remove("is-overview-initial-indicator-exiting");' in dismiss_body
     assert "}, 180);" in dismiss_body
     assert "}, 400);" in dismiss_body
     assert 'setAttribute("hidden", "hidden")' in dismiss_body
@@ -2573,28 +2573,42 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert ".overview-initial-overlay" in styles
     assert ".is-overview-initializing .overview-initial-overlay" in styles
     assert ".is-overview-initial-overlay-exiting .overview-initial-overlay" in styles
-    assert ".overview-initial-spinner" in styles
+    assert ".overview-initial-indicator" in styles
+    assert ".overview-initial-dot" in styles
     assert "transition: opacity 180ms ease;" in styles
     overlay_styles = styles.split(".overview-initial-overlay {", 1)[1].split("}", 1)[0]
-    spinner_styles = styles.split(".overview-initial-spinner {", 1)[1].split("}", 1)[0]
+    indicator_styles = styles.split(".overview-initial-indicator {", 1)[1].split("}", 1)[0]
+    dots_styles = styles.split(".overview-initial-dots {", 1)[1].split("}", 1)[0]
+    dot_styles = styles.split(".overview-initial-dot {", 1)[1].split("}", 1)[0]
+    dot_keyframes = styles.split("@keyframes overview-loading-dot-opacity {", 1)[1].split("}", 3)[0]
     assert "position: fixed;" in overlay_styles
     assert "inset: 0;" in overlay_styles
     assert "display: block;" in overlay_styles
     assert "display: flex;" not in overlay_styles
     assert "transform:" not in overlay_styles
-    assert "position: absolute;" in spinner_styles
-    assert "top: calc(50% - 12px);" in spinner_styles
-    assert "left: calc(50% - 12px);" in spinner_styles
-    assert "width: 24px;" in spinner_styles
-    assert "height: 24px;" in spinner_styles
-    assert "transform:" not in spinner_styles
-    assert "border-top-color: var(--brand-menu-blue);" in spinner_styles
-    assert "border-bottom-color: var(--brand-menu-blue);" in spinner_styles
-    assert "animation: overview-loader-spin 0.86s linear infinite;" in spinner_styles
-    assert "transition: opacity 110ms ease;" in spinner_styles
-    spinner_exit_styles = styles.split(".is-overview-initial-spinner-exiting .overview-initial-spinner {", 1)[1].split("}", 1)[0]
-    assert "opacity: 0;" in spinner_exit_styles
-    assert "progress" not in styles.split(".overview-initial-overlay {", 1)[1].split(".overview-initial-spinner", 1)[0]
+    assert "position: absolute;" in indicator_styles
+    assert "top: calc(50% - 12px);" in indicator_styles
+    assert "left: calc(50% - 56px);" in indicator_styles
+    assert "width: 112px;" in indicator_styles
+    assert "height: 24px;" in indicator_styles
+    assert "font-size: 15px;" in indicator_styles
+    assert "transform:" not in indicator_styles
+    assert "animation:" not in indicator_styles
+    assert "transition: opacity 110ms ease;" in indicator_styles
+    assert "grid-template-columns: repeat(3, 6px);" in dots_styles
+    assert "width: 18px;" in dots_styles
+    assert "flex: 0 0 18px;" in dots_styles
+    assert "animation: overview-loading-dot-opacity 1.2s ease-in-out infinite;" in dot_styles
+    assert "transform:" not in dot_styles
+    assert "left:" not in dot_styles
+    assert "translate" not in dot_styles
+    assert "transform:" not in dot_keyframes
+    assert "translate" not in dot_keyframes
+    assert "opacity:" in dot_keyframes
+    assert "overview-loader-spin" not in styles.split(".overview-initial-overlay {", 1)[1].split(".sales-drivers-layout", 1)[0]
+    indicator_exit_styles = styles.split(".is-overview-initial-indicator-exiting .overview-initial-indicator {", 1)[1].split("}", 1)[0]
+    assert "opacity: 0;" in indicator_exit_styles
+    assert "progress" not in styles.split(".overview-initial-overlay {", 1)[1].split(".overview-initial-indicator", 1)[0]
     assert ".is-overview-initializing .filter-grid" not in styles
     assert ".overview-layout.is-overview-initial-loading" in styles
     assert "min-height: calc(100% - 46px);" in styles
@@ -2613,7 +2627,10 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert 'document.getElementById("overview-initial-overlay")?.removeAttribute("hidden");' in template
     assert 'id="overview-initial-overlay"' in template
     assert 'aria-label="Загрузка аналитики" hidden' in template
-    assert 'class="overview-initial-spinner"' in template
+    assert 'class="overview-initial-indicator"' in template
+    assert 'class="overview-initial-label">Загрузка</span>' in template
+    assert template.count('class="overview-initial-dot overview-initial-dot--') == 3
+    assert 'class="overview-initial-spinner"' not in template
     assert "Загрузка аналитики" in template
     assert "is-overview-initial-loading" in template
     assert "aria-busy=\"true\"" in template
