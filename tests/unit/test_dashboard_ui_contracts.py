@@ -99,6 +99,36 @@ def test_dashboard_static_assets_are_content_versioned() -> None:
     assert "__DASHBOARD_ASSET_VERSION__" not in rendered_html
 
 
+def test_dashboard_filter_retain_available_values_contract() -> None:
+    script = html_or_script("app.js")
+    retain_body = _function_body(script, "retainAvailableFilterValues")
+
+    assert "new Set((availableOptions || []).map((item) => item.value))" in retain_body
+    assert ".filter((value) => availableValues.has(value))" in retain_body
+
+    def retain(selected: list[str], available: list[str]) -> list[str]:
+        available_values = set(available)
+        return [value for value in selected if value in available_values]
+
+    assert retain(["пэт"], ["пэт", "ж/б"]) == ["пэт"]
+    assert retain(["стекло"], ["пэт"]) == []
+    assert retain(["0.5"], ["0.5", "1.5"]) == ["0.5"]
+    assert retain(["SKU_A_001"], ["SKU_A_001"]) == ["SKU_A_001"]
+    assert retain(["пэт", "стекло", "ж/б"], ["пэт", "ж/б"]) == ["пэт", "ж/б"]
+
+
+def test_dashboard_apply_filter_uses_retain_not_child_reset_contract() -> None:
+    script = html_or_script("app.js")
+    apply_body = _function_body(script, "applyPendingFilter")
+    populate_body = _function_body(script, "populateEntityFilter")
+    reset_body = _function_body(script, "resetAllEntityFilters")
+
+    assert "resetChildFilters(id)" not in apply_body
+    assert "retainAvailableFilterValues(selectedValuesForFilter(id)" in populate_body
+    assert "state.filters[id] = []" in reset_body
+    assert "state.pendingFilters[id] = []" in reset_body
+
+
 def test_runtime_resolves_cascading_product_filters_to_sku_universe(tmp_path: Path) -> None:
     source_like_path = tmp_path / "source_like.parquet"
     pl.DataFrame(
@@ -1806,7 +1836,8 @@ def test_browser_filter_state_is_staged_multi_value_and_applied_once() -> None:
     apply_body = script.split("async function applyPendingFilter(id)", 1)[1].split("function handleFilterSearchKeydown", 1)[0]
     assert "await refreshRuntimeOptions();" in apply_body
     assert "await runActiveViewQuery();" in apply_body
-    assert "resetChildFilters(id);" in apply_body
+    assert "resetChildFilters(id);" not in apply_body
+    assert "retainAvailableFilterValues(selectedValuesForFilter(id)" in script
 
 
 def test_dashboard_options_parent_filters_preserve_multi_values() -> None:
@@ -3553,3 +3584,19 @@ def html_or_script(name: str) -> str:
         .joinpath(name)
         .read_text(encoding="utf-8")
     )
+
+
+def _function_body(script: str, function_name: str) -> str:
+    marker = f"function {function_name}("
+    start = script.index(marker)
+    brace = script.index("{", start)
+    depth = 0
+    for index in range(brace, len(script)):
+        char = script[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return script[brace + 1 : index]
+    raise AssertionError(f"Function body not found: {function_name}")

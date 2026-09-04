@@ -5785,10 +5785,9 @@ function populateEntityFilter(id) {
   const config = filterConfig[id];
   const allValues = state.options.entities?.[id] || [];
   const volumeRanges = id === "volume" ? volumeFacetRanges() : [];
-  const availableValues = new Set([...allValues, ...volumeRanges].map((item) => item.value));
-  state.filters[id] = selectedValuesForFilter(id).filter((value) => availableValues.has(value));
+  state.filters[id] = retainAvailableFilterValues(selectedValuesForFilter(id), [...allValues, ...volumeRanges]);
   if (state.pendingFilters[id]) {
-    state.pendingFilters[id] = state.pendingFilters[id].filter((value) => availableValues.has(value));
+    state.pendingFilters[id] = retainAvailableFilterValues(state.pendingFilters[id], [...allValues, ...volumeRanges]);
   }
   if (config.querySupported === false) {
     state.filters[id] = [];
@@ -5807,6 +5806,11 @@ function populateEntityFilter(id) {
   syncFilterControl(id);
   renderFilterOptions(id);
   updateFilterCount();
+}
+
+function retainAvailableFilterValues(selectedValues, availableOptions) {
+  const availableValues = new Set((availableOptions || []).map((item) => item.value));
+  return (Array.isArray(selectedValues) ? selectedValues : []).filter((value) => availableValues.has(value));
 }
 
 function renderFilterUnavailable(id, message) {
@@ -6115,7 +6119,6 @@ async function applyPendingFilter(id) {
     const next = pendingValuesForFilter(id);
     state.filters[id] = next;
     if (valuesChanged(previous, next)) {
-      resetChildFilters(id);
       applyFilterDrilldown(id);
     }
     closeFilterPopover(id);

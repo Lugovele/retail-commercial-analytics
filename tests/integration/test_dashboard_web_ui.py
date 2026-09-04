@@ -111,6 +111,126 @@ def test_dashboard_package_scope_refresh_exits_loading_when_browser_url_is_provi
             browser.close()
 
 
+def test_dashboard_cascade_filters_retain_valid_downstream_values_when_browser_url_is_provided() -> None:
+    dashboard_url = os.environ.get("DASHBOARD_E2E_URL")
+    if not dashboard_url:
+        return
+    try:
+        sync_playwright = importlib.import_module("playwright.sync_api").sync_playwright
+    except ImportError:
+        return
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.goto(dashboard_url, wait_until="domcontentloaded")
+            _wait_overview_ready(page, timeout=60000)
+            page.evaluate(
+                """() => {
+                    const originalFetch = window.fetch.bind(window);
+                    window.__overviewQueryPayloads = [];
+                    window.__dashboardFetchCounts = { options: 0, overviewQuery: 0 };
+                    window.fetch = async (input, init = {}) => {
+                        const url = typeof input === "string" ? input : input.url;
+                        if (url.includes("/api/dashboard/options")) {
+                            window.__dashboardFetchCounts.options += 1;
+                        }
+                        if (url.includes("/api/dashboard/query") && init.method === "POST") {
+                            window.__dashboardFetchCounts.overviewQuery += 1;
+                            window.__overviewQueryPayloads.push(JSON.parse(init.body || "{}"));
+                        }
+                        return originalFetch(input, init);
+                    };
+                }"""
+            )
+            scenario = page.evaluate(
+                """async () => {
+                    const runtime = await fetch("/api/dashboard/runtime").then((response) => response.json());
+                    const retailer = runtime.retailers.find(
+                        (item) => item.retailer_id === runtime.default_retailer_id
+                    ) || runtime.retailers[0];
+                    const baseParams = new URLSearchParams({
+                        retailer_id: retailer.retailer_id,
+                        source_id: retailer.source_id,
+                        private_label_scope: "INCLUDE",
+                        period_mode: "COMPARE"
+                    });
+                    const options = await fetch(`/api/dashboard/options?${baseParams}`).then((response) => response.json());
+                    const packages = options.entities.package || [];
+                    const manufacturers = options.entities.manufacturer || [];
+                    for (const manufacturer of manufacturers) {
+                        const scopedParams = new URLSearchParams(baseParams);
+                        scopedParams.append("manufacturer", manufacturer.value);
+                        const scoped = await fetch(`/api/dashboard/options?${scopedParams}`).then((response) => response.json());
+                        const packageValues = new Set((scoped.entities.package || []).map((item) => item.value));
+                        const sku = (scoped.entities.sku || [])[0];
+                        const preferredPet = packages.find((item) =>
+                            packageValues.has(item.value)
+                            && `${item.label} ${item.display_name || ""}`.toLocaleLowerCase("ru-RU").includes("пэт")
+                        );
+                        const validPackage = preferredPet || packages.find((item) => packageValues.has(item.value));
+                        const invalidPackage = packages.find((item) => !packageValues.has(item.value));
+                        if (validPackage && invalidPackage && sku) {
+                            return {
+                                manufacturer: manufacturer.value,
+                                validPackage: validPackage.value,
+                                invalidPackage: invalidPackage.value,
+                                sku: sku.value
+                            };
+                        }
+                    }
+                    return null;
+                }"""
+            )
+            if not scenario:
+                pytest.skip("dashboard data has no valid/invalid package cascade scenario")
+
+            _select_filter_value(page, "package", scenario["validPackage"])
+            _apply_filter_and_wait(page, "package")
+            _select_filter_value(page, "manufacturer", scenario["manufacturer"])
+            _apply_filter_and_wait(page, "manufacturer")
+
+            assert _selected_filter_values(page, "package") == [scenario["validPackage"]]
+            assert _last_overview_query_payload(page)["entity_filters"]["package"] == [scenario["validPackage"]]
+
+            _reset_filters_and_wait(page)
+            _select_filter_value(page, "package", scenario["invalidPackage"])
+            _apply_filter_and_wait(page, "package")
+            _select_filter_value(page, "manufacturer", scenario["manufacturer"])
+            _apply_filter_and_wait(page, "manufacturer")
+
+            assert _selected_filter_values(page, "package") == []
+            assert "package" not in _last_overview_query_payload(page).get("entity_filters", {})
+
+            _reset_filters_and_wait(page)
+            _select_filter_value(page, "package", scenario["validPackage"])
+            _select_filter_value(page, "package", scenario["invalidPackage"])
+            _apply_filter_and_wait(page, "package")
+            _select_filter_value(page, "manufacturer", scenario["manufacturer"])
+            _apply_filter_and_wait(page, "manufacturer")
+
+            assert _selected_filter_values(page, "package") == [scenario["validPackage"]]
+
+            _reset_filters_and_wait(page)
+            _select_filter_value(page, "sku", scenario["sku"])
+            _apply_filter_and_wait(page, "sku")
+            _select_filter_value(page, "manufacturer", scenario["manufacturer"])
+            _apply_filter_and_wait(page, "manufacturer")
+
+            assert _selected_filter_values(page, "sku") == [scenario["sku"]]
+            assert _last_overview_query_payload(page)["entity_filters"]["sku"] == [scenario["sku"]]
+
+            _reset_filters_and_wait(page)
+            assert _selected_filter_values(page, "manufacturer") == []
+            assert _selected_filter_values(page, "package") == []
+            assert _selected_filter_values(page, "sku") == []
+            assert page.locator("#overview").get_attribute("aria-busy") == "false"
+            assert page.evaluate("() => window.__dashboardFetchCounts.options") <= 18
+        finally:
+            browser.close()
+
+
 def test_dashboard_scope_refresh_failure_clears_loading_when_browser_url_is_provided() -> None:
     dashboard_url = os.environ.get("DASHBOARD_E2E_URL")
     if not dashboard_url:
@@ -206,6 +326,62 @@ def _overview_loading_state(page: Any) -> dict[str, Any]:
             };
         }"""
     )
+
+
+def _select_filter_value(page: Any, filter_id: str, value: str) -> None:
+    popover = page.locator(f"#{filter_id}-filter-popover")
+    if "is-hidden" in (popover.get_attribute("class") or ""):
+        page.locator(f"#{filter_id}-filter-trigger").click()
+        page.wait_for_selector(f"#{filter_id}-filter-popover:not(.is-hidden)", timeout=10000)
+    option_locator = page.locator(
+        f"#{filter_id}-options [data-value=\"{_css_attr_value(value)}\"] input"
+    ).first
+    if option_locator.count() == 0:
+        page.locator(f"#{filter_id}-search").fill(value)
+        page.wait_for_selector(
+            f"#{filter_id}-options [data-value=\"{_css_attr_value(value)}\"] input",
+            timeout=10000,
+        )
+    option_locator.click()
+
+
+def _apply_filter_and_wait(page: Any, filter_id: str) -> None:
+    before_payload_count = page.evaluate("() => window.__overviewQueryPayloads?.length || 0")
+    page.locator(f'[data-apply-filter="{filter_id}"]').click()
+    _wait_overview_refreshing(page, timeout=10000)
+    _wait_overview_ready(page, timeout=30000)
+    page.wait_for_function(
+        "(count) => (window.__overviewQueryPayloads?.length || 0) > count",
+        arg=before_payload_count,
+        timeout=10000,
+    )
+
+
+def _reset_filters_and_wait(page: Any) -> None:
+    before_payload_count = page.evaluate("() => window.__overviewQueryPayloads?.length || 0")
+    page.locator("#reset-filters").click()
+    _wait_overview_refreshing(page, timeout=10000)
+    _wait_overview_ready(page, timeout=30000)
+    page.wait_for_function(
+        "(count) => (window.__overviewQueryPayloads?.length || 0) > count",
+        arg=before_payload_count,
+        timeout=10000,
+    )
+
+
+def _selected_filter_values(page: Any, filter_id: str) -> list[str]:
+    return page.eval_on_selector(
+        f"#{filter_id}-filter",
+        "(select) => Array.from(select.selectedOptions).map((option) => option.value)",
+    )
+
+
+def _last_overview_query_payload(page: Any) -> dict[str, Any]:
+    return page.evaluate("() => window.__overviewQueryPayloads.at(-1)")
+
+
+def _css_attr_value(value: str) -> str:
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def test_dashboard_wsgi_runtime_catalog_and_query_contract(tmp_path: Path) -> None:
