@@ -2533,18 +2533,48 @@ def test_overview_initial_loading_uses_final_geometry_skeletons() -> None:
     script = html_or_script("app.js")
     styles = html_or_script("styles.css")
     skeleton = script.split("function renderSkeletons()", 1)[1].split("function attentionItems()", 1)[0]
+    initialize_body = _function_body(script, "initializeDashboard")
+    loading_body = _function_body(script, "setOverviewLoadMode")
+    chart_refresh = script.split("async function runOverviewChartRefresh()", 1)[1].split("function renderSkeletons()", 1)[0]
 
+    assert "renderSkeletons();" in initialize_body
+    assert "const hashView = viewFromHash();" in initialize_body
+    assert 'const startsOnOverview = !hashView || hashView === "overview";' in initialize_body
+    assert 'setOverviewLoadMode("ready");' in initialize_body
+    assert initialize_body.count('setOverviewLoadMode("ready");') >= 2
     assert "renderKpiGroup(group, (definition) =>" in skeleton
     assert "kpi-card--${definition.visualTier} is-loading" in skeleton
     assert "kpi-card-content--skeleton" in skeleton
-    assert '["title", "value", "reference"].forEach((part) =>' in skeleton
+    assert 'title.className = "kpi-title kpi-title--skeleton";' in skeleton
+    assert "title.textContent = definition.label;" in skeleton
+    assert '["value", "reference"].forEach((part) =>' in skeleton
     assert "kpi-skeleton-line--${part}" in skeleton
+    assert 'line.setAttribute("aria-hidden", "true");' in skeleton
+    assert '"н/д"' not in skeleton
+    assert 'textContent = "0"' not in skeleton
     assert "overview-chart-skeleton" in skeleton
     assert "Загрузка динамики" not in skeleton
+    assert 'document.body?.classList.toggle("is-overview-initializing", mode === "initial");' in loading_body
+    assert 'setOverviewLoadMode("chart")' in chart_refresh
+    assert "renderSkeletons();" not in chart_refresh
+    assert 'setOverviewLoadMode("scope")' not in chart_refresh
+    assert ".is-overview-initializing .filter-grid" in styles
+    assert ".is-overview-initializing #retailer-identity strong" in styles
+    assert ".is-overview-initializing #period-summary" in styles
+    assert "pointer-events: none;" in styles
+    assert ".overview-layout.is-overview-initial-loading" in styles
+    assert "min-height: calc(100% - 46px);" in styles
+    assert "min-height: clamp(219px, calc(146vh - 902px), 412px);" in styles
     assert ".overview-chart-skeleton" in styles
     assert ".kpi-skeleton-line" in styles
+    chart_skeleton_styles = styles.split(".overview-chart-skeleton {", 1)[1].split(".overview-chart-skeleton-line {", 1)[0]
+    chart_line_styles = styles.split(".overview-chart-skeleton-line {", 1)[1].split(".overview-chart-skeleton-line--1", 1)[0]
+    assert "border-left" not in chart_skeleton_styles
+    assert "border-bottom" not in chart_skeleton_styles
+    assert "transform:" not in chart_line_styles
 
     template = _template_text("index.html")
+    assert '<body class="is-overview-initializing">' in template
     assert "is-overview-initial-loading" in template
     assert "aria-busy=\"true\"" in template
     assert template.count("data-kpi-slot=") >= 11

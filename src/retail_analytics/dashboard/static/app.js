@@ -706,6 +706,13 @@ function closePeriodPopover() {
 async function initializeDashboard() {
   try {
     setLoading(true, "Загрузка данных");
+    const hashView = viewFromHash();
+    const startsOnOverview = !hashView || hashView === "overview";
+    if (startsOnOverview) {
+      renderSkeletons();
+    } else {
+      setOverviewLoadMode("ready");
+    }
     state.runtime = await getJson("/api/dashboard/runtime");
     setupRetailerControl();
     await Promise.all([
@@ -716,13 +723,13 @@ async function initializeDashboard() {
     updatePeriodPanels();
     updatePrivateLabelTerminology();
     updatePreviewGrain();
-    const hashView = viewFromHash();
     setActiveView(hashView || state.activeView, { refresh: false, scroll: false });
     renderChartMetricOptions();
     await runActiveViewQuery();
     setupSectionObserver();
     if (hashView) scrollToView(hashView, { behavior: "auto" });
   } catch (error) {
+    setOverviewLoadMode("ready");
     setLoading(false, "Не удалось загрузить данные.");
     showPageError(error);
   }
@@ -929,6 +936,7 @@ function overviewHasRenderedSnapshot() {
 
 function setOverviewLoadMode(mode) {
   state.overviewLoadMode = mode;
+  document.body?.classList.toggle("is-overview-initializing", mode === "initial");
   const overview = document.getElementById("overview");
   const kpiGrid = document.getElementById("kpi-grid");
   const chartBox = document.getElementById("chart-box");
@@ -5604,9 +5612,14 @@ function renderSkeletons() {
     content.className = "kpi-card-content kpi-card-content--skeleton";
     const main = document.createElement("div");
     main.className = "kpi-card-main";
-    ["title", "value", "reference"].forEach((part) => {
+    const title = document.createElement("span");
+    title.className = "kpi-title kpi-title--skeleton";
+    title.textContent = definition.label;
+    main.appendChild(title);
+    ["value", "reference"].forEach((part) => {
       const line = document.createElement("span");
       line.className = `kpi-skeleton-line kpi-skeleton-line--${part}`;
+      line.setAttribute("aria-hidden", "true");
       main.appendChild(line);
     });
     content.appendChild(main);

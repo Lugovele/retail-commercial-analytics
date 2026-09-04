@@ -324,6 +324,38 @@ h3 {
   min-height: 36px;
 }
 
+.is-overview-initializing .report-control {
+  flex: 0 0 190px;
+}
+
+.is-overview-initializing .period-control {
+  flex: 0 0 86px;
+}
+
+.is-overview-initializing .filter-grid,
+.is-overview-initializing .period-trigger,
+.is-overview-initializing .filter-trigger,
+.is-overview-initializing #private-label-scope {
+  pointer-events: none;
+}
+
+.is-overview-initializing #retailer-identity strong,
+.is-overview-initializing #period-summary {
+  display: block;
+  width: 58px;
+  color: transparent;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent),
+    color-mix(in srgb, var(--text-muted) 13%, var(--bg-subtle));
+  background-size: 180% 100%;
+  border-radius: 999px;
+  animation: overview-skeleton-pulse 1.45s ease-in-out infinite;
+}
+
+.is-overview-initializing #period-summary {
+  width: 72px;
+}
+
 .control,
 .period-control,
 .report-control,
@@ -1155,6 +1187,10 @@ main {
   padding: 7px 0;
 }
 
+.overview-layout.is-overview-initial-loading {
+  min-height: calc(100% - 46px);
+}
+
 .sales-drivers-layout,
 .portfolio-market-layout,
 .stores-layout {
@@ -1827,7 +1863,7 @@ main {
 
 #chart-box {
   flex: 1 1 auto;
-  min-height: 0;
+  min-height: clamp(219px, calc(146vh - 902px), 412px);
   position: relative;
   background: var(--bg-surface);
 }
@@ -1903,32 +1939,36 @@ main {
 
 .overview-chart-skeleton {
   position: absolute;
-  inset: 20px 24px 40px 48px;
+  inset: 0;
   overflow: hidden;
-  background:
-    repeating-linear-gradient(to right, transparent 0, transparent calc(8.333% - 1px), var(--chart-grid) calc(8.333% - 1px), var(--chart-grid) 8.333%),
-    repeating-linear-gradient(to bottom, transparent 0, transparent calc(25% - 1px), var(--chart-grid) calc(25% - 1px), var(--chart-grid) 25%);
-  border-bottom: 1px solid var(--chart-grid);
-  border-left: 1px solid var(--chart-grid);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(248, 251, 254, 0.72));
+  border: 1px solid color-mix(in srgb, var(--chart-grid) 82%, transparent);
 }
 
 .overview-chart-skeleton-line {
   position: absolute;
-  right: 7%;
-  left: 4%;
-  height: 2px;
-  background: color-mix(in srgb, var(--brand-menu-blue) 18%, var(--border-default));
+  left: 8%;
+  height: 10px;
+  background:
+    linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.72), transparent),
+    color-mix(in srgb, var(--text-muted) 12%, var(--bg-subtle));
+  background-size: 180% 100%;
   border-radius: 999px;
   opacity: 0.74;
+  animation: overview-skeleton-pulse 1.45s ease-in-out infinite;
 }
 
-.overview-chart-skeleton-line--1 { top: 24%; transform: rotate(-3deg); }
-.overview-chart-skeleton-line--2 { top: 43%; transform: rotate(2deg); }
-.overview-chart-skeleton-line--3 { top: 61%; transform: rotate(-1deg); }
-.overview-chart-skeleton-line--4 { top: 76%; transform: rotate(1.5deg); }
+.overview-chart-skeleton-line--1 { top: 24%; width: 68%; }
+.overview-chart-skeleton-line--2 { top: 43%; width: 84%; }
+.overview-chart-skeleton-line--3 { top: 62%; width: 56%; }
+.overview-chart-skeleton-line--4 { top: 78%; width: 72%; }
 
 .kpi-card-content--skeleton {
   min-width: 0;
+}
+
+.kpi-title--skeleton {
+  align-self: center;
 }
 
 .kpi-skeleton-line {
@@ -1967,6 +2007,9 @@ main {
 @media (prefers-reduced-motion: reduce) {
   .overview-refresh-progress::before,
   .overview-chart-loader-spinner,
+  .overview-chart-skeleton-line,
+  .is-overview-initializing #retailer-identity strong,
+  .is-overview-initializing #period-summary,
   .kpi-skeleton-line {
     animation: none;
   }
