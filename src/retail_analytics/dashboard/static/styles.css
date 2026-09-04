@@ -1192,6 +1192,7 @@ main {
   height: 24px;
   border: 2px solid #dce5ef;
   border-top-color: var(--brand-menu-blue);
+  border-bottom-color: var(--brand-menu-blue);
   border-radius: 50%;
   animation: overview-loader-spin 0.86s linear infinite;
 }
