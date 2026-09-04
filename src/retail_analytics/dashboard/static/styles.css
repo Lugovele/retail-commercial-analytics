@@ -1195,6 +1195,12 @@ main {
   border-bottom-color: var(--brand-menu-blue);
   border-radius: 50%;
   animation: overview-loader-spin 0.86s linear infinite;
+  opacity: 1;
+  transition: opacity 110ms ease;
+}
+
+.is-overview-initial-spinner-exiting .overview-initial-spinner {
+  opacity: 0;
 }
 
 .sales-drivers-layout,

@@ -2547,8 +2547,12 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert "state.initialOverviewOverlayDismissed = true;" in dismiss_body
     assert 'const overlay = document.getElementById("overview-initial-overlay");' in dismiss_body
     assert 'overlay?.setAttribute("hidden", "hidden");' in dismiss_body
+    assert 'body.classList.add("is-overview-initial-spinner-exiting");' in dismiss_body
     assert 'body.classList.add("is-overview-initial-overlay-exiting");' in dismiss_body
     assert 'body.classList.remove("is-overview-initializing");' in dismiss_body
+    assert 'body.classList.remove("is-overview-initial-spinner-exiting");' in dismiss_body
+    assert "}, 180);" in dismiss_body
+    assert "}, 400);" in dismiss_body
     assert 'setAttribute("hidden", "hidden")' in dismiss_body
     assert "renderKpiGroup(group, (definition) =>" in skeleton
     assert "kpi-card--${definition.visualTier} is-loading" in skeleton
@@ -2587,6 +2591,9 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert "border-top-color: var(--brand-menu-blue);" in spinner_styles
     assert "border-bottom-color: var(--brand-menu-blue);" in spinner_styles
     assert "animation: overview-loader-spin 0.86s linear infinite;" in spinner_styles
+    assert "transition: opacity 110ms ease;" in spinner_styles
+    spinner_exit_styles = styles.split(".is-overview-initial-spinner-exiting .overview-initial-spinner {", 1)[1].split("}", 1)[0]
+    assert "opacity: 0;" in spinner_exit_styles
     assert "progress" not in styles.split(".overview-initial-overlay {", 1)[1].split(".overview-initial-spinner", 1)[0]
     assert ".is-overview-initializing .filter-grid" not in styles
     assert ".overview-layout.is-overview-initial-loading" in styles

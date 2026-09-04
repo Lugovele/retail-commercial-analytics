@@ -960,12 +960,16 @@ function dismissInitialOverviewOverlay() {
     overlay?.setAttribute("hidden", "hidden");
     return;
   }
-  body.classList.add("is-overview-initial-overlay-exiting");
-  body.classList.remove("is-overview-initializing");
+  body.classList.add("is-overview-initial-spinner-exiting");
   window.setTimeout(() => {
+    body.classList.add("is-overview-initial-overlay-exiting");
+    body.classList.remove("is-overview-initializing");
+  }, 180);
+  window.setTimeout(() => {
+    body.classList.remove("is-overview-initial-spinner-exiting");
     body.classList.remove("is-overview-initial-overlay-exiting");
     overlay?.setAttribute("hidden", "hidden");
-  }, 220);
+  }, 400);
 }
 
 function renderOverviewScopeProgress(isVisible) {
