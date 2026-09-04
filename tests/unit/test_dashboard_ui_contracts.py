@@ -2571,7 +2571,19 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert ".is-overview-initial-overlay-exiting .overview-initial-overlay" in styles
     assert ".overview-initial-spinner" in styles
     assert "transition: opacity 180ms ease;" in styles
-    assert "transform:" not in styles.split(".overview-initial-overlay {", 1)[1].split("}", 1)[0]
+    overlay_styles = styles.split(".overview-initial-overlay {", 1)[1].split("}", 1)[0]
+    spinner_styles = styles.split(".overview-initial-spinner {", 1)[1].split("}", 1)[0]
+    assert "position: fixed;" in overlay_styles
+    assert "inset: 0;" in overlay_styles
+    assert "display: block;" in overlay_styles
+    assert "display: flex;" not in overlay_styles
+    assert "transform:" not in overlay_styles
+    assert "position: absolute;" in spinner_styles
+    assert "top: calc(50% - 12px);" in spinner_styles
+    assert "left: calc(50% - 12px);" in spinner_styles
+    assert "width: 24px;" in spinner_styles
+    assert "height: 24px;" in spinner_styles
+    assert "transform:" not in spinner_styles
     assert "progress" not in styles.split(".overview-initial-overlay {", 1)[1].split(".overview-initial-spinner", 1)[0]
     assert ".is-overview-initializing .filter-grid" not in styles
     assert ".overview-layout.is-overview-initial-loading" in styles

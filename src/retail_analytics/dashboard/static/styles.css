@@ -1163,9 +1163,7 @@ main {
   position: fixed;
   inset: 0;
   z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  display: block;
   background: #ffffff;
   opacity: 0;
   pointer-events: none;
@@ -1187,6 +1185,9 @@ main {
 }
 
 .overview-initial-spinner {
+  position: absolute;
+  top: calc(50% - 12px);
+  left: calc(50% - 12px);
   width: 24px;
   height: 24px;
   border: 2px solid #dce5ef;
