@@ -1190,10 +1190,10 @@ main {
   left: calc(50% - 12px);
   width: 24px;
   height: 24px;
-  border: 2px solid #dce5ef;
-  border-top-color: var(--brand-menu-blue);
+  border: 2px solid var(--brand-menu-blue);
   border-radius: 50%;
-  animation: overview-loader-spin 0.86s linear infinite;
+  opacity: 0.84;
+  animation: overview-spinner-pulse 1.05s ease-in-out infinite;
 }
 
 .sales-drivers-layout,
@@ -2001,6 +2001,12 @@ main {
 
 @keyframes overview-loader-spin {
   to { transform: rotate(360deg); }
+}
+
+@keyframes overview-spinner-pulse {
+  0%,
+  100% { opacity: 0.78; }
+  50% { opacity: 1; }
 }
 
 @keyframes overview-skeleton-pulse {

@@ -2584,6 +2584,11 @@ def test_overview_initial_loading_uses_simple_overlay_until_ready() -> None:
     assert "width: 24px;" in spinner_styles
     assert "height: 24px;" in spinner_styles
     assert "transform:" not in spinner_styles
+    assert "border: 2px solid var(--brand-menu-blue);" in spinner_styles
+    assert "animation: overview-spinner-pulse 1.05s ease-in-out infinite;" in spinner_styles
+    assert "overview-loader-spin" not in spinner_styles
+    pulse_keyframes = styles.split("@keyframes overview-spinner-pulse {", 1)[1].split("}", 2)[0]
+    assert "transform:" not in pulse_keyframes
     assert "progress" not in styles.split(".overview-initial-overlay {", 1)[1].split(".overview-initial-spinner", 1)[0]
     assert ".is-overview-initializing .filter-grid" not in styles
     assert ".overview-layout.is-overview-initial-loading" in styles
